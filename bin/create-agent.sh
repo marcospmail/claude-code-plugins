@@ -439,15 +439,8 @@ fi
 if [[ "$SEND_BRIEF" == true ]] && [[ "$START_CLAUDE" == true ]]; then
     echo "Sending briefing..."
 
-    # Select appropriate template
-    case "$ROLE" in
-        pm|orchestrator)
-            TEMPLATE="$TEMPLATES_DIR/pm-briefing.md"
-            ;;
-        *)
-            TEMPLATE="$TEMPLATES_DIR/engineer-briefing.md"
-            ;;
-    esac
+    # All agents use engineer briefing (PM is created via deploy-pm with its own briefing)
+    TEMPLATE="$TEMPLATES_DIR/engineer-briefing.md"
 
     if [[ -f "$TEMPLATE" ]]; then
         # Read and customize the template

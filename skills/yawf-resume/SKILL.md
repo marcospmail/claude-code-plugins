@@ -23,7 +23,7 @@ This skill resumes a previously created workflow. When users close their browser
 </capabilities>
 
 <requirements>
-- Tmux orchestrator installed at ~/dev/tools/tmux-orchestrator
+- Yato installed at ~/dev/tools/yato
 - A project with existing .workflow/ folder containing workflows
 - Current directory should be the project root
 </requirements>
@@ -61,7 +61,7 @@ Check if a workflow name was provided: `$ARGUMENTS`
 If no argument provided, list available workflows:
 
 ```bash
-~/dev/tools/tmux-orchestrator/bin/resume-workflow.sh "$PROJECT_PATH"
+~/dev/tools/yato/bin/resume-workflow.sh "$PROJECT_PATH"
 ```
 
 This will show output like:
@@ -95,7 +95,7 @@ Run the resume-workflow script which:
 - Re-enables ralph loop if it was active
 
 ```bash
-~/dev/tools/tmux-orchestrator/bin/resume-workflow.sh "$PROJECT_PATH" "$WORKFLOW_NAME"
+~/dev/tools/yato/bin/resume-workflow.sh "$PROJECT_PATH" "$WORKFLOW_NAME"
 ```
 
 Capture the session name from the output for the attach command.
@@ -117,7 +117,7 @@ Wait 5 seconds for Claude to initialize, then brief the PM:
 
 ```bash
 sleep 5
-~/dev/tools/tmux-orchestrator/bin/send-message.sh "$PM_PANE" "RESUMING WORKFLOW: $WORKFLOW_NAME
+~/dev/tools/yato/bin/send-message.sh "$PM_PANE" "RESUMING WORKFLOW: $WORKFLOW_NAME
 
 Read these files and continue from where you left off:
 - .workflow/$WORKFLOW_NAME/agents/pm/instructions.md

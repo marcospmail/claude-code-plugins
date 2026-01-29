@@ -9,7 +9,7 @@ argument-hint: [workflow-path]
 
 <context>
 ## Purpose
-This skill is used by the Project Manager in the tmux-orchestrator system to break down a PRD (Product Requirements Document) into actionable tasks with agent assignments.
+This skill is used by the Project Manager in Yato (Yet Another Tmux Orchestrator) to break down a PRD (Product Requirements Document) into actionable tasks with agent assignments.
 
 ## Workflow Context
 - **Input:** PRD file from the workflow folder (prd.md)
@@ -39,7 +39,7 @@ Read the PRD file using the Read tool.
 
 ## Step 2: Identify Available Agents
 
-Reference the standard tmux-orchestrator team structure:
+Reference the standard Yato team structure:
 
 | Agent | Role | Can Modify Code | Typical Tasks |
 |-------|------|-----------------|---------------|

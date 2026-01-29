@@ -17,7 +17,7 @@
 
 3. Deploy the PM:
 ```bash
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm todo-app -p ~/projects/todo-app
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm todo-app -p ~/projects/todo-app
 ```
 
 4. Copy attach command:
@@ -56,7 +56,7 @@ Or simply paste from clipboard (Cmd+V)
 
 3. Deploy:
 ```bash
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm auth-service -p ~/work/microservices/auth-service
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm auth-service -p ~/work/microservices/auth-service
 ```
 
 4. Copy:
@@ -95,7 +95,7 @@ Or simply paste from clipboard (Cmd+V)
 
 3. Deploy:
 ```bash
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm fitness-api -p ~/projects/fitness-tracker/backend
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm fitness-api -p ~/projects/fitness-tracker/backend
 ```
 
 4. Copy:
@@ -134,7 +134,7 @@ Or simply paste from clipboard (Cmd+V)
 
 3. Deploy:
 ```bash
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm acme-dashboard -p ~/clients/acme-corp/dashboard
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm acme-dashboard -p ~/clients/acme-corp/dashboard
 ```
 
 4. Copy:
@@ -172,7 +172,7 @@ Or simply paste from clipboard (Cmd+V)
 
 Deploy:
 ```bash
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm blog-engine -p ~/projects/blog-engine
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm blog-engine -p ~/projects/blog-engine
 ```
 
 Copy:
@@ -216,7 +216,7 @@ mkdir -p ~/new-ventures/ecommerce
 
 4. Deploy:
 ```bash
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm ecommerce-platform -p ~/new-ventures/ecommerce
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm ecommerce-platform -p ~/new-ventures/ecommerce
 ```
 
 5. Copy:

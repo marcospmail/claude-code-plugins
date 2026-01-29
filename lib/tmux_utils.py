@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tmux Utilities - Python utilities for tmux operations.
+Yato Tmux Utilities - Python utilities for tmux operations.
 
 This module provides a comprehensive interface for:
 - Managing tmux sessions and windows
@@ -435,7 +435,7 @@ class TmuxOrchestrator:
         status = self.get_all_windows_status()
 
         # Format for Claude consumption
-        snapshot = f"Tmux Monitoring Snapshot - {status['timestamp']}\n"
+        snapshot = f"Yato Monitoring Snapshot - {status['timestamp']}\n"
         snapshot += "=" * 60 + "\n\n"
 
         for session in status['sessions']:

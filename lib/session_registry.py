@@ -14,7 +14,7 @@ from typing import Optional, List, Dict, Any
 
 # Get the project root directory (parent of lib/)
 PROJECT_ROOT = Path(__file__).parent.parent.absolute()
-DEFAULT_REGISTRY_PATH = PROJECT_ROOT / ".tmux-orchestrator" / "registry.json"
+DEFAULT_REGISTRY_PATH = PROJECT_ROOT / ".yato" / "registry.json"
 
 
 class Agent:

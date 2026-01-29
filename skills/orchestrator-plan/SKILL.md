@@ -81,14 +81,14 @@ Based on the PRD complexity, generate a team-config.json:
 Once user approves:
 
 ```bash
-ORCHESTRATOR_PATH="$HOME/dev/tools/tmux-orchestrator"
+YATO_PATH="$HOME/dev/tools/yato"
 
 # Get session name from path
 SESSION_NAME=$(basename $ARGUMENTS)
 
 # Deploy the team with the config
-python3 $ORCHESTRATOR_PATH/lib/orchestrator.py deploy $SESSION_NAME -p $ARGUMENTS -c $ARGUMENTS/team-config.json
+python3 $YATO_PATH/lib/orchestrator.py deploy $SESSION_NAME -p $ARGUMENTS -c $ARGUMENTS/team-config.json
 
 # Start Claude and brief all agents
-python3 $ORCHESTRATOR_PATH/lib/orchestrator.py start
+python3 $YATO_PATH/lib/orchestrator.py start
 ```

@@ -1,15 +1,15 @@
-![Orchestrator Hero](/Orchestrator.png)
+![Yato Hero](/Orchestrator.png)
 
-# Tmux Orchestrator
+# Yato (Yet Another Tmux Orchestrator)
 
-**Run AI agents 24/7 while you sleep** - The Tmux Orchestrator is a Claude Code plugin that enables Claude agents to work autonomously, schedule their own check-ins, and coordinate across multiple projects without human intervention.
+**Run AI agents 24/7 while you sleep** - Yato is a Claude Code plugin that enables Claude agents to work autonomously, schedule their own check-ins, and coordinate across multiple projects without human intervention.
 
 ## 📦 Installation
 
 ### As a Claude Code Plugin
 ```bash
 # Clone the repository
-git clone https://github.com/personal/tmux-orchestrator ~/dev/tools/tmux-orchestrator
+git clone https://github.com/personal/yato ~/dev/tools/yato
 
 # The plugin is automatically detected by Claude Code
 ```
@@ -31,7 +31,7 @@ git clone https://github.com/personal/tmux-orchestrator ~/dev/tools/tmux-orchest
 
 ## 🏗️ Architecture
 
-The Tmux Orchestrator uses a three-tier hierarchy to overcome context window limitations:
+Yato uses a three-tier hierarchy to overcome context window limitations:
 
 ```
 ┌─────────────┐
@@ -61,7 +61,7 @@ Unlike simple polling, agents can now proactively notify their PM:
 ## 📁 Project Structure
 
 ```
-tmux-orchestrator/
+yato/
 ├── .claude-plugin/               # Claude Code plugin manifest
 │   └── plugin.json               # Plugin metadata
 ├── agents/                       # Agent definition files
@@ -93,11 +93,10 @@ tmux-orchestrator/
 │   ├── tmux_utils.py             # Tmux utilities
 │   └── orchestrator.py           # Main orchestrator logic
 ├── templates/                    # Agent briefing templates
-│   ├── pm-briefing.md            # PM instructions
 │   └── engineer-briefing.md      # Engineer instructions
 ├── config/
 │   └── defaults.conf             # Default configuration
-├── .tmux-orchestrator/           # Local state (gitignored)
+├── .yato/                        # Local state (gitignored)
 │   ├── registry.json             # Active agents
 │   ├── checkins.json             # Scheduled check-ins
 │   └── logs/                     # Agent logs
@@ -150,7 +149,7 @@ tmux new-session -s orchestrator
 claude
 
 # Brief the orchestrator
-"You are the Orchestrator. Use the tools in ~/dev/tools/tmux-orchestrator to:
+"You are the Orchestrator. Use the tools in ~/dev/tools/yato to:
 1. Create a PM for the frontend project
 2. Create developers for React and API work
 3. Schedule regular check-ins every 30 minutes"
@@ -181,7 +180,7 @@ This creates a tmux session with a PM at window :1 and Developer at window :2.
 
 ## ⏰ Check-in System
 
-The orchestrator uses a scheduled check-in system to maintain oversight:
+Yato uses a scheduled check-in system to maintain oversight:
 
 ### Schedule Check-ins
 ```bash
@@ -275,7 +274,7 @@ python3 lib/orchestrator.py check <agent>     # Check agent output
 
 ## 📝 Workflow System
 
-The orchestrator uses a structured workflow system for managing project requirements and tasks.
+Yato uses a structured workflow system for managing project requirements and tasks.
 
 ### Workflow Directory Structure
 ```
@@ -544,13 +543,12 @@ You are a Project Manager...
 | `commands/orc-status.md` | Show system status |
 | `commands/parse-prd-to-tasks.md` | PRD to tasks conversion |
 | **Other** | |
-| `templates/pm-briefing.md` | PM instructions template |
 | `templates/engineer-briefing.md` | Engineer instructions template |
 | `CLAUDE.md` | Agent behavior instructions |
 
 ## 🤝 Contributing
 
-The orchestrator evolves through community discoveries and optimizations. When contributing:
+Yato evolves through community discoveries and optimizations. When contributing:
 
 1. Document new tmux commands and patterns in CLAUDE.md
 2. Share novel use cases and agent coordination strategies

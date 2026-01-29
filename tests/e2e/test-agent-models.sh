@@ -45,7 +45,7 @@ AGENTS_YML="$TEST_DIR/.workflow/$WORKFLOW_NAME/agents.yml"
 
 # Create team with all roles to test models
 tmux send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $PROJECT_ROOT/bin/create-team.sh $TEST_DIR developer qa code-reviewer" Enter
-sleep 25
+sleep 30  # Increased to handle slower runs in test suites
 
 echo "Testing model assignments in agents.yml..."
 

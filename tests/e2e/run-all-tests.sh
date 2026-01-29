@@ -1,7 +1,7 @@
 #!/bin/bash
 # run-all-tests.sh
 #
-# Runs all E2E tests for tmux-orchestrator and reports results
+# Runs all E2E tests for yato and reports results
 #
 # Usage: ./run-all-tests.sh [--verbose]
 
@@ -31,6 +31,9 @@ for test_file in "$SCRIPT_DIR"/test-*.sh; do
     if [[ -f "$test_file" ]]; then
         test_name=$(basename "$test_file" .sh)
         TOTAL_TESTS=$((TOTAL_TESTS + 1))
+
+        # Small delay between tests to allow background processes to settle
+        sleep 1
 
         echo "─────────────────────────────────────────────────────"
         echo "Running: $test_name"

@@ -20,7 +20,7 @@ Check-ins are stored per-workflow in the project's `.workflow/<workflow>/checkin
 Run the cancel-checkin.sh script from the project directory:
 
 ```bash
-$HOME/dev/tools/tmux-orchestrator/bin/cancel-checkin.sh
+$HOME/dev/tools/yato/bin/cancel-checkin.sh
 ```
 
 This cancels check-ins for the current project's active workflow (uses relative paths).

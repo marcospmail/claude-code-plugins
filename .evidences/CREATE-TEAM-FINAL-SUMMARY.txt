@@ -59,7 +59,7 @@ Simplified from complex multi-step instructions to:
 
   8) ONLY AFTER USER TYPES 'start':
      a) Create ALL agents with ONE command (auto-detects session):
-        $HOME/dev/tools/tmux-orchestrator/bin/create-team.sh /path/to/project
+        $HOME/dev/tools/yato/bin/create-team.sh /path/to/project
         ⛔ FORBIDDEN: tmux new-session, creating agents manually
 
 ═══════════════════════════════════════════════════════════════════

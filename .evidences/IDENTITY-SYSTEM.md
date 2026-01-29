@@ -75,16 +75,16 @@ This fixes the "hanging input" issue where messages weren't being sent promptly.
 
 ## Files Modified
 
-1. `/Users/personal/dev/tools/tmux-orchestrator/lib/orchestrator.py`
+1. `/Users/personal/dev/tools/yato/lib/orchestrator.py`
    - Updated PM briefing with code modification rules
    - Made discovery questions conditional
 
-2. `/Users/personal/dev/tools/tmux-orchestrator/bin/create-agent.sh`
+2. `/Users/personal/dev/tools/yato/bin/create-agent.sh`
    - Added identity.yml creation
    - Added role-based can_modify_code determination
    - Updated agent briefing with restrictions
 
-3. `/Users/personal/dev/tools/tmux-orchestrator/bin/send-message.sh`
+3. `/Users/personal/dev/tools/yato/bin/send-message.sh`
    - Reduced delay from 2s to 0.5s
    - Simplified Enter sending logic
 

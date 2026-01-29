@@ -1,6 +1,6 @@
 # Plugin Migration Plan
 
-Files to move into `tmux-orchestrator/` to make it a proper Claude Code plugin.
+Files to move into `yato/` to make it a proper Claude Code plugin.
 
 ## Current Location → Target Location
 
@@ -8,21 +8,21 @@ Files to move into `tmux-orchestrator/` to make it a proper Claude Code plugin.
 
 | Current Location (MOVE FROM) | Target Location (MOVE TO) |
 |------------------------------|---------------------------|
-| `/Users/personal/dev/dotfiles/claude-code/skills/yawf-resume/` | `tmux-orchestrator/skills/yawf-resume/` |
-| `/Users/personal/dev/dotfiles/claude-code/skills/yawf-existing-project/` | `tmux-orchestrator/skills/yawf-existing-project/` |
-| `/Users/personal/dev/dotfiles/claude-code/skills/yawf-new-project/` | `tmux-orchestrator/skills/yawf-new-project/` |
+| `/Users/personal/dev/dotfiles/claude-code/skills/yawf-resume/` | `yato/skills/yawf-resume/` |
+| `/Users/personal/dev/dotfiles/claude-code/skills/yawf-existing-project/` | `yato/skills/yawf-existing-project/` |
+| `/Users/personal/dev/dotfiles/claude-code/skills/yawf-new-project/` | `yato/skills/yawf-new-project/` |
 
 ### Agents (move from dotfiles)
 
 | Current Location (MOVE FROM) | Target Location (MOVE TO) |
 |------------------------------|---------------------------|
-| `/Users/personal/dev/dotfiles/claude-code/agents/tmux-meta-agent.md` | `tmux-orchestrator/agents/tmux-meta-agent.md` |
+| `/Users/personal/dev/dotfiles/claude-code/agents/tmux-meta-agent.md` | `yato/agents/tmux-meta-agent.md` |
 
 ### Commands (move from user global)
 
 | Current Location (MOVE FROM) | Target Location (MOVE TO) |
 |------------------------------|---------------------------|
-| `/Users/personal/.claude/commands/parse-prd-to-tasks.md` | `tmux-orchestrator/commands/parse-prd-to-tasks.md` |
+| `/Users/personal/.claude/commands/parse-prd-to-tasks.md` | `yato/commands/parse-prd-to-tasks.md` |
 
 ### New Files to Create
 
@@ -33,7 +33,7 @@ Files to move into `tmux-orchestrator/` to make it a proper Claude Code plugin.
 ## Final Plugin Structure
 
 ```
-tmux-orchestrator/
+yato/
 ├── .claude-plugin/
 │   └── plugin.json              # NEW - Plugin manifest
 ├── skills/
@@ -64,4 +64,4 @@ tmux-orchestrator/
 
 1. Remove moved files from dotfiles
 2. Update any symlinks if needed
-3. Commands will be namespaced as `/tmux-orchestrator:yawf-resume`, etc.
+3. Commands will be namespaced as `/yato:yawf-resume`, etc.

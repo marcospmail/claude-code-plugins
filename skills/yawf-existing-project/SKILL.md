@@ -1,6 +1,6 @@
 ---
 name: yawf-existing-project
-description: Work on an existing codebase with the tmux orchestrator. If NOT in tmux, deploys PM and gives attach command (PM handles discovery). If IN tmux, performs analysis, creates context files, and seamlessly switches to PM. Use when user wants to add features, fix bugs, refactor, or work on any existing project.
+description: Work on an existing codebase with Yato (Yet Another Tmux Orchestrator). If NOT in tmux, deploys PM and gives attach command (PM handles discovery). If IN tmux, performs analysis, creates context files, and seamlessly switches to PM. Use when user wants to add features, fix bugs, refactor, or work on any existing project.
 allowed-tools: Bash,Read,Write,Glob,Grep,Edit
 user-invocable: true
 disable-model-invocation: false
@@ -10,7 +10,7 @@ argument-hint: "[what to build: description, URL, or PRD]"
 # YAWF Existing Project
 
 <context>
-This skill helps you work on an existing codebase using the tmux orchestrator system. The workflow differs based on whether you're already in tmux or not:
+This skill helps you work on an existing codebase using Yato (Yet Another Tmux Orchestrator). The workflow differs based on whether you're already in tmux or not:
 - **In tmux**: Full analysis, create context files, seamlessly switch to PM session
 - **Not in tmux**: Just deploy PM and give attach command - PM handles discovery
 </context>
@@ -23,7 +23,7 @@ This skill helps you work on an existing codebase using the tmux orchestrator sy
 </capabilities>
 
 <requirements>
-- Tmux orchestrator installed at ~/dev/tools/tmux-orchestrator
+- Yato installed at ~/dev/tools/yato
 - Python 3 available
 - Current directory should be the project root
 </requirements>
@@ -71,7 +71,7 @@ else
 fi
 
 # Create workflow folder (captures the folder name like "001-add-feature")
-WORKFLOW_NAME=$(~/dev/tools/tmux-orchestrator/bin/init-workflow.sh "$PROJECT_PATH" "$TITLE" 2>/dev/null | grep "^Workflow:" | awk '{print $2}')
+WORKFLOW_NAME=$(~/dev/tools/yato/bin/init-workflow.sh "$PROJECT_PATH" "$TITLE" 2>/dev/null | grep "^Workflow:" | awk '{print $2}')
 
 # If init-workflow.sh didn't output the name, get it from the newest folder
 if [[ -z "$WORKFLOW_NAME" ]]; then
@@ -104,7 +104,7 @@ Session name format: `{project}_{workflow}` (e.g., `my-project_001-add-feature`)
 
 ```bash
 SESSION_NAME="${PROJECT_SLUG}_${WORKFLOW_NAME}"
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
 ```
 
 ## A5: Give User the Attach Command
@@ -212,7 +212,7 @@ PROJECT_SLUG=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | tr '._ ' '-')
 TITLE=$(echo "[USER'S REQUEST]" | cut -d' ' -f1-4)
 
 # Create workflow folder
-WORKFLOW_NAME=$(~/dev/tools/tmux-orchestrator/bin/init-workflow.sh "$PROJECT_PATH" "$TITLE" 2>/dev/null | grep "^Workflow:" | awk '{print $2}')
+WORKFLOW_NAME=$(~/dev/tools/yato/bin/init-workflow.sh "$PROJECT_PATH" "$TITLE" 2>/dev/null | grep "^Workflow:" | awk '{print $2}')
 
 # Fallback: get from newest folder
 if [[ -z "$WORKFLOW_NAME" ]]; then
@@ -291,7 +291,7 @@ Session name format: `{project}_{workflow}` (e.g., `my-project_001-add-oauth`)
 
 ```bash
 SESSION_NAME="${PROJECT_SLUG}_${WORKFLOW_NAME}"
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
 ```
 
 ## B7: Switch to PM Session (Seamless)

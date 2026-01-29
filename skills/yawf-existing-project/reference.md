@@ -219,11 +219,11 @@ When deploying the PM, you can pass the analysis and objectives:
 
 ```bash
 # Deploy PM
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH"
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH"
 
 # Send analysis context
 sleep 5
-~/dev/tools/tmux-orchestrator/bin/send-message.sh "$SESSION_NAME:0" \
+~/dev/tools/yato/bin/send-message.sh "$SESSION_NAME:0" \
   "Project analysis complete. See .workflow/codebase-analysis.md for details. User objective: [USER_OBJECTIVE]"
 ```
 

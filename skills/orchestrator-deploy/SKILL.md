@@ -30,17 +30,17 @@ The config file should be a JSON array of agent definitions:
 
 1. **Set the orchestrator path:**
 ```bash
-ORCHESTRATOR_PATH="$HOME/dev/tools/tmux-orchestrator"
+YATO_PATH="$HOME/dev/tools/yato"
 ```
 
 2. **Deploy the team:**
 ```bash
-python3 $ORCHESTRATOR_PATH/lib/orchestrator.py deploy $ARGUMENTS -p <path> -c <config>
+python3 $YATO_PATH/lib/orchestrator.py deploy $ARGUMENTS -p <path> -c <config>
 ```
 
 3. **Start Claude in all windows:**
 ```bash
-python3 $ORCHESTRATOR_PATH/lib/orchestrator.py start
+python3 $YATO_PATH/lib/orchestrator.py start
 ```
 
 4. **Show the deployed team structure** to the user with agent IDs and roles.

@@ -1,8 +1,8 @@
 # E2E Tests Implementation Status
 
-This file tracks all end-to-end tests for the tmux-orchestrator workflow.
+This file tracks all end-to-end tests for the yato workflow.
 
-## Current Coverage: 11 Tests | 80+ Assertions
+## Current Coverage: 12 Tests | 88+ Assertions
 
 ### Agent Creation & Registry
 - [x] **test-agent-creation.sh** - Basic agent creation (developer + qa) - 13 assertions
@@ -21,6 +21,7 @@ This file tracks all end-to-end tests for the tmux-orchestrator workflow.
 
 ### PM Behavior
 - [x] **test-pm-checkin-askuser.sh** - PM briefing includes AskUserQuestion for check-in frequency
+- [x] **test-pm-discovery-questions.sh** - PM briefing includes discovery question instructions (8 assertions)
 
 ### Error Handling
 - [x] **test-error-handling.sh** - Proper error messages for various conditions - 5 assertions
@@ -32,9 +33,9 @@ This file tracks all end-to-end tests for the tmux-orchestrator workflow.
 | Agent Creation | 5 | ✅ All Pass |
 | Workflow Init | 2 | ✅ All Pass |
 | Communication | 2 | ✅ All Pass |
-| PM Behavior | 1 | ✅ Pass |
+| PM Behavior | 2 | ✅ All Pass |
 | Error Handling | 1 | ✅ Pass |
-| **TOTAL** | **11** | **✅ 100%** |
+| **TOTAL** | **12** | **✅ 100%** |
 
 ## Run All Tests
 

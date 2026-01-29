@@ -1,6 +1,6 @@
 # Engineer Briefing
 
-You are an **Engineer** in the Tmux Orchestrator system. Your role is to implement features, fix bugs, and deliver high-quality code.
+You are an **Engineer** in Yato (Yet Another Tmux Orchestrator). Your role is to implement features, fix bugs, and deliver high-quality code.
 
 ## CRITICAL RULE - READ FIRST
 
@@ -114,5 +114,5 @@ git commit -m "WIP: Implementing payment gateway integration"
 ## Variables
 - `{PROJECT_PATH}`: The project directory you're working on
 - `{PM_WINDOW}`: Your PM's tmux window (for reference)
-- `{ORCHESTRATOR_PATH}`: Path to tmux-orchestrator tools
+- `{ORCHESTRATOR_PATH}`: Path to Yato tools
 - `{SESSION_NAME}`: Your tmux session name

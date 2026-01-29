@@ -5,7 +5,7 @@
 ### deploy-pm Command
 
 ```bash
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm SESSION_NAME -p PROJECT_PATH
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm SESSION_NAME -p PROJECT_PATH
 ```
 
 **Parameters:**
@@ -98,7 +98,7 @@ tmux attach-session -t SESSION_NAME
 mkdir -p /path/to/project
 
 # Then run deploy-pm
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm SESSION_NAME -p /path/to/project
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm SESSION_NAME -p /path/to/project
 ```
 
 ### Orchestrator Not Found
@@ -108,11 +108,11 @@ python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm SESSION_NAME
 **Solution:**
 ```bash
 # Verify orchestrator path
-ls -la ~/dev/tools/tmux-orchestrator/lib/orchestrator.py
+ls -la ~/dev/tools/yato/lib/orchestrator.py
 
 # Update path if different
-export ORCHESTRATOR_PATH="/path/to/tmux-orchestrator"
-python3 $ORCHESTRATOR_PATH/lib/orchestrator.py deploy-pm SESSION_NAME -p PROJECT_PATH
+export YATO_PATH="/path/to/yato"
+python3 $YATO_PATH/lib/orchestrator.py deploy-pm SESSION_NAME -p PROJECT_PATH
 ```
 
 ## Integration with Other Tools
@@ -132,7 +132,7 @@ tmux send-keys -t SESSION_NAME:0 "git commit -m 'Initial commit'" Enter
 To add developers to the project:
 
 ```bash
-~/dev/tools/tmux-orchestrator/bin/create-agent.sh SESSION_NAME developer \
+~/dev/tools/yato/bin/create-agent.sh SESSION_NAME developer \
   -p PROJECT_PATH \
   --pm-window SESSION_NAME:0
 ```

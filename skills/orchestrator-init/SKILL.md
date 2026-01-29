@@ -17,17 +17,17 @@ You are initializing a new tmux orchestrator project.
 
 1. **Set the orchestrator path:**
 ```bash
-ORCHESTRATOR_PATH="$HOME/dev/tools/tmux-orchestrator"
+YATO_PATH="$HOME/dev/tools/yato"
 ```
 
 2. **Initialize the project** (creates session + PM + Developer):
 ```bash
-python3 $ORCHESTRATOR_PATH/lib/orchestrator.py init <session> -p <path>
+python3 $YATO_PATH/lib/orchestrator.py init <session> -p <path>
 ```
 
 3. **Start Claude in all agent windows:**
 ```bash
-python3 $ORCHESTRATOR_PATH/lib/orchestrator.py start
+python3 $YATO_PATH/lib/orchestrator.py start
 ```
 
 4. **Report the result** to the user, including:
@@ -40,5 +40,5 @@ python3 $ORCHESTRATOR_PATH/lib/orchestrator.py start
 
 After initialization, the user should brief the PM:
 ```bash
-$ORCHESTRATOR_PATH/bin/send-message.sh <session>:1 "Your project requirements here"
+$YATO_PATH/bin/send-message.sh <session>:1 "Your project requirements here"
 ```

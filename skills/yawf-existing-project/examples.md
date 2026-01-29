@@ -69,7 +69,7 @@ SESSION_NAME="ecommerce-app"
 
 6. Deploy PM:
 ```bash
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm ecommerce-app -p /Users/username/projects/ecommerce-app
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm ecommerce-app -p /Users/username/projects/ecommerce-app
 ```
 
 7. Copy attach:
@@ -165,7 +165,7 @@ SESSION_NAME="api-backend"
 
 6. Deploy:
 ```bash
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm api-backend -p /Users/username/work/api-backend
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm api-backend -p /Users/username/work/api-backend
 ```
 
 7. Output:
@@ -243,7 +243,7 @@ All 45 components need TS conversion + type definitions
 5. Deploy:
 ```bash
 SESSION_NAME="ui-components"
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm ui-components -p /Users/username/projects/ui-components
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm ui-components -p /Users/username/projects/ui-components
 ```
 
 6. Output:
@@ -322,7 +322,7 @@ Based on Django Debug Toolbar:
 4. Deploy:
 ```bash
 SESSION_NAME="django-blog"
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm django-blog -p /Users/username/work/django-blog
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm django-blog -p /Users/username/work/django-blog
 ```
 
 5. Output:
@@ -400,7 +400,7 @@ cat package.json | grep -A 5 scripts
 4. Deploy:
 ```bash
 SESSION_NAME="company-monorepo"
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm company-monorepo -p /Users/username/work/company-monorepo
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm company-monorepo -p /Users/username/work/company-monorepo
 ```
 
 5. Output:
@@ -482,7 +482,7 @@ Convert page by page, starting with most-used screens
 4. Deploy:
 ```bash
 SESSION_NAME="old-dashboard"
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm old-dashboard -p /Users/username/projects/old-dashboard
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm old-dashboard -p /Users/username/projects/old-dashboard
 ```
 
 5. Output:

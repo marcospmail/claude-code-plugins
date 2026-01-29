@@ -7,7 +7,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ORCHESTRATOR_PATH="$HOME/dev/tools/tmux-orchestrator"
+YATO_PATH="$HOME/dev/tools/yato"
 
 # Source workflow utilities
 source "$SCRIPT_DIR/workflow-utils.sh"
@@ -138,7 +138,7 @@ You are the Project Manager in an oversight loop. Your job is to verify all agen
 
 ## Your Tools
 - Read agent progress files: Read .workflow/agents/*/agent-tasks.md
-- Send commands: $HOME/dev/tools/tmux-orchestrator/bin/send-message.sh <session>:<window>.<pane> "message"
+- Send commands: $HOME/dev/tools/yato/bin/send-message.sh <session>:<window>.<pane> "message"
 - Check agent output: tmux capture-pane -t <session>:<window>.<pane> -p | tail -50
 
 ## Oversight Protocol

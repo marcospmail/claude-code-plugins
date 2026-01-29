@@ -221,11 +221,11 @@ The display script was never started or crashed and wasn't restarted.
 
 **Issue:** When user asked PM to spawn developer + code-reviewer agents, PM incorrectly used:
 1. First: `Task` tool with "Developer" prompt (sub-agent)
-2. Then: `tmux-orchestrator:tmux-meta-agent` sub-agent
+2. Then: `yato:tmux-meta-agent` sub-agent
 
 **Expected:** PM should directly run `create-team.sh` via Bash:
 ```bash
-$HOME/dev/tools/tmux-orchestrator/bin/create-team.sh /path/to/project developer:developer:opus code-reviewer:code-reviewer:opus
+$HOME/dev/tools/yato/bin/create-team.sh /path/to/project developer:developer:opus code-reviewer:code-reviewer:opus
 ```
 
 **Root Cause:** PM instructions don't explicitly forbid using Task tool for agent creation. PM may confuse "delegate to agents" with "use Task tool sub-agents".
@@ -355,7 +355,7 @@ create-team.sh /Users/personal/dev/sync developer:developer:opus qa:qa:opus code
 | 17:28 | Display text overlap in CMS-58 check-in pane - see Bug 6 |
 | 17:28 | Empty check-in display in CMS-66 pane 0 |
 | 17:29 | Check-in timing verified - 5 min intervals working correctly |
-| 17:29 | Global registry (~/.tmux-orchestrator/registry.json) not found |
+| 17:29 | Global registry (~/.yato/registry.json) not found |
 | 17:30 | Bug 6 persists - multiple lines show text overlap (extra chars at end) |
 | 17:31 | All workflow files verified present and valid |
 | 17:31 | CMS-58 check-ins confirmed working (5 min intervals) |
@@ -368,7 +368,7 @@ create-team.sh /Users/personal/dev/sync developer:developer:opus qa:qa:opus code
 | 17:37 | CMS-58 progress: 2/9 tasks completed (was 1/9) |
 | 17:37 | Both agents actively working, no new errors |
 | 17:37 | CMS-58 rapid progress: 5/9 done, 1 in progress, 3 pending |
-| 17:40 | Created bug-fix workflow session: tmux-orchestrator_001-fixorchestratorbugs |
+| 17:40 | Created bug-fix workflow session: yato_001-fixorchestratorbugs |
 | 17:41 | CMS-58 check-in #8 fired successfully |
 | 17:41 | Bug-fix PM initialized, waiting for user attach |
 | 17:43 | Bug-fix session attached, PM now working |
@@ -393,7 +393,7 @@ create-team.sh /Users/personal/dev/sync developer:developer:opus qa:qa:opus code
 | 03:12 | User reported: Model mismatch in sync session - agents showing Opus but agents.yml says sonnet |
 | 03:15 | Confirmed Bug 9: PM doesn't use name:role:model format when user specifies custom models |
 | 03:15 | sync_001-createelectrondashboard: PM ran `create-team.sh ... developer qa code-reviewer` instead of using opus format |
-| 03:20 | Sent new bugs 8-10 to PM in tmux-orchestrator_001-fixorchestratorbugs |
+| 03:20 | Sent new bugs 8-10 to PM in yato_001-fixorchestratorbugs |
 | 03:22 | PM updated PRD, added tasks, assigned to developer, restarted check-ins |
 | 03:25 | Developer completed Bug 8: Removed 'start loop' from orchestrator.py |
 | 03:25 | Developer completed Bug 9: Updated PM template for name:role:model format |
@@ -406,5 +406,5 @@ create-team.sh /Users/personal/dev/sync developer:developer:opus qa:qa:opus code
 | 03:36 | Bug 11 added to audit - PM tried Task tool then tmux-meta-agent instead of direct Bash |
 | 03:37 | Sent Bug 11 to bug-fix session for immediate fix |
 | 03:50 | DELETED agents/ folder - was creating unnecessary Task tool sub-agents |
-| 03:50 | Removed tmux-orchestrator:Developer, :PM, :QA, :tmux-meta-agent from Task tool |
+| 03:50 | Removed yato:Developer, :PM, :QA, :tmux-meta-agent from Task tool |
 | 03:50 | Updated README.md to remove agents/ references |

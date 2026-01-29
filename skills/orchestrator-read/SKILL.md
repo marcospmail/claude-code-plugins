@@ -17,12 +17,12 @@ You are reading the output from an orchestrator agent window.
 
 1. **Set the orchestrator path:**
 ```bash
-ORCHESTRATOR_PATH="$HOME/dev/tools/tmux-orchestrator"
+YATO_PATH="$HOME/dev/tools/yato"
 ```
 
 2. **Capture the agent output:**
 ```bash
-python3 $ORCHESTRATOR_PATH/lib/claude_control.py read <target> -n <lines>
+python3 $YATO_PATH/lib/claude_control.py read <target> -n <lines>
 ```
 
 3. **Analyze the output** and summarize for the user:

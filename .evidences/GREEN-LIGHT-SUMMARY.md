@@ -50,7 +50,7 @@ Users can:
 3. Create additional agents in separate windows (without --pane flag)
 
 ## Files Modified
-- `/Users/personal/dev/tools/tmux-orchestrator/bin/create-agent.sh`
+- `/Users/personal/dev/tools/yato/bin/create-agent.sh`
   - Removed complex multi-column logic
   - Simplified to: first agent uses placeholder, rest horizontal split
   - Updated help text

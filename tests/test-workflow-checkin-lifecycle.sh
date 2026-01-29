@@ -141,7 +141,7 @@ echo ""
 echo "=== Step 5: Schedule a check-in ==="
 
 # Run schedule-checkin from within the tmux session (needs WORKFLOW_NAME env)
-tmux send-keys -t "$TEST_SESSION:0.0" "cd '$TEST_DIR' && ORCHESTRATOR_PATH='$PROJECT_ROOT' '$PROJECT_ROOT/bin/schedule-checkin.sh' 1 'Test check-in' '$TEST_SESSION:0'" Enter
+tmux send-keys -t "$TEST_SESSION:0.0" "cd '$TEST_DIR' && YATO_PATH='$PROJECT_ROOT' '$PROJECT_ROOT/bin/schedule-checkin.sh' 1 'Test check-in' '$TEST_SESSION:0'" Enter
 sleep 2
 
 # Check if check-in was added to JSON

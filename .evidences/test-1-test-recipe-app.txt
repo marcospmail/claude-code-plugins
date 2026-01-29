@@ -27,7 +27,7 @@ Pane 4: reviewer-1 [9x24] at (71,0)
       "window_index": 0,
       "role": "pm",
       "pm_window": null,
-      "project_path": "/Users/personal/dev/tools/tmux-orchestrator",
+      "project_path": "/Users/personal/dev/tools/yato",
       "status": "active",
       "created_at": "2026-01-16T10:11:17.397878",
       "pane_index": 1,
@@ -52,7 +52,7 @@ Pane 4: reviewer-1 [9x24] at (71,0)
       "window_index": 1,
       "role": "pm",
       "pm_window": null,
-      "project_path": "/Users/personal/dev/tools/tmux-orchestrator",
+      "project_path": "/Users/personal/dev/tools/yato",
       "status": "active",
       "created_at": "2026-01-16T10:10:00.191993"
     },

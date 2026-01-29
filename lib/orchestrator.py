@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tmux Orchestrator - Main entry point for the orchestration system.
+Yato (Yet Another Tmux Orchestrator) - Main entry point for the orchestration system.
 
 This module provides:
 - Unified interface for all orchestration operations
@@ -338,7 +338,7 @@ class Orchestrator:
             f"      * If EMPTY/NEW PROJECT: Ask 'What are we building?' and inform user they can provide: a brief description, a URL to a file/line, a link to a PRD, or paste a full PRD. "
             f"      * If EXISTING PROJECT: Summarize what you found, then ask 'What would you like to accomplish?' and inform user they can provide: a brief description, a URL to a file/line, a link to a PRD, or paste a full PRD. "
             f"2) AFTER getting user's initial request: Create workflow folder IMMEDIATELY. "
-            f"   Run: $HOME/dev/tools/tmux-orchestrator/bin/init-workflow.sh {project_path} \"<short-3-5-word-title>\" "
+            f"   Run: $HOME/dev/tools/yato/bin/init-workflow.sh {project_path} \"<short-3-5-word-title>\" "
             f"   Example: init-workflow.sh {project_path} \"Add user authentication\" "
             f"   This creates: .workflow/001-add-user-auth/ and sets it as current. "
             f"   ALL subsequent files go in this workflow folder! "
@@ -377,7 +377,7 @@ class Orchestrator:
             f"     - '10 minutes' (description: 'Less frequent check-ins for independent work') "
             f"   User can select from these or type custom minutes in 'Other' field. "
             f"   After user answers, extract the number and SAVE IT by running: "
-            f"   source $HOME/dev/tools/tmux-orchestrator/bin/workflow-utils.sh && update_checkin_interval {project_path} <MINUTES> "
+            f"   source $HOME/dev/tools/yato/bin/workflow-utils.sh && update_checkin_interval {project_path} <MINUTES> "
             f"   Example: If user selects '5 minutes', run: update_checkin_interval {project_path} 5 "
             f"   Example: If user types '7' in Other, run: update_checkin_interval {project_path} 7 "
             f"8) Show this EXACT message with colors: "
@@ -386,7 +386,7 @@ class Orchestrator:
             f"   \033[1;32m╚══════════════════════════════════════════════════╝\033[0m "
             f"9) ONLY AFTER USER TYPES 'start': "
             f"   a) Create agents based on APPROVED team structure: "
-            f"      $HOME/dev/tools/tmux-orchestrator/bin/create-team.sh {project_path} <agent-role> <agent-role> ... "
+            f"      $HOME/dev/tools/yato/bin/create-team.sh {project_path} <agent-role> <agent-role> ... "
             f"      FORMAT: name:role:model (e.g., impl:developer:opus, tester:qa:sonnet) "
             f"      EXAMPLES: "
             f"      - Single QA: create-team.sh {project_path} qa "
@@ -400,7 +400,7 @@ class Orchestrator:
             f"      WORKFLOW_NAME=$(tmux showenv WORKFLOW_NAME 2>/dev/null | cut -d= -f2) "
             f"      INTERVAL=$(grep checkin_interval_minutes .workflow/$WORKFLOW_NAME/status.yml | awk '{{print $2}}') "
             f"      SESSION=$(tmux display-message -p '#S') "
-            f"      $HOME/dev/tools/tmux-orchestrator/bin/schedule-checkin.sh $INTERVAL 'Check team progress' $SESSION:0.1 "
+            f"      $HOME/dev/tools/yato/bin/schedule-checkin.sh $INTERVAL 'Check team progress' $SESSION:0.1 "
             f"      IMPORTANT: Only call schedule-checkin.sh ONCE to start the loop! "
             f"      The loop AUTO-CONTINUES until all tasks in tasks.json are done (no pending/in_progress/blocked). "
             f"      DO NOT call schedule-checkin.sh again - it handles rescheduling automatically! "
@@ -442,7 +442,7 @@ class Orchestrator:
             f"   CRITICAL: Do this whenever user adds features, changes scope, or clarifies requirements. "
             f"14) CHECK-IN LOOP AUTO-STOPS when all tasks in tasks.json are complete (no pending/in_progress/blocked). "
             f"   If you need to stop early, user can invoke /cancel-checkin skill or you can run: "
-            f"   $HOME/dev/tools/tmux-orchestrator/bin/cancel-checkin.sh "
+            f"   $HOME/dev/tools/yato/bin/cancel-checkin.sh "
             f"Start now: Check for .workflow/prd.md first, then begin discovery questions!"
         )
 
@@ -990,7 +990,7 @@ def cmd_deploy_pm(args: argparse.Namespace) -> int:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Tmux Orchestrator - Manage Claude AI agent teams",
+        description="Yato (Yet Another Tmux Orchestrator) - Manage Claude AI agent teams",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 

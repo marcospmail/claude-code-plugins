@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-The Tmux Orchestrator is a Claude Code plugin that enables multiple Claude agents to work autonomously across tmux sessions. It provides tools for deploying agent teams (PM, Developer, QA), scheduling check-ins, and coordinating work across projects.
+Yato (Yet Another Tmux Orchestrator) is a Claude Code plugin that enables multiple Claude agents to work autonomously across tmux sessions. It provides tools for deploying agent teams (PM, Developer, QA), scheduling check-ins, and coordinating work across projects.
 
 ## Architecture
 
@@ -40,7 +40,7 @@ The Tmux Orchestrator is a Claude Code plugin that enables multiple Claude agent
 | `commands/` | Claude Code slash commands (`/orc-*`) |
 | `agents/` | Agent role definitions (pm.md, developer.md, qa.md) |
 | `templates/` | Briefing templates for agents |
-| `.tmux-orchestrator/` | Runtime state (registry.json, checkins.json) |
+| `.yato/` | Runtime state (registry.json, checkins.json) |
 
 ### Python Module Hierarchy
 
@@ -60,8 +60,8 @@ lib/
 1. **Commands** (`commands/*.md`) invoke Python CLI or shell scripts
 2. **Python CLI** (`lib/claude_control.py`) manages agent lifecycle
 3. **Shell scripts** (`bin/*.sh`) handle tmux communication
-4. **Registry** (`.tmux-orchestrator/registry.json`) tracks all agents
-5. **Check-ins** (`.tmux-orchestrator/checkins.json`) schedules oversight
+4. **Registry** (`.yato/registry.json`) tracks all agents
+5. **Check-ins** (`.yato/checkins.json`) schedules oversight
 
 ## Common Commands
 
@@ -98,7 +98,7 @@ bin/cancel-checkin.sh
 ## Key Concepts
 
 ### Agent Registry
-Agents are tracked in `.tmux-orchestrator/registry.json`:
+Agents are tracked in `.yato/registry.json`:
 ```json
 {
   "agents": [
@@ -115,7 +115,7 @@ Agents are tracked in `.tmux-orchestrator/registry.json`:
 ```
 
 ### Check-in System
-Scheduled check-ins in `.tmux-orchestrator/checkins.json`:
+Scheduled check-ins in `.yato/checkins.json`:
 ```json
 {
   "checkins": [
@@ -170,11 +170,11 @@ bin/notify-pm.sh STATUS "50% complete"
 bin/notify-pm.sh PROGRESS "3 of 5 tasks done"
 ```
 
-## ORCHESTRATOR_PATH Variable
+## YATO_PATH Variable
 
-Always set this at the start of orchestrator sessions:
+Always set this at the start of Yato sessions:
 ```bash
-ORCHESTRATOR_PATH="$HOME/dev/tools/tmux-orchestrator"
+YATO_PATH="$HOME/dev/tools/yato"
 ```
 
 ## Tmux Patterns

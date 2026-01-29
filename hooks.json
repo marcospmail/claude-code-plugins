@@ -4,7 +4,7 @@
       "name": "orchestrator-startup",
       "event": "on_session_start",
       "description": "Check orchestrator environment on Claude startup",
-      "command": "python3 $HOME/dev/tools/tmux-orchestrator/lib/claude_control.py status 2>/dev/null || echo 'Orchestrator not configured'",
+      "command": "python3 $HOME/dev/tools/yato/lib/claude_control.py status 2>/dev/null || echo 'Yato not configured'",
       "enabled": false
     },
     {

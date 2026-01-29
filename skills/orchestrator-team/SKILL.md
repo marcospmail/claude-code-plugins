@@ -16,12 +16,12 @@ You are viewing the team structure for a Project Manager.
 
 1. **Set the orchestrator path:**
 ```bash
-ORCHESTRATOR_PATH="$HOME/dev/tools/tmux-orchestrator"
+YATO_PATH="$HOME/dev/tools/yato"
 ```
 
 2. **Get the team:**
 ```bash
-python3 $ORCHESTRATOR_PATH/lib/claude_control.py team <pm>
+python3 $YATO_PATH/lib/claude_control.py team <pm>
 ```
 
 3. **Present the team hierarchy** showing:

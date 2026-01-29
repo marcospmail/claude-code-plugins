@@ -51,7 +51,7 @@ Your FIRST and ONLY action must be to delegate the next pending task.
 
 Run this bash command:
 ```bash
-SESSION=$(tmux display-message -p '#S') && ~/dev/tools/tmux-orchestrator/bin/send-message.sh "$SESSION:WINDOW" "TASK_DESCRIPTION"
+SESSION=$(tmux display-message -p '#S') && ~/dev/tools/yato/bin/send-message.sh "$SESSION:WINDOW" "TASK_DESCRIPTION"
 ```
 
 Replace WINDOW and TASK_DESCRIPTION:
@@ -249,7 +249,7 @@ if [ -n "$PM_SESSION_ID" ] && [ "$CURRENT_SESSION_ID" = "$PM_SESSION_ID" ]; then
 BLOCKED: PM cannot use Task tool to spawn sub-agents.
 
 Instead, use create-team.sh to create agents:
-  $HOME/dev/tools/tmux-orchestrator/bin/create-team.sh PROJECT_PATH name:role:model
+  $HOME/dev/tools/yato/bin/create-team.sh PROJECT_PATH name:role:model
 
 Examples:
   create-team.sh /path developer:developer:opus

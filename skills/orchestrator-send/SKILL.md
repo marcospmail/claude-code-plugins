@@ -17,17 +17,17 @@ You are sending a message to an orchestrator agent.
 
 1. **Set the orchestrator path:**
 ```bash
-ORCHESTRATOR_PATH="$HOME/dev/tools/tmux-orchestrator"
+YATO_PATH="$HOME/dev/tools/yato"
 ```
 
 2. **Send the message:**
 ```bash
-$ORCHESTRATOR_PATH/bin/send-message.sh <target> "<message>"
+$YATO_PATH/bin/send-message.sh <target> "<message>"
 ```
 
 3. **Optionally read the response** after a few seconds:
 ```bash
-python3 $ORCHESTRATOR_PATH/lib/claude_control.py read <target> -n 30
+python3 $YATO_PATH/lib/claude_control.py read <target> -n 30
 ```
 
 4. **Confirm to the user** that the message was sent and show how to check for responses.

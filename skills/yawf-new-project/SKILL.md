@@ -1,6 +1,6 @@
 ---
 name: yawf-new-project
-description: Start a new project from scratch using the tmux orchestrator. Creates a new tmux session with a Project Manager agent. Use when user wants to begin a new codebase or project.
+description: Start a new project from scratch using Yato (Yet Another Tmux Orchestrator). Creates a new tmux session with a Project Manager agent. Use when user wants to begin a new codebase or project.
 allowed-tools: Bash,Read,Write
 user-invocable: true
 disable-model-invocation: false
@@ -10,7 +10,7 @@ argument-hint: "[project-name] [what to build: description, URL, or PRD]"
 # YAWF New Project
 
 <context>
-This skill helps you start a completely new project from scratch using the tmux orchestrator system. It creates a new tmux session with a Project Manager agent who will coordinate the development work.
+This skill helps you start a completely new project from scratch using Yato (Yet Another Tmux Orchestrator). It creates a new tmux session with a Project Manager agent who will coordinate the development work.
 </context>
 
 <capabilities>
@@ -22,7 +22,7 @@ This skill helps you start a completely new project from scratch using the tmux 
 </capabilities>
 
 <requirements>
-- Tmux orchestrator installed at ~/dev/tools/tmux-orchestrator
+- Yato installed at ~/dev/tools/yato
 - Python 3 available
 - pbcopy command (macOS clipboard)
 </requirements>
@@ -62,7 +62,7 @@ else
 fi
 
 # Create workflow folder (captures the folder name like "001-build-recipe-app")
-WORKFLOW_NAME=$(~/dev/tools/tmux-orchestrator/bin/init-workflow.sh "$PROJECT_PATH" "$TITLE" 2>/dev/null | grep "^Workflow:" | awk '{print $2}')
+WORKFLOW_NAME=$(~/dev/tools/yato/bin/init-workflow.sh "$PROJECT_PATH" "$TITLE" 2>/dev/null | grep "^Workflow:" | awk '{print $2}')
 
 # Fallback: get from newest folder
 if [[ -z "$WORKFLOW_NAME" ]]; then
@@ -113,7 +113,7 @@ Session name format: `{project}_{workflow}` (e.g., `recipe-manager_001-build-rec
 ```bash
 PROJECT_SLUG=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | tr '._ ' '-')
 SESSION_NAME="${PROJECT_SLUG}_${WORKFLOW_NAME}"
-python3 ~/dev/tools/tmux-orchestrator/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
+python3 ~/dev/tools/yato/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
 ```
 
 ## Step 6: Connect to PM Session
