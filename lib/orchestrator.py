@@ -235,9 +235,10 @@ class Orchestrator:
 
         # Split vertically for Check-ins on top (small pane)
         # -c ensures the new pane starts in project directory (needed for relative paths)
+        # -l 10 gives 8-9 usable lines after accounting for pane border
         subprocess.run([
             "tmux", "split-window", "-t", f"{session_name}:0.0",
-            "-v", "-b", "-l", "8",
+            "-v", "-b", "-l", "10",
             "-c", str(project_dir),
             "-P", "-F", "#{pane_index}"
         ], capture_output=True)
@@ -317,6 +318,8 @@ class Orchestrator:
             f"  - Update PRD with technical details you invented (only use user-provided requirements)\n"
             f"  - Use Write/Edit/Bash tools for implementation work\n"
             f"  - Use TodoWrite tool (forbidden - use workflow tasks.json instead)\n"
+            f"  - Use Task tool or sub-agents to create team members (ALWAYS use create-team.sh directly via Bash)\n"
+            f"  - Delegate agent creation to tmux-meta-agent or any other sub-agent\n"
             f"\n"
             f"GOLDEN RULE: If it's not coordination/planning, DELEGATE IT to an agent via send-message.sh.\n"
             f"═══════════════════════════════════════════════════════════════════\n"
