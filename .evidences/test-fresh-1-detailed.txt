@@ -1,0 +1,33 @@
+=== TEST FRESH-1: Full Workflow Test ===
+Date: Fri Jan 16 2026
+
+=== Step 1: deploy-pm creates initial layout ===
+Initial panes:
+  Pane 0: Check-ins [39x7] at (0,1)
+  Pane 1: PM [39x15] at (0,9)
+  Pane 2: Agents [40x23] at (40,1)  <-- placeholder
+
+=== Step 2: First agent uses placeholder ===
+After developer creation:
+  Pane 2: dev-1 [40x23] at (40,1)  <-- same position, renamed
+
+=== Step 3: Second agent splits horizontally ===
+After qa creation:
+  Pane 2: dev-1 [20x23] at (40,1)  <-- width reduced
+  Pane 3: qa-1 [19x23] at (61,1)   <-- new pane, different X
+
+=== Step 4: Third agent splits horizontally ===
+  Pane 0: Check-ins [39x7] at (0,1)
+  Pane 1: PM [39x15] at (0,9)
+  Pane 2: dev-1 [20x23] at (40,1)
+  Pane 3: qa-1 [9x23] at (61,1)
+  Pane 4: reviewer-1 [9x23] at (71,1)
+
+=== Verification Checks ===
+✓ All agents in SAME session: test-fresh-1
+✓ All agents in SAME window: 0
+✓ Horizontal layout: All agents at Y=1, different X positions (40, 61, 71)
+✓ All agents full height: 23 rows each
+✓ NO separate windows created
+
+TEST FRESH-1: PASSED ✓

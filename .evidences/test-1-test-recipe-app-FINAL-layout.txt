@@ -1,0 +1,47 @@
+=== TEST 1 FINAL: test-recipe-app ===
+Date: Fri Jan 16 16:57:43 -03 2026
+
+=== Window Structure ===
+0: Orchestrator (5 panes)
+
+=== Pane Layout ===
+Pane 0: Check-ins [39x7] at (0,1)
+Pane 1: PM [39x15] at (0,9)
+Pane 2: dev-1 [40x11] at (40,1)
+Pane 3: qa-1 [40x5] at (40,13)
+Pane 4: reviewer-1 [40x5] at (40,19)
+
+=== Agent Verification (last 15 lines of each agent pane) ===
+
+--- Developer (pane 0.2) ---
+
+
+
+
+
+
+  ⏵⏵ bypass
+  permissions on
+  (shift+tab to
+  cycle)
+
+
+--- QA (pane 0.3) ---
+  ⏵⏵ bypass
+  permissions on
+  (shift+tab to
+  cycle)
+
+
+--- Code Reviewer (pane 0.4) ---
+  ⏵⏵ bypass
+  permissions on
+  (shift+tab to
+  cycle)
+
+
+=== Layout Verification ===
+✓ Left column (x=0): Check-ins + PM
+✓ Right column (x=40): 3 agents vertically stacked
+✓ Agent pane sizes: 11, 5, 5 rows
+✓ Claude running in all agent panes: CONFIRMED

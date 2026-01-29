@@ -1,0 +1,15 @@
+{
+  "name": "tmux-orchestrator-marketplace",
+  "owner": {
+    "name": "Personal"
+  },
+  "plugins": [
+    {
+      "name": "tmux-orchestrator",
+      "source": "./",
+      "description": "Multi-agent orchestration with parallel Claude instances in tmux",
+      "category": "automation",
+      "tags": ["tmux", "agents", "orchestration", "parallel", "team"]
+    }
+  ]
+}

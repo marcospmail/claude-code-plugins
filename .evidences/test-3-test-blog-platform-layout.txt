@@ -1,0 +1,34 @@
+=== Test 3: test-blog-platform ===
+Date: Fri Jan 16 16:54:45 -03 2026
+
+=== Windows ===
+0: Orchestrator (5 panes)
+
+=== Panes Layout ===
+Pane 0: Check-ins [39x7] at (0,1)
+Pane 1: PM [39x15] at (0,9)
+Pane 2: fullstack-dev [40x11] at (40,1)
+Pane 3: qa-1 [40x5] at (40,13)
+Pane 4: security-1 [40x5] at (40,19)
+
+=== Visual Layout ===
+Left side (x=0):  Pane 0 (Check-ins) + Pane 1 (PM)
+Right side (x=40): Pane 2 (fullstack-dev) + Pane 3 (qa-1) + Pane 4 (security-1) [VERTICAL STACK]
+
+=== Full Pane Capture ===
+
+
+/tmp/test-blog-platform …
+➜
+
+/tmp/test-blog-platform …
+➜
+
+/tmp/test-blog-platform on 🐳 v28.5.2 (o
+rbstack) …
+➜
+
+/tmp/test-blog-platform on 🐳 v28.5.2 (o
+rbstack)
+➜
+

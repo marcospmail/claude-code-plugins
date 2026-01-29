@@ -1,0 +1,22 @@
+=== TEST 3: test-blog-platform ===
+Date: Fri Jan 16 2026
+
+=== Session Verification ===
+All agents created in: test-blog-platform (CORRECT - same session)
+Window: 0 (single window for all agents)
+
+=== Pane Layout ===
+Pane 0: Check-ins [40x12] at (0,0)
+Pane 1: PM [40x11] at (0,13)
+Pane 2: dev-1 [19x24] at (41,0)
+Pane 3: qa-1 [9x24] at (61,0)
+Pane 4: security-1 [9x24] at (71,0)
+
+=== Layout Verification ===
+✓ Left column (x=0): Check-ins + PM
+✓ Right side (x>40): All 3 agents horizontally side-by-side
+✓ All agents in SAME session: test-blog-platform
+✓ All agents in SAME window: 0
+✓ Agent IDs all reference test-blog-platform session
+
+TEST 3 PASSED

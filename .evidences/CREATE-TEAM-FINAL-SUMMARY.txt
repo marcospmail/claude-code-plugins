@@ -1,0 +1,73 @@
+╔══════════════════════════════════════════════════════════════════╗
+║      CREATE-TEAM.SH TESTS - ALL 3 PASSED                         ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Date: Fri Jan 16 2026                                           ║
+║  Solution: New create-team.sh script with auto-session detection ║
+╚══════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════
+THE PROBLEM
+═══════════════════════════════════════════════════════════════════
+PM (Claude agent) was:
+- Creating agents in WRONG session (new session instead of current)
+- Sometimes not using --pane flag (separate windows)
+- Not following the complex instructions correctly
+
+═══════════════════════════════════════════════════════════════════
+THE SOLUTION
+═══════════════════════════════════════════════════════════════════
+Created: bin/create-team.sh
+- AUTO-DETECTS current session (no PM input needed)
+- Creates ALL mandatory agents (developer, qa, code-reviewer)
+- Supports optional agents as arguments
+- Always uses --pane flag
+- Verifies layout after creation
+
+═══════════════════════════════════════════════════════════════════
+TEST RESULTS
+═══════════════════════════════════════════════════════════════════
+
+TEST 1: team-test-1 (3 mandatory agents)
+  Pane 0: Check-ins [39x7] at (0,1)
+  Pane 1: PM [39x15] at (0,9)
+  Pane 2: dev-1 [20x23] at (40,1)
+  Pane 3: qa-1 [9x23] at (61,1)
+  Pane 4: reviewer-1 [9x23] at (71,1)
+  ✓ PASSED
+
+TEST 2: team-test-2 (3 mandatory + 1 optional)
+  Pane 0: Check-ins [39x7] at (0,1)
+  Pane 1: PM [39x15] at (0,9)
+  Pane 2: dev-1 [20x23] at (40,1)
+  Pane 3: qa-1 [9x23] at (61,1)
+  Pane 4: reviewer-1 [4x23] at (71,1)
+  Pane 5: backend-1 [4x23] at (76,1)
+  ✓ PASSED
+
+TEST 3: team-test-3 (3 mandatory agents)
+  Pane 0: Check-ins [39x7] at (0,1)
+  Pane 1: PM [39x15] at (0,9)
+  Pane 2: dev-1 [20x23] at (40,1)
+  Pane 3: qa-1 [9x23] at (61,1)
+  Pane 4: reviewer-1 [9x23] at (71,1)
+  ✓ PASSED
+
+═══════════════════════════════════════════════════════════════════
+PM BRIEFING UPDATE
+═══════════════════════════════════════════════════════════════════
+Simplified from complex multi-step instructions to:
+
+  8) ONLY AFTER USER TYPES 'start':
+     a) Create ALL agents with ONE command (auto-detects session):
+        $HOME/dev/tools/tmux-orchestrator/bin/create-team.sh /path/to/project
+        ⛔ FORBIDDEN: tmux new-session, creating agents manually
+
+═══════════════════════════════════════════════════════════════════
+KEY IMPROVEMENTS
+═══════════════════════════════════════════════════════════════════
+1. Session auto-detection (PM can't get it wrong)
+2. Single command instead of multiple (less room for error)
+3. Built-in layout verification
+4. Mandatory agents always created
+
+ALL 3 TESTS PASSED ✓

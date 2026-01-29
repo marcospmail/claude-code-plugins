@@ -1,0 +1,6 @@
+Pane 0: Check-ins [39x7] at (0,1)
+Pane 1: PM [39x15] at (0,9)
+Pane 2: dev-1 [20x23] at (40,1)
+Pane 3: qa-1 [9x23] at (61,1)
+Pane 4: reviewer-1 [9x23] at (71,1)
+Windows:        1
