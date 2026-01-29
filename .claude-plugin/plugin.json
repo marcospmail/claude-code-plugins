@@ -1,0 +1,15 @@
+{
+  "name": "tmux-orchestrator",
+  "version": "2.10.0",
+  "description": "AI-powered multi-agent orchestration via tmux sessions. Deploy teams of Claude agents (PM, Developer, QA) that work in parallel with independent contexts.",
+  "author": {
+    "name": "Personal"
+  },
+  "skills": "./skills/",
+  "commands": [
+    "./skills/yawf-new-project/",
+    "./skills/yawf-existing-project/",
+    "./skills/yawf-resume/",
+    "./skills/cancel-checkin/"
+  ]
+}

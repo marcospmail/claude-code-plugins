@@ -121,6 +121,150 @@ cat > "$WORKFLOW_PATH/agents/pm/constraints.example.md" <<'EOF'
 - Respond to agent check-ins promptly
 EOF
 
+# Create project-level hooks for orchestrator workflow
+mkdir -p "$PROJECT_PATH/.claude/hooks"
+
+# Create settings.json with SessionStart and PreToolUse hooks
+cat > "$PROJECT_PATH/.claude/settings.json" <<'EOF'
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/capture-session-id.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/block-task-tool.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+
+# Create SessionStart hook to capture session_id for all agents
+cat > "$PROJECT_PATH/.claude/hooks/capture-session-id.sh" <<'EOF'
+#!/bin/bash
+# Capture session_id when Claude starts and write to agent's identity.yml
+# This runs for ALL agents (PM, developer, QA, etc.)
+
+# Read session_id from JSON stdin
+SESSION_DATA=$(cat)
+SESSION_ID=$(echo "$SESSION_DATA" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null)
+
+if [ -z "$SESSION_ID" ]; then
+    exit 0  # No session_id, nothing to do
+fi
+
+# Get pane title to identify which agent this is
+PANE_TITLE=""
+if [ -n "$TMUX_PANE" ]; then
+    PANE_TITLE=$(tmux display-message -t "$TMUX_PANE" -p '#{pane_title}' 2>/dev/null)
+elif [ -n "$TMUX" ]; then
+    PANE_TITLE=$(tmux display-message -p '#{pane_title}' 2>/dev/null)
+fi
+
+# Find the active workflow directory
+WORKFLOW_DIR=$(ls -td .workflow/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1)
+if [ -z "$WORKFLOW_DIR" ]; then
+    exit 0  # No workflow, nothing to do
+fi
+
+# Map pane title to agent identity file
+IDENTITY_FILE=""
+case "$PANE_TITLE" in
+    "PM")
+        IDENTITY_FILE="${WORKFLOW_DIR}agents/pm/identity.yml"
+        ;;
+    "Check-ins"*|"")
+        # Skip check-in pane or empty title
+        exit 0
+        ;;
+    *)
+        # For other agents, use pane title as folder name (lowercase)
+        AGENT_NAME=$(echo "$PANE_TITLE" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+        IDENTITY_FILE="${WORKFLOW_DIR}agents/${AGENT_NAME}/identity.yml"
+        ;;
+esac
+
+# Write session_id to identity file if it exists
+if [ -f "$IDENTITY_FILE" ]; then
+    if grep -q "^session_id:" "$IDENTITY_FILE"; then
+        # Update existing session_id
+        sed -i '' "s/^session_id:.*/session_id: $SESSION_ID/" "$IDENTITY_FILE" 2>/dev/null || \
+        sed -i "s/^session_id:.*/session_id: $SESSION_ID/" "$IDENTITY_FILE"
+    else
+        # Append session_id
+        echo "session_id: $SESSION_ID" >> "$IDENTITY_FILE"
+    fi
+fi
+
+exit 0
+EOF
+chmod +x "$PROJECT_PATH/.claude/hooks/capture-session-id.sh"
+
+# Create PreToolUse hook to block Task tool ONLY for PM (using session_id comparison)
+cat > "$PROJECT_PATH/.claude/hooks/block-task-tool.sh" <<'EOF'
+#!/bin/bash
+# Block Task tool ONLY for PM agent - other agents (developers, QA) are allowed
+# Uses session_id comparison instead of pane title for reliability
+
+# Read JSON input to get current session_id
+INPUT=$(cat)
+CURRENT_SESSION_ID=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null)
+
+if [ -z "$CURRENT_SESSION_ID" ]; then
+    exit 0  # No session_id available, allow
+fi
+
+# Find the active workflow directory
+WORKFLOW_DIR=$(ls -td .workflow/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1)
+if [ -z "$WORKFLOW_DIR" ]; then
+    exit 0  # No workflow, allow
+fi
+
+# Get PM's session_id from identity file
+PM_IDENTITY="${WORKFLOW_DIR}agents/pm/identity.yml"
+if [ ! -f "$PM_IDENTITY" ]; then
+    exit 0  # No PM identity file, allow
+fi
+
+PM_SESSION_ID=$(grep "^session_id:" "$PM_IDENTITY" 2>/dev/null | awk '{print $2}')
+
+# Block if current session matches PM's session
+if [ -n "$PM_SESSION_ID" ] && [ "$CURRENT_SESSION_ID" = "$PM_SESSION_ID" ]; then
+    cat >&2 << 'ERRMSG'
+BLOCKED: PM cannot use Task tool to spawn sub-agents.
+
+Instead, use create-team.sh to create agents:
+  $HOME/dev/tools/tmux-orchestrator/bin/create-team.sh PROJECT_PATH name:role:model
+
+Examples:
+  create-team.sh /path developer:developer:opus
+  create-team.sh /path impl:developer:sonnet tester:qa:sonnet
+
+Then use send-message.sh to communicate with agents.
+ERRMSG
+    exit 2
+fi
+
+# Allow for other agents
+exit 0
+EOF
+chmod +x "$PROJECT_PATH/.claude/hooks/block-task-tool.sh"
+
 # Add initial_request to status.yml if it exists at root level
 INITIAL_REQUEST_FILE="$PROJECT_PATH/.workflow/initial-request.md"
 if [[ -f "$INITIAL_REQUEST_FILE" ]]; then
