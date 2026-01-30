@@ -132,62 +132,6 @@ get_current_workflow_path() {
     fi
 }
 
-# Set current workflow
-# Sets tmux WORKFLOW_NAME env var (if in tmux)
-# No longer writes to .workflow/current file
-set_current_workflow() {
-    local project_path="$1"
-    local folder_name="$2"
-
-    local workflow_dir="$project_path/.workflow"
-    local full_path="$workflow_dir/$folder_name"
-
-    if [[ -d "$full_path" ]]; then
-        # Set tmux environment variable (if in tmux)
-        if [[ -n "$TMUX" ]]; then
-            tmux setenv WORKFLOW_NAME "$folder_name"
-        fi
-        return 0
-    else
-        echo "Error: Workflow folder not found: $full_path" >&2
-        return 1
-    fi
-}
-
-# Update workflow status
-update_workflow_status() {
-    local project_path="$1"
-    local new_status="$2"  # in-progress, completed, paused
-
-    local workflow_path=$(get_current_workflow_path "$project_path")
-    if [[ -z "$workflow_path" ]]; then
-        echo "Error: No current workflow" >&2
-        return 1
-    fi
-
-    local status_file="$workflow_path/status.yml"
-    if [[ -f "$status_file" ]]; then
-        sed -i '' "s/^status: .*/status: $new_status/" "$status_file"
-    fi
-}
-
-# Update session in status.yml
-update_workflow_session() {
-    local project_path="$1"
-    local session="$2"
-
-    local workflow_path=$(get_current_workflow_path "$project_path")
-    if [[ -z "$workflow_path" ]]; then
-        echo "Error: No current workflow" >&2
-        return 1
-    fi
-
-    local status_file="$workflow_path/status.yml"
-    if [[ -f "$status_file" ]]; then
-        sed -i '' "s/^session: .*/session: \"$session\"/" "$status_file"
-    fi
-}
-
 # Update check-in interval in status.yml
 update_checkin_interval() {
     local project_path="$1"
@@ -233,51 +177,6 @@ list_workflows() {
             fi
         fi
     done
-}
-
-# Get workflow info as JSON (for resume)
-get_workflow_info() {
-    local project_path="$1"
-    local workflow_name="$2"
-
-    local workflow_path="$project_path/.workflow/$workflow_name"
-    local status_file="$workflow_path/status.yml"
-
-    if [[ ! -f "$status_file" ]]; then
-        echo "{}"
-        return 1
-    fi
-
-    # Parse status.yml
-    local wf_status=$(grep "^status:" "$status_file" | sed 's/status: //')
-    local wf_title=$(grep "^title:" "$status_file" | sed 's/title: //' | tr -d '"')
-    local wf_session=$(grep "^session:" "$status_file" | sed 's/session: //' | tr -d '"')
-    local wf_interval=$(grep "^checkin_interval_minutes:" "$status_file" | sed 's/checkin_interval_minutes: //')
-
-    # List agents
-    local wf_agents=""
-    for agent_dir in "$workflow_path/agents"/*/; do
-        if [[ -d "$agent_dir" ]] && [[ -f "$agent_dir/identity.yml" ]]; then
-            local agent_name=$(basename "$agent_dir")
-            if [[ -n "$wf_agents" ]]; then
-                wf_agents="$wf_agents,$agent_name"
-            else
-                wf_agents="$agent_name"
-            fi
-        fi
-    done
-
-    cat <<EOF
-{
-  "name": "$workflow_name",
-  "status": "$wf_status",
-  "title": "$wf_title",
-  "session": "$wf_session",
-  "checkin_interval_minutes": $wf_interval,
-  "agents": ["${wf_agents//,/\",\"}"],
-  "path": "$workflow_path"
-}
-EOF
 }
 
 # Create agents.yml file with PM entry
@@ -361,10 +260,14 @@ EOF
     echo "Added $agent_name to agents.yml (window $window_number)"
 }
 
-# Get window number for an agent by name
-get_agent_window() {
+# Save team structure to team.yml
+# This file is used by /parse-prd-to-tasks to know which agents are available
+# Usage: save_team_structure <project_path> <agents...>
+# Agent format: name:role:model (e.g., "impl:developer:opus" or "qa:qa:sonnet")
+save_team_structure() {
     local project_path="$1"
-    local agent_name="$2"
+    shift
+    local agents=("$@")
 
     local workflow_path=$(get_current_workflow_path "$project_path")
     if [[ -z "$workflow_path" ]]; then
@@ -372,46 +275,41 @@ get_agent_window() {
         return 1
     fi
 
-    local agents_file="$workflow_path/agents.yml"
+    local team_file="$workflow_path/team.yml"
 
-    if [[ ! -f "$agents_file" ]]; then
-        echo "Error: agents.yml not found" >&2
-        return 1
-    fi
+    # Create team.yml header
+    cat > "$team_file" <<EOF
+# Team Structure
+# This file defines the agents that will be created for this workflow.
+# Used by /parse-prd-to-tasks to assign tasks to appropriate agents.
+# Created: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-    # Find the agent entry and get the window number
-    # This assumes agents are in YAML format with consistent indentation
-    local window=$(awk "/^  - name: $agent_name$/,/^  - name:/ { if (/^    window:/) print \$2; exit }" "$agents_file")
+agents:
+EOF
 
-    if [[ -z "$window" ]]; then
-        # Try PM entry
-        window=$(awk "/^pm:$/,/^agents:/ { if (/^  window:/) print \$2; exit }" "$agents_file")
-    fi
+    # Add each agent
+    for agent_spec in "${agents[@]}"; do
+        # Parse agent spec: name:role:model
+        IFS=':' read -r agent_name agent_role agent_model <<< "$agent_spec"
 
-    echo "$window"
-}
+        # Handle simple format (just role)
+        if [[ -z "$agent_role" ]]; then
+            agent_role="$agent_name"
+            agent_name="$agent_role"
+            agent_model="sonnet"
+        fi
 
-# List all agents from agents.yml
-list_agents_from_yml() {
-    local project_path="$1"
+        # Handle name:role format (no model)
+        if [[ -z "$agent_model" ]]; then
+            agent_model="sonnet"
+        fi
 
-    local workflow_path=$(get_current_workflow_path "$project_path")
-    if [[ -z "$workflow_path" ]]; then
-        echo "Error: No current workflow" >&2
-        return 1
-    fi
+        cat >> "$team_file" <<EOF
+  - name: $agent_name
+    role: $agent_role
+    model: $agent_model
+EOF
+    done
 
-    local agents_file="$workflow_path/agents.yml"
-
-    if [[ ! -f "$agents_file" ]]; then
-        echo "Error: agents.yml not found" >&2
-        return 1
-    fi
-
-    echo "PM:"
-    grep -A 5 "^pm:" "$agents_file" | grep -E "  (name|role|window|pane):" | sed 's/^  /  /'
-
-    echo ""
-    echo "Agents:"
-    grep -A 4 "^  - name:" "$agents_file" | grep -E "  - name:|    (role|window|model):" | sed 's/^    /  /'
+    echo "Saved team structure to: $team_file"
 }
