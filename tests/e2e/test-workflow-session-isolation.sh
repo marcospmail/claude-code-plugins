@@ -101,7 +101,7 @@ echo "Testing check-in scripts read from tmux env..."
 # Run schedule-checkin.sh inside the tmux session
 # First, cd to the project directory, then run the script
 tmux send-keys -t "$SESSION_A" "cd $TEST_DIR_A && $ORCHESTRATOR_ROOT/bin/schedule-checkin.sh 1 'Test checkin' $SESSION_A:0" Enter
-sleep 2
+sleep 3
 
 # Verify checkins.json was created in the correct workflow folder
 if [[ -f "$TEST_DIR_A/.workflow/$WORKFLOW_A/checkins.json" ]]; then
