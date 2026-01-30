@@ -32,8 +32,13 @@ for test_file in "$SCRIPT_DIR"/test-*.sh; do
         test_name=$(basename "$test_file" .sh)
         TOTAL_TESTS=$((TOTAL_TESTS + 1))
 
-        # Small delay between tests to allow background processes to settle
-        sleep 1
+        # Clean up any stale e2e sessions from previous tests
+        tmux list-sessions 2>/dev/null | grep -E "^e2e-" | cut -d: -f1 | while read session; do
+            tmux kill-session -t "$session" 2>/dev/null || true
+        done
+
+        # Delay between tests to allow background processes and tmux to settle
+        sleep 2
 
         echo "─────────────────────────────────────────────────────"
         echo "Running: $test_name"
