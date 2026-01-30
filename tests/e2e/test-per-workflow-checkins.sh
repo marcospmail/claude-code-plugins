@@ -86,10 +86,10 @@ echo "Testing check-in file location..."
 
 # Run schedule-checkin.sh inside tmux sessions
 tmux send-keys -t "$SESSION_A" "cd $TEST_DIR_A && $BIN_DIR/schedule-checkin.sh 5 'Test A' '$SESSION_A:0'" Enter
-sleep 2
+sleep 3
 
 tmux send-keys -t "$SESSION_B" "cd $TEST_DIR_B && $BIN_DIR/schedule-checkin.sh 5 'Test B' '$SESSION_B:0'" Enter
-sleep 2
+sleep 3
 
 if [[ -f "$TEST_DIR_A/.workflow/001-workflow-a/checkins.json" ]]; then
     pass "Project A checkins.json created in workflow directory"
@@ -145,7 +145,7 @@ echo "Testing cancel isolation..."
 
 # Cancel from Project A session
 tmux send-keys -t "$SESSION_A" "$BIN_DIR/cancel-checkin.sh" Enter
-sleep 1
+sleep 2
 
 # Check Project A is cancelled
 STATUS_A=$(python3 -c "
@@ -224,7 +224,7 @@ tmux new-session -d -s "$TEST_SESSION" -c "$TEST_DIR_NO_WF"
 # Do NOT set WORKFLOW_NAME
 
 tmux send-keys -t "$TEST_SESSION" "$BIN_DIR/schedule-checkin.sh 5 'Test' '$TEST_SESSION:0' 2>&1; echo DONE" Enter
-sleep 2
+sleep 3
 
 ERROR_OUTPUT=$(tmux capture-pane -t "$TEST_SESSION" -p)
 tmux kill-session -t "$TEST_SESSION" 2>/dev/null || true
