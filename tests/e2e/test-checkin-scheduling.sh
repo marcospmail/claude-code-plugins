@@ -72,7 +72,7 @@ echo "Testing first check-in schedules successfully..."
 
 # Run schedule-checkin from inside the session
 tmux send-keys -t "$SESSION_NAME:0" "$BIN_DIR/schedule-checkin.sh 1 'First check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-1.txt" Enter
-sleep 2
+sleep 3
 
 OUTPUT1=$(cat /tmp/checkin-test-1.txt 2>/dev/null)
 
@@ -109,7 +109,7 @@ echo "Testing duplicate check-in is prevented..."
 
 # Try to schedule another check-in while one is pending
 tmux send-keys -t "$SESSION_NAME:0" "$BIN_DIR/schedule-checkin.sh 1 'Duplicate check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-2.txt" Enter
-sleep 2
+sleep 3
 
 OUTPUT2=$(cat /tmp/checkin-test-2.txt 2>/dev/null)
 
@@ -146,11 +146,11 @@ echo "Testing check-in after cancel..."
 
 # Cancel the pending check-in
 tmux send-keys -t "$SESSION_NAME:0" "$BIN_DIR/cancel-checkin.sh 2>&1" Enter
-sleep 2
+sleep 3
 
 # Now schedule should work again
 tmux send-keys -t "$SESSION_NAME:0" "$BIN_DIR/schedule-checkin.sh 1 'After cancel check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-3.txt" Enter
-sleep 2
+sleep 3
 
 OUTPUT3=$(cat /tmp/checkin-test-3.txt 2>/dev/null)
 
@@ -189,7 +189,7 @@ sleep 1
 
 LONG_NOTE="Auto check-in (15 tasks remaining) - this is a longer note for testing"
 tmux send-keys -t "$SESSION_NAME:0" "$BIN_DIR/schedule-checkin.sh 1 '$LONG_NOTE' $SESSION_NAME:0 2>&1" Enter
-sleep 2
+sleep 3
 
 # Check that full note is in JSON
 STORED_NOTE=$(python3 -c "
