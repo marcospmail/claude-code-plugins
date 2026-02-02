@@ -20,8 +20,9 @@ from typing import Optional, List, Dict
 # Add lib directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from session_registry import SessionRegistry, Agent
+from session_registry import Agent
 from tmux_utils import TmuxOrchestrator as TmuxUtils
+from workflow_registry import WorkflowRegistry
 
 
 class Orchestrator:
@@ -35,7 +36,15 @@ class Orchestrator:
     - Project lifecycle management
     """
 
-    def __init__(self, project_root: Optional[Path] = None):
+    def __init__(self, project_root: Optional[Path] = None, project_path: Optional[str] = None, workflow_name: Optional[str] = None):
+        """
+        Initialize the orchestrator.
+
+        Args:
+            project_root: Path to the yato project root (for accessing bin/, lib/, templates/)
+            project_path: Path to the target project (for workflow operations)
+            workflow_name: Specific workflow name (optional, auto-detected if not provided)
+        """
         self.project_root = project_root or Path(__file__).parent.parent
         self.bin_dir = self.project_root / "bin"
         self.lib_dir = self.project_root / "lib"
@@ -43,6 +52,45 @@ class Orchestrator:
 
         self.tmux = TmuxUtils()
         self.tmux.safety_mode = False  # Disable confirmation prompts
+
+        # Workflow context
+        self._project_path = Path(project_path).expanduser().resolve() if project_path else None
+        self._workflow_name = workflow_name
+        self._registry = None
+
+    def _get_registry(self, project_path: Optional[str] = None) -> Optional[WorkflowRegistry]:
+        """Get or create a WorkflowRegistry for the given project path."""
+        target_path = Path(project_path).expanduser().resolve() if project_path else self._project_path
+        if not target_path:
+            return None
+        return WorkflowRegistry.from_project(target_path, self._workflow_name)
+
+    def _register_agent_to_workflow(
+        self,
+        project_path: str,
+        session_name: str,
+        window_index: int,
+        role: str,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        pane_index: Optional[int] = None
+    ) -> Optional[Agent]:
+        """Register an agent to the workflow's agents.yml file."""
+        registry = self._get_registry(project_path)
+        if not registry:
+            return None
+
+        agent = Agent(
+            session_name=session_name,
+            window_index=window_index,
+            role=role,
+            project_path=project_path,
+            name=name or role,
+            model=model,
+            pane_index=pane_index
+        )
+        registry.add_agent(agent, is_pm=(role == "pm"))
+        return agent
 
     # ==================== Session Management ====================
 
@@ -90,26 +138,29 @@ class Orchestrator:
             pm_window = self.tmux.create_window(session_name, "Claude-PM", project_path)
             if pm_window is not None:
                 pm_agent_id = f"{session_name}:{pm_window}"
-                agent = self.tmux.register_agent(
+                agent = self._register_agent_to_workflow(
+                    project_path=project_path,
                     session_name=session_name,
                     window_index=pm_window,
                     role="pm",
-                    project_path=project_path
+                    name="PM"
                 )
-                result["agents"].append(agent.to_dict())
+                if agent:
+                    result["agents"].append(agent.to_dict())
 
         # Create developer if requested
         if with_developer:
             dev_window = self.tmux.create_window(session_name, "Claude-Developer", project_path)
             if dev_window is not None:
-                agent = self.tmux.register_agent(
+                agent = self._register_agent_to_workflow(
+                    project_path=project_path,
                     session_name=session_name,
                     window_index=dev_window,
                     role="developer",
-                    pm_window=pm_agent_id,
-                    project_path=project_path
+                    name="Developer"
                 )
-                result["agents"].append(agent.to_dict())
+                if agent:
+                    result["agents"].append(agent.to_dict())
 
         return result
 
@@ -263,17 +314,17 @@ class Orchestrator:
         subprocess.run(["tmux", "set-option", "-p", "-t", pm_target, "allow-set-title", "off"], capture_output=True)
 
         # Register PM agent - PM always uses Opus (pane 1, since pane 0 is check-in display)
-        agent = self.tmux.register_agent(
+        agent = self._register_agent_to_workflow(
+            project_path=str(project_dir),
             session_name=session_name,
             window_index=0,
             role="pm",
-            project_path=str(project_dir),
             name="PM",
-            focus="Planning and team coordination",
             model="opus",  # PM always uses Opus
             pane_index=1
         )
-        result["agents"].append(agent.to_dict())
+        if agent:
+            result["agents"].append(agent.to_dict())
         result["pm_target"] = pm_target
 
         return result
@@ -346,29 +397,46 @@ class Orchestrator:
             f"4) Create prd.md in workflow folder (e.g., .workflow/001-xyz/prd.md). "
             f"   CRITICAL: PRD must be EXTREMELY DETAILED - include architecture, data models, API specs, UI flows, edge cases, error handling. "
             f"   If codebase-analysis.md exists, reference it: 'See [codebase-analysis.md](./codebase-analysis.md) for technical details.' "
-            f"5) Propose team with MODELS based on ACTUAL NEEDS (NOT mandatory 3-agent structure). "
+            f"5) Propose team based on ACTUAL NEEDS (NOT mandatory 3-agent structure). "
             f"   ANALYZE the task and propose ONLY the agents needed: "
-            f"   - If fixing bugs/implementing features: developer (sonnet/opus) - CAN MODIFY CODE "
-            f"   - If testing needed: qa (sonnet) - usually CANNOT MODIFY CODE (only test/report), BUT can modify test files if using test-writer agents "
+            f"   - If fixing bugs/implementing features: developer (opus) - CAN MODIFY CODE "
+            f"   - If testing needed: qa (opus) - usually CANNOT MODIFY CODE (only test/report), BUT can modify test files if using test-writer agents "
             f"   - If security/review needed: code-reviewer (opus) - CANNOT MODIFY CODE (only review/request changes) "
             f"   - If specialized work: backend-developer, frontend-developer, designer, devops, etc. "
             f"   EXAMPLES: "
-            f"   - E2E test fixes → Single QA with opus (uses e2e-test-writer, can modify test files) "
-            f"   - Bug fix → Single developer with sonnet "
-            f"   - New feature → Developer (sonnet) + QA (sonnet) + Code-reviewer (opus) "
-            f"   - Documentation → Single developer with haiku "
-            f"   MODEL GUIDELINES: opus=complex/critical, sonnet=standard implementation, haiku=simple/repetitive. "
+            f"   - E2E test fixes → Single QA with opus "
+            f"   - Bug fix → Single developer with opus "
+            f"   - New feature → Developer (opus) + QA (opus) "
+            f"   - Documentation → Single developer with opus "
+            f"   MODEL GUIDELINES: ALWAYS propose opus initially. User can request sonnet/haiku if they want to save costs. "
             f"   CRITICAL: Propose MINIMAL team needed - don't default to 3 agents! "
             f"   FORMAT your team proposal like this: "
             f"   Agent: [name] | Model: [model] | Role: [role] | Description: [brief description of what they'll work on] "
             f"   DO NOT include specific task numbers or assignments. "
             f"   DO NOT explain 'why this structure' or 'parallel execution plan'. "
-            f"   END with: 'Does this team structure work for you, or would you like any changes?' "
-            f"   Wait for user approval. "
-            f"6) Create tasks.json in workflow folder (e.g., .workflow/001-xyz/tasks.json). "
+            f"   AFTER showing team proposal, use AskUserQuestion tool: "
+            f"   Question: 'Does this team structure work for you?' "
+            f"   Header: 'Team' "
+            f"   Options: "
+            f"     - 'Yes, looks good' (description: 'Approve the proposed team') "
+            f"   User can type changes in 'Other' field. Wait for response. "
+            f"   CRITICAL TEAM APPROVAL LOOP: "
+            f"   - If user selects 'Yes, looks good' → proceed to step 6 "
+            f"   - If user types changes in 'Other' → update team proposal, show new table, then ASK AGAIN with AskUserQuestion "
+            f"   - NEVER save team until user explicitly selects 'Yes, looks good' "
+            f"   - Keep asking until user approves with 'Yes, looks good' "
+            f"6) AFTER USER SELECTS 'Yes, looks good': Save team structure to team.yml BEFORE creating tasks. "
+            f"   Run: source $HOME/dev/tools/yato/bin/workflow-utils.sh && save_team_structure {project_path} <agents> "
+            f"   Agent format: name:role:model (e.g., 'impl:developer:opus qa:qa:opus') "
+            f"   Examples: "
+            f"   - Single QA: save_team_structure {project_path} qa:qa:opus "
+            f"   - Full team: save_team_structure {project_path} impl:developer:opus qa:qa:opus reviewer:code-reviewer:opus "
+            f"   This creates .workflow/001-xyz/team.yml which /parse-prd-to-tasks will read. "
+            f"7) Create tasks.json in workflow folder (e.g., .workflow/001-xyz/tasks.json). "
             f"   CRITICAL: Tasks must be EXTREMELY DETAILED - clear acceptance criteria, implementation steps, file paths, expected outcomes. "
+            f"   CRITICAL: Only assign tasks to agents that exist in team.yml (created in step 6). "
             f"   Format: JSON with tasks array. Each task has: id, subject, description, activeForm, agent, status, blockedBy, blocks. "
-            f"7) Ask check-in interval using AskUserQuestion tool with these options: "
+            f"8) Ask check-in interval using AskUserQuestion tool with these options: "
             f"   Question: 'How often should I check in with the team?' "
             f"   Header: 'Check-in' "
             f"   Options: "
@@ -380,11 +448,11 @@ class Orchestrator:
             f"   source $HOME/dev/tools/yato/bin/workflow-utils.sh && update_checkin_interval {project_path} <MINUTES> "
             f"   Example: If user selects '5 minutes', run: update_checkin_interval {project_path} 5 "
             f"   Example: If user types '7' in Other, run: update_checkin_interval {project_path} 7 "
-            f"8) Show this EXACT message with colors: "
+            f"9) Show this EXACT message with colors: "
             f"   \033[1;32m╔══════════════════════════════════════════════════╗\033[0m\n"
             f"   \033[1;32m║  Type 'start' to begin work                     ║\033[0m\n"
             f"   \033[1;32m╚══════════════════════════════════════════════════╝\033[0m "
-            f"9) ONLY AFTER USER TYPES 'start': "
+            f"10) ONLY AFTER USER TYPES 'start': "
             f"   a) Create agents based on APPROVED team structure: "
             f"      $HOME/dev/tools/yato/bin/create-team.sh {project_path} <agent-role> <agent-role> ... "
             f"      FORMAT: name:role:model (e.g., impl:developer:opus, tester:qa:sonnet) "
@@ -404,7 +472,7 @@ class Orchestrator:
             f"      IMPORTANT: Only call schedule-checkin.sh ONCE to start the loop! "
             f"      The loop AUTO-CONTINUES until all tasks in tasks.json are done (no pending/in_progress/blocked). "
             f"      DO NOT call schedule-checkin.sh again - it handles rescheduling automatically! "
-            f"10) AGENT LOCATIONS - Read agents.yml to find agent windows: "
+            f"11) AGENT LOCATIONS - Read agents.yml to find agent windows: "
             f"   File: .workflow/[workflow-name]/agents.yml "
             f"   Contains: PM + all agents with their window numbers "
             f"   Example: qa agent at window 1 means target is $SESSION:1 "
@@ -412,7 +480,7 @@ class Orchestrator:
             f"   Example reading agents.yml: "
             f"     QA_WINDOW=$(grep -A 4 'name: qa' .workflow/001-xyz/agents.yml | grep 'window:' | awk '{{print $2}}') "
             f"     send-message.sh $SESSION:$QA_WINDOW \"Check your agent-tasks.md\" "
-            f"11) TASK ASSIGNMENT via agent-tasks.md: Create workflow/agents/<agent-name>/agent-tasks.md for each agent. "
+            f"12) TASK ASSIGNMENT via agent-tasks.md: Create workflow/agents/<agent-name>/agent-tasks.md for each agent. "
             f"   STRICT FORMAT - agent-tasks.md must ONLY contain: "
             f"   ```markdown\n"
             f"   ## Tasks\n"
@@ -431,8 +499,8 @@ class Orchestrator:
             f"     4. .workflow/[workflow]/agents/[role]/constraints.md (if exists, else constraints.example.md) "
             f"   SUBSEQUENT MESSAGES: Just tell agent 'Check your agent-tasks.md for new tasks'. "
             f"   IMPORTANT: Tell agents to READ files themselves - do NOT send file contents in messages. "
-            f"12) When receiving agent updates: IMMEDIATELY update workflow/tasks.json status tracking (pending → in_progress → completed). "
-            f"13) WHEN REQUIREMENTS CHANGE SIGNIFICANTLY: "
+            f"13) When receiving agent updates: IMMEDIATELY update workflow/tasks.json status tracking (pending → in_progress → completed). "
+            f"14) WHEN REQUIREMENTS CHANGE SIGNIFICANTLY: "
             f"   a) If USER provides new requirements: Update PRD (.workflow/$WORKFLOW_NAME/prd.md) with their exact input. "
             f"      If technical implementation details needed: Ask developer to propose approach, then update PRD with approved approach. "
             f"      FORBIDDEN: Adding technical details you invented without user approval or developer input. "
@@ -440,7 +508,7 @@ class Orchestrator:
             f"   c) This creates a fresh tasks.json based on updated PRD. "
             f"   d) Reassign tasks to agents via their agent-tasks.md files using send-message.sh. "
             f"   CRITICAL: Do this whenever user adds features, changes scope, or clarifies requirements. "
-            f"14) CHECK-IN LOOP AUTO-STOPS when all tasks in tasks.json are complete (no pending/in_progress/blocked). "
+            f"15) CHECK-IN LOOP AUTO-STOPS when all tasks in tasks.json are complete (no pending/in_progress/blocked). "
             f"   If you need to stop early, user can invoke /cancel-checkin skill or you can run: "
             f"   $HOME/dev/tools/yato/bin/cancel-checkin.sh "
             f"Start now: Check for .workflow/prd.md first, then begin discovery questions!"
@@ -469,18 +537,16 @@ class Orchestrator:
                 window = self.tmux.create_window(session_name, name, project_path)
                 if window is not None:
                     pm_agent_id = f"{session_name}:{window}"
-                    agent = self.tmux.register_agent(
+                    agent = self._register_agent_to_workflow(
+                        project_path=project_path,
                         session_name=session_name,
                         window_index=window,
                         role="pm",
-                        project_path=project_path,
                         name=name,
-                        focus=config.get("focus"),
-                        skills=config.get("skills"),
-                        briefing=config.get("briefing"),
                         model=model
                     )
-                    result["agents"].append(agent.to_dict())
+                    if agent:
+                        result["agents"].append(agent.to_dict())
                 break
 
         # Create other agents
@@ -493,19 +559,16 @@ class Orchestrator:
             model = config.get("model") or self._get_default_model(role)
             window = self.tmux.create_window(session_name, name, project_path)
             if window is not None:
-                agent = self.tmux.register_agent(
+                agent = self._register_agent_to_workflow(
+                    project_path=project_path,
                     session_name=session_name,
                     window_index=window,
                     role=role,
-                    pm_window=pm_agent_id if role != "orchestrator" else None,
-                    project_path=project_path,
                     name=name,
-                    focus=config.get("focus"),
-                    skills=config.get("skills"),
-                    briefing=config.get("briefing"),
                     model=model
                 )
-                result["agents"].append(agent.to_dict())
+                if agent:
+                    result["agents"].append(agent.to_dict())
 
         return result
 
@@ -581,19 +644,17 @@ class Orchestrator:
                     pane_index = int(win_pane[1])
 
                     pm_agent_id = target
-                    agent = self.tmux.register_agent(
+                    agent = self._register_agent_to_workflow(
+                        project_path=project_path,
                         session_name=session,
                         window_index=window_idx,
                         role="pm",
-                        project_path=project_path,
                         name=name,
-                        focus=config.get("focus"),
-                        skills=config.get("skills"),
-                        briefing=config.get("briefing"),
                         model=model,
                         pane_index=pane_index
                     )
-                    result["agents"].append(agent.to_dict())
+                    if agent:
+                        result["agents"].append(agent.to_dict())
                     pane_idx += 1
                 break
 
@@ -618,20 +679,17 @@ class Orchestrator:
                 window_idx = int(win_pane[0])
                 pane_index = int(win_pane[1])
 
-                agent = self.tmux.register_agent(
+                agent = self._register_agent_to_workflow(
+                    project_path=project_path,
                     session_name=session,
                     window_index=window_idx,
                     role=role,
-                    pm_window=pm_agent_id if role != "orchestrator" else None,
-                    project_path=project_path,
                     name=name,
-                    focus=config.get("focus"),
-                    skills=config.get("skills"),
-                    briefing=config.get("briefing"),
                     model=model,
                     pane_index=pane_index
                 )
-                result["agents"].append(agent.to_dict())
+                if agent:
+                    result["agents"].append(agent.to_dict())
                 pane_idx += 1
 
         return result
@@ -764,25 +822,32 @@ class Orchestrator:
 
     # ==================== Agent Operations ====================
 
-    def start_claude_in_agents(self, agent_ids: Optional[List[str]] = None) -> Dict[str, bool]:
+    def start_claude_in_agents(self, project_path: str, agent_ids: Optional[List[str]] = None) -> Dict[str, bool]:
         """
         Start Claude in specified agents (or all registered agents).
 
         Uses --dangerously-skip-permissions and sets model based on agent config.
 
         Args:
+            project_path: Path to the project
             agent_ids: List of agent IDs to start, or None for all
 
         Returns:
             Dictionary mapping agent_id to success status
         """
+        registry = self._get_registry(project_path)
+        if not registry:
+            return {}
+
         if agent_ids is None:
-            agents = self.tmux.list_agents()
+            agents = registry.list_agents()
         else:
-            agents = [self.tmux.get_agent(aid) for aid in agent_ids if self.tmux.get_agent(aid)]
+            agents = [registry.get_agent(aid) for aid in agent_ids if registry.get_agent(aid)]
 
         results = {}
         for agent in agents:
+            if not agent:
+                continue
             # Build Claude command with model and dangerous flag
             model = agent.model or "sonnet"
             claude_cmd = f"claude --dangerously-skip-permissions --model {model}"
@@ -796,9 +861,17 @@ class Orchestrator:
         """Send a briefing message to an agent."""
         return self.tmux.send_message_to_agent(agent_id, message)
 
-    def brief_team(self, pm_id: str, message: str) -> Dict[str, bool]:
-        """Send a message to all agents reporting to a PM."""
-        return self.tmux.broadcast_to_team(pm_id, message)
+    def brief_team(self, project_path: str, message: str) -> Dict[str, bool]:
+        """Send a message to all team members (non-PM agents)."""
+        registry = self._get_registry(project_path)
+        if not registry:
+            return {}
+
+        team = registry.get_team()
+        results = {}
+        for agent in team:
+            results[agent.agent_id] = self.tmux.send_message_to_agent(agent.agent_id, message)
+        return results
 
     def check_agent_status(self, agent_id: str, num_lines: int = 30) -> str:
         """Get recent output from an agent."""
@@ -806,21 +879,37 @@ class Orchestrator:
 
     # ==================== Monitoring ====================
 
-    def get_system_status(self) -> Dict:
+    def get_system_status(self, project_path: Optional[str] = None) -> Dict:
         """Get comprehensive system status."""
-        return {
+        result = {
             "timestamp": __import__("datetime").datetime.now().isoformat(),
             "sessions": self.tmux.get_all_windows_status(),
-            "agents": [a.to_dict() for a in self.tmux.list_agents()]
+            "agents": []
         }
+
+        if project_path:
+            registry = self._get_registry(project_path)
+            if registry:
+                result["workflow"] = registry.workflow_path.name
+                result["agents"] = [a.to_dict() for a in registry.list_agents()]
+
+        return result
 
     def create_snapshot(self) -> str:
         """Create a monitoring snapshot."""
         return self.tmux.create_monitoring_snapshot()
 
-    def get_team_status(self, pm_id: str) -> Dict[str, str]:
-        """Get status of all agents reporting to a PM."""
-        return self.tmux.check_team_status(pm_id)
+    def get_team_status(self, project_path: str, num_lines: int = 20) -> Dict[str, str]:
+        """Get status of all team members (non-PM agents)."""
+        registry = self._get_registry(project_path)
+        if not registry:
+            return {}
+
+        team = registry.get_team()
+        status = {}
+        for agent in team:
+            status[agent.agent_id] = self.tmux.capture_agent_output(agent.agent_id, num_lines)
+        return status
 
     # ==================== Utilities ====================
 

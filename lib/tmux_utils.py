@@ -6,7 +6,9 @@ This module provides a comprehensive interface for:
 - Managing tmux sessions and windows
 - Capturing and analyzing window content
 - Sending messages to agents
-- Integration with the session registry
+
+Note: Registry operations have been moved to WorkflowRegistry.
+This module focuses on pure tmux operations only.
 """
 
 import subprocess
@@ -15,10 +17,6 @@ import time
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
-
-# Import session registry
-from session_registry import SessionRegistry, Agent
 
 
 @dataclass
@@ -46,14 +44,14 @@ class TmuxOrchestrator:
     - Session/window management
     - Content capture and analysis
     - Message sending to agents
-    - Registry integration
+
+    Note: Registry operations have been moved to WorkflowRegistry.
     """
 
-    def __init__(self, registry_path: Optional[Path] = None):
+    def __init__(self):
         self.safety_mode = True
         self.max_lines_capture = 1000
         self.message_delay = 0.5  # Delay between message and Enter
-        self.registry = SessionRegistry(registry_path)
 
     # ==================== Session/Window Management ====================
 
@@ -181,7 +179,7 @@ class TmuxOrchestrator:
             return f"Error capturing window content: {e}"
 
     def capture_agent_output(self, agent_id: str, num_lines: int = 50) -> str:
-        """Capture output from a registered agent.
+        """Capture output from an agent target.
 
         Supports both window format (session:window) and pane format (session:window.pane).
         """
@@ -269,7 +267,7 @@ class TmuxOrchestrator:
             return False
 
     def send_message_to_agent(self, agent_id: str, message: str, confirm: bool = False) -> bool:
-        """Send a message to a registered agent.
+        """Send a message to an agent target.
 
         Supports both window format (session:window) and pane format (session:window.pane).
         """
@@ -317,71 +315,6 @@ class TmuxOrchestrator:
             print(f"Error sending to pane: {e}")
             return False
 
-    # ==================== Agent Registry Integration ====================
-
-    def register_agent(
-        self,
-        session_name: str,
-        window_index: int,
-        role: str,
-        pm_window: Optional[str] = None,
-        project_path: Optional[str] = None,
-        name: Optional[str] = None,
-        focus: Optional[str] = None,
-        skills: Optional[List[str]] = None,
-        briefing: Optional[str] = None,
-        model: Optional[str] = None,
-        pane_index: Optional[int] = None
-    ) -> Agent:
-        """Register a new agent in the registry."""
-        return self.registry.register_agent(
-            session_name=session_name,
-            window_index=window_index,
-            role=role,
-            pm_window=pm_window,
-            project_path=project_path,
-            name=name,
-            focus=focus,
-            skills=skills,
-            briefing=briefing,
-            model=model,
-            pane_index=pane_index
-        )
-
-    def unregister_agent(self, agent_id: str) -> bool:
-        """Remove an agent from the registry."""
-        return self.registry.unregister_agent(agent_id)
-
-    def get_agent(self, agent_id: str) -> Optional[Agent]:
-        """Get an agent by ID."""
-        return self.registry.get_agent(agent_id)
-
-    def list_agents(self, role: Optional[str] = None, session: Optional[str] = None) -> List[Agent]:
-        """List all registered agents."""
-        return self.registry.list_agents(role=role, session=session)
-
-    def get_pm_for_agent(self, agent_id: str) -> Optional[Agent]:
-        """Get the PM for a given agent."""
-        return self.registry.get_pm_for_agent(agent_id)
-
-    def get_team_for_pm(self, pm_id: str) -> List[Agent]:
-        """Get all agents reporting to a PM."""
-        return self.registry.get_team_for_pm(pm_id)
-
-    def get_agents_with_status(self) -> List[Dict]:
-        """Get all agents with their current window status."""
-        agents = self.registry.list_agents()
-        result = []
-
-        for agent in agents:
-            window_info = self.get_window_info(agent.session_name, agent.window_index)
-            result.append({
-                "agent": agent.to_dict(),
-                "window_info": window_info
-            })
-
-        return result
-
     # ==================== Status and Monitoring ====================
 
     def get_all_windows_status(self) -> Dict:
@@ -402,15 +335,11 @@ class TmuxOrchestrator:
             for window in session.windows:
                 window_info = self.get_window_info(session.name, window.window_index)
 
-                # Check if this window has a registered agent
-                agent = self.registry.get_agent(f"{session.name}:{window.window_index}")
-
                 window_data = {
                     "index": window.window_index,
                     "name": window.window_name,
                     "active": window.active,
-                    "info": window_info,
-                    "agent": agent.to_dict() if agent else None
+                    "info": window_info
                 }
                 session_data["windows"].append(window_data)
 
@@ -447,10 +376,6 @@ class TmuxOrchestrator:
                 if window['active']:
                     snapshot += " (ACTIVE)"
 
-                # Show agent info if registered
-                if window['agent']:
-                    snapshot += f" [{window['agent']['role']}]"
-
                 snapshot += "\n"
 
                 if 'content' in window['info']:
@@ -463,51 +388,7 @@ class TmuxOrchestrator:
                             snapshot += f"    | {line}\n"
                 snapshot += "\n"
 
-        # Add registered agents summary
-        agents = self.registry.list_agents()
-        if agents:
-            snapshot += "\n" + "=" * 60 + "\n"
-            snapshot += "Registered Agents\n"
-            snapshot += "-" * 40 + "\n"
-            for agent in agents:
-                pm_info = f" → {agent.pm_window}" if agent.pm_window else ""
-                snapshot += f"  {agent.agent_id}: {agent.role}{pm_info}\n"
-
         return snapshot
-
-    # ==================== Team Management ====================
-
-    def notify_pm(self, agent_id: str, message_type: str, message: str) -> bool:
-        """Send a notification from an agent to their PM."""
-        agent = self.registry.get_agent(agent_id)
-        if not agent or not agent.pm_window:
-            print(f"Agent {agent_id} has no PM assigned")
-            return False
-
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        formatted = f"[{message_type}] from {agent_id} at {timestamp}: {message}"
-
-        return self.send_message_to_agent(agent.pm_window, formatted)
-
-    def broadcast_to_team(self, pm_id: str, message: str) -> Dict[str, bool]:
-        """Send a message to all agents reporting to a PM."""
-        team = self.registry.get_team_for_pm(pm_id)
-        results = {}
-
-        for agent in team:
-            results[agent.agent_id] = self.send_message_to_agent(agent.agent_id, message)
-
-        return results
-
-    def check_team_status(self, pm_id: str, num_lines: int = 20) -> Dict[str, str]:
-        """Capture recent output from all team members."""
-        team = self.registry.get_team_for_pm(pm_id)
-        status = {}
-
-        for agent in team:
-            status[agent.agent_id] = self.capture_agent_output(agent.agent_id, num_lines)
-
-        return status
 
 
 if __name__ == "__main__":
