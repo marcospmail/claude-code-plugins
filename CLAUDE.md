@@ -255,11 +255,8 @@ echo "=== Next ==="
 
 ### Running Tests
 ```bash
-# E2E tests (comprehensive)
+# E2E tests
 bash tests/e2e/run-all-tests.sh
-
-# Unit tests
-uv run pytest tests/
 ```
 
 ### Package Structure
