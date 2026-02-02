@@ -17,12 +17,17 @@ import sys
 from pathlib import Path
 from typing import Optional, List, Dict
 
-# Add lib directory to path
-sys.path.insert(0, str(Path(__file__).parent))
-
-from session_registry import Agent
-from tmux_utils import TmuxOrchestrator as TmuxUtils
-from workflow_registry import WorkflowRegistry
+# Handle imports for both `uv run` and direct `python3 lib/orchestrator.py` execution
+try:
+    from lib.session_registry import Agent
+    from lib.tmux_utils import TmuxOrchestrator as TmuxUtils
+    from lib.workflow_registry import WorkflowRegistry
+except ModuleNotFoundError:
+    # Running as script, add parent directory to path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from lib.session_registry import Agent
+    from lib.tmux_utils import TmuxOrchestrator as TmuxUtils
+    from lib.workflow_registry import WorkflowRegistry
 
 
 class Orchestrator:
@@ -133,11 +138,9 @@ class Orchestrator:
                 return result
 
         # Create PM if requested
-        pm_agent_id = None
         if with_pm:
             pm_window = self.tmux.create_window(session_name, "Claude-PM", project_path)
             if pm_window is not None:
-                pm_agent_id = f"{session_name}:{pm_window}"
                 agent = self._register_agent_to_workflow(
                     project_path=project_path,
                     session_name=session_name,
@@ -529,14 +532,12 @@ class Orchestrator:
     ) -> Dict:
         """Deploy team using separate windows (original behavior)."""
         # Find or create PM first
-        pm_agent_id = None
         for config in team_config:
             if config.get("role") == "pm":
                 name = config.get("name", "Claude-PM")
                 model = config.get("model") or self._get_default_model("pm")
                 window = self.tmux.create_window(session_name, name, project_path)
                 if window is not None:
-                    pm_agent_id = f"{session_name}:{window}"
                     agent = self._register_agent_to_workflow(
                         project_path=project_path,
                         session_name=session_name,
@@ -622,7 +623,6 @@ class Orchestrator:
                         pane_targets.append(result_split.stdout.strip())
 
         # Assign agents to panes
-        pm_agent_id = None
         pane_idx = 0
 
         # First pass: create PM
@@ -643,7 +643,6 @@ class Orchestrator:
                     window_idx = int(win_pane[0])
                     pane_index = int(win_pane[1])
 
-                    pm_agent_id = target
                     agent = self._register_agent_to_workflow(
                         project_path=project_path,
                         session_name=session,
@@ -780,46 +779,6 @@ class Orchestrator:
 
         return "\n".join(lines)
 
-    def start_and_brief_agents(self, result: Dict) -> Dict[str, bool]:
-        """
-        Start Claude in agents and send their briefings.
-
-        Uses --dangerously-skip-permissions and sets model based on agent config.
-
-        Args:
-            result: Result from deploy_team containing agents and project_context
-
-        Returns:
-            Dictionary mapping agent_id to success status
-        """
-        import time
-
-        outcomes = {}
-        project_context = result.get("project_context")
-
-        for agent in result.get("agents", []):
-            agent_id = agent.get("agent_id")
-            model = agent.get("model", "sonnet")
-
-            # Build Claude command with model and dangerous flag
-            claude_cmd = f"claude --dangerously-skip-permissions --model {model}"
-
-            # Start Claude
-            success = self.tmux.send_message_to_agent(agent_id, claude_cmd)
-            if not success:
-                outcomes[agent_id] = False
-                continue
-
-            # Wait for Claude to start
-            time.sleep(5)
-
-            # Generate and send briefing
-            briefing = self.generate_agent_briefing(agent, project_context)
-            success = self.tmux.send_message_to_agent(agent_id, briefing)
-            outcomes[agent_id] = success
-
-        return outcomes
-
     # ==================== Agent Operations ====================
 
     def start_claude_in_agents(self, project_path: str, agent_ids: Optional[List[str]] = None) -> Dict[str, bool]:
@@ -910,13 +869,6 @@ class Orchestrator:
         for agent in team:
             status[agent.agent_id] = self.tmux.capture_agent_output(agent.agent_id, num_lines)
         return status
-
-    # ==================== Utilities ====================
-
-    def run_shell_command(self, command: str, in_project: bool = True) -> subprocess.CompletedProcess:
-        """Run a shell command, optionally in the project directory."""
-        cwd = str(self.project_root) if in_project else None
-        return subprocess.run(command, shell=True, capture_output=True, text=True, cwd=cwd)
 
 
 # ==================== CLI Interface ====================

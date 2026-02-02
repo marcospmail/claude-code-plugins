@@ -8,13 +8,19 @@ Agents are stored in the workflow's agents.yml file, not a global registry.
 
 import os
 import subprocess
-from datetime import datetime
+import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 import yaml
 
-from session_registry import Agent
+# Handle imports for both `uv run` and direct script execution
+try:
+    from lib.session_registry import Agent
+except ModuleNotFoundError:
+    # Running as script, add parent directory to path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from lib.session_registry import Agent
 
 
 class WorkflowRegistry:

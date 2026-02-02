@@ -56,7 +56,7 @@ mkdir -p "$TEST_DIR"
 echo "test file" > "$TEST_DIR/test.txt"
 
 # Deploy PM (capture output for debugging if needed)
-DEPLOY_OUTPUT=$(python3 "$PROJECT_ROOT/lib/orchestrator.py" deploy-pm "$SESSION_NAME" -p "$TEST_DIR" 2>&1)
+DEPLOY_OUTPUT=$(cd "$PROJECT_ROOT" && uv run python lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$TEST_DIR" 2>&1)
 DEPLOY_EXIT=$?
 if [[ $DEPLOY_EXIT -ne 0 ]]; then
     echo "deploy-pm failed with exit code $DEPLOY_EXIT"

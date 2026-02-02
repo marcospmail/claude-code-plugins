@@ -15,22 +15,17 @@ You are initializing a new tmux orchestrator project.
 
 ## Steps
 
-1. **Set the orchestrator path:**
+1. **Initialize the project** (creates session + PM + Developer):
 ```bash
-YATO_PATH="$HOME/dev/tools/yato"
+cd ~/dev/tools/yato && uv run python lib/orchestrator.py init <session> -p <path>
 ```
 
-2. **Initialize the project** (creates session + PM + Developer):
+2. **Start Claude in all agent windows:**
 ```bash
-python3 $YATO_PATH/lib/orchestrator.py init <session> -p <path>
+cd ~/dev/tools/yato && uv run python lib/orchestrator.py start
 ```
 
-3. **Start Claude in all agent windows:**
-```bash
-python3 $YATO_PATH/lib/orchestrator.py start
-```
-
-4. **Report the result** to the user, including:
+3. **Report the result** to the user, including:
    - Session name created
    - Agent windows created (PM at :1, Developer at :2)
    - How to brief the PM with project requirements
@@ -40,5 +35,5 @@ python3 $YATO_PATH/lib/orchestrator.py start
 
 After initialization, the user should brief the PM:
 ```bash
-$YATO_PATH/bin/send-message.sh <session>:1 "Your project requirements here"
+cd ~/dev/tools/yato && uv run yato send <session>:1 "Your project requirements here"
 ```

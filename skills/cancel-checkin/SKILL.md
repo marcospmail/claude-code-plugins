@@ -17,10 +17,10 @@ Check-ins are stored per-workflow in the project's `.workflow/<workflow>/checkin
 </context>
 
 <instructions>
-Run the cancel-checkin.sh script from the project directory:
+Run the cancel-checkin command from the project directory:
 
 ```bash
-$HOME/dev/tools/yato/bin/cancel-checkin.sh
+cd ~/dev/tools/yato && uv run yato checkin cancel
 ```
 
 This cancels check-ins for the current project's active workflow (uses relative paths).

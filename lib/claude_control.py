@@ -17,11 +17,15 @@ import sys
 from pathlib import Path
 from typing import Optional, List
 
-# Add lib directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
-from session_registry import Agent
-from workflow_registry import WorkflowRegistry
+# Handle imports for both `uv run` and direct `python3 lib/claude_control.py` execution
+try:
+    from lib.session_registry import Agent
+    from lib.workflow_registry import WorkflowRegistry
+except ModuleNotFoundError:
+    # Running as script, add parent directory to path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from lib.session_registry import Agent
+    from lib.workflow_registry import WorkflowRegistry
 
 
 class TmuxController:
