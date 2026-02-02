@@ -138,7 +138,9 @@ project/.workflow/
 └── 001-feature-name/
     ├── status.yml             # Workflow status (includes initial_request)
     ├── prd.md                 # Requirements
-    ├── tasks.json             # Generated tasks (JSON format)
+    ├── team.yml               # Proposed team structure (agents to create)
+    ├── tasks.json             # Generated tasks (JSON format, assigned to team.yml agents)
+    ├── agents.yml             # Runtime agent registry (created agents)
     └── agents/                # Agent configs
 ```
 
@@ -151,6 +153,36 @@ initial_request: |
 folder: "001-add-hourly-cron"
 checkin_interval_minutes: 15
 session: "myproject"
+```
+
+**team.yml** defines the proposed team structure (created before tasks.json):
+```yaml
+# Team Structure - defines agents that will be created
+agents:
+  - name: developer
+    role: developer
+    model: sonnet
+  - name: qa
+    role: qa
+    model: sonnet
+```
+
+**tasks.json** assigns tasks to agents defined in team.yml:
+```json
+{
+  "tasks": [
+    {
+      "id": "T1",
+      "subject": "Implement feature X",
+      "description": "Detailed description...",
+      "activeForm": "Implementing feature X",
+      "agent": "developer",
+      "status": "pending",
+      "blockedBy": [],
+      "blocks": ["T2"]
+    }
+  ]
+}
 ```
 
 ## Agent Communication

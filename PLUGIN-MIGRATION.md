@@ -8,9 +8,9 @@ Files to move into `yato/` to make it a proper Claude Code plugin.
 
 | Current Location (MOVE FROM) | Target Location (MOVE TO) |
 |------------------------------|---------------------------|
-| `/Users/personal/dev/dotfiles/claude-code/skills/yawf-resume/` | `yato/skills/yawf-resume/` |
-| `/Users/personal/dev/dotfiles/claude-code/skills/yawf-existing-project/` | `yato/skills/yawf-existing-project/` |
-| `/Users/personal/dev/dotfiles/claude-code/skills/yawf-new-project/` | `yato/skills/yawf-new-project/` |
+| `/Users/personal/dev/dotfiles/claude-code/skills/yato-resume/` | `yato/skills/yato-resume/` |
+| `/Users/personal/dev/dotfiles/claude-code/skills/yato-existing-project/` | `yato/skills/yato-existing-project/` |
+| `/Users/personal/dev/dotfiles/claude-code/skills/yato-new-project/` | `yato/skills/yato-new-project/` |
 
 ### Agents (move from dotfiles)
 
@@ -37,13 +37,13 @@ yato/
 ├── .claude-plugin/
 │   └── plugin.json              # NEW - Plugin manifest
 ├── skills/
-│   ├── yawf-resume/             # MOVE from dotfiles
+│   ├── yato-resume/             # MOVE from dotfiles
 │   │   └── SKILL.md
-│   ├── yawf-existing-project/   # MOVE from dotfiles
+│   ├── yato-existing-project/   # MOVE from dotfiles
 │   │   ├── SKILL.md
 │   │   ├── reference.md
 │   │   └── examples.md
-│   └── yawf-new-project/        # MOVE from dotfiles
+│   └── yato-new-project/        # MOVE from dotfiles
 │       └── SKILL.md
 ├── commands/
 │   └── parse-prd-to-tasks.md    # MOVE from user global
@@ -64,4 +64,4 @@ yato/
 
 1. Remove moved files from dotfiles
 2. Update any symlinks if needed
-3. Commands will be namespaced as `/yato:yawf-resume`, etc.
+3. Commands will be namespaced as `/yato:yato-resume`, etc.

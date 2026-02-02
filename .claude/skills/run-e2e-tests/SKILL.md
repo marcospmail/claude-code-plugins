@@ -1,6 +1,7 @@
 ---
 name: run-e2e-tests
 description: Run end-to-end tests for the Yato tmux orchestrator project. Use this skill whenever you need to run tests, verify system functionality, execute the test suite, check that everything works, validate the codebase, or test tmux orchestrator features.
+user-invocable: false
 allowed-tools: Bash
 ---
 
