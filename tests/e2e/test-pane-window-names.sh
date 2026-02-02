@@ -55,15 +55,42 @@ echo ""
 mkdir -p "$TEST_DIR"
 echo "test file" > "$TEST_DIR/test.txt"
 
-# Deploy PM
-python3 "$PROJECT_ROOT/lib/orchestrator.py" deploy-pm "$SESSION_NAME" -p "$TEST_DIR" > /dev/null 2>&1
+# Deploy PM (capture output for debugging if needed)
+DEPLOY_OUTPUT=$(python3 "$PROJECT_ROOT/lib/orchestrator.py" deploy-pm "$SESSION_NAME" -p "$TEST_DIR" 2>&1)
+DEPLOY_EXIT=$?
+if [[ $DEPLOY_EXIT -ne 0 ]]; then
+    echo "deploy-pm failed with exit code $DEPLOY_EXIT"
+    echo "Output: $DEPLOY_OUTPUT"
+fi
 
-# Wait for checkin-display.sh to run at least once
+# Wait for session to be created and verify it exists
+sleep 2
+for i in {1..10}; do
+    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+        break
+    fi
+    sleep 1
+done
+
+if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    fail "Session '$SESSION_NAME' was not created by deploy-pm"
+    exit 1
+fi
+
+# Wait for checkin-display.sh to run and set pane titles
 sleep 5
 
-# Check pane titles
-PANE_0_TITLE=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^0:" | cut -d: -f2-)
-PANE_1_TITLE=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
+# Check pane titles with retry (titles may take a moment to be set)
+PANE_0_TITLE=""
+PANE_1_TITLE=""
+for i in {1..5}; do
+    PANE_0_TITLE=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^0:" | cut -d: -f2-)
+    PANE_1_TITLE=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
+    if [[ -n "$PANE_0_TITLE" && -n "$PANE_1_TITLE" ]]; then
+        break
+    fi
+    sleep 1
+done
 
 echo "Testing pane 0 (Check-ins)..."
 if [[ "$PANE_0_TITLE" == *"Check-ins"* ]]; then
@@ -177,8 +204,15 @@ echo ""
 echo "Phase 4: Final PM pane persistence check..."
 echo ""
 
-# Final check that PM pane name is still correct
-PANE_1_FINAL=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
+# Final check that PM pane name is still correct (with retry)
+PANE_1_FINAL=""
+for i in {1..5}; do
+    PANE_1_FINAL=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
+    if [[ -n "$PANE_1_FINAL" ]]; then
+        break
+    fi
+    sleep 1
+done
 
 if [[ "$PANE_1_FINAL" == "PM" ]]; then
     pass "PM pane still named 'PM'"

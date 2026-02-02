@@ -27,27 +27,6 @@ TESTS_FAILED=0
 pass() { echo "  PASS: $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
 fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
-# Capture pane with retry to handle race condition with screen clears
-# The display script clears every 2s, so we might catch it mid-clear
-capture_pane_retry() {
-    local target="$1"
-    local pattern="$2"
-    local attempts=5
-    for i in $(seq 1 $attempts); do
-        PANE_CONTENT=$(tmux capture-pane -t "$target" -p 2>/dev/null)
-        if [[ -n "$pattern" ]]; then
-            if echo "$PANE_CONTENT" | grep -q "$pattern"; then
-                return 0
-            fi
-        elif [[ -n "$PANE_CONTENT" && "$PANE_CONTENT" != *$'\n'*$'\n'*$'\n' ]]; then
-            # Has non-empty content
-            return 0
-        fi
-        sleep 0.5
-    done
-    return 1
-}
-
 cleanup() {
     echo ""; echo "Cleaning up..."
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
@@ -78,7 +57,7 @@ echo "Testing display without workflow..."
 tmux send-keys -t "$SESSION_NAME:0" "$BIN_DIR/checkin-display.sh" Enter
 
 # Wait for display to render
-sleep 3
+sleep 5
 
 # Capture pane content
 PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
@@ -97,8 +76,8 @@ else
     pass "No script path visible in display"
 fi
 
-# Check for "waiting for workflow" message (with retry to handle screen clear race condition)
-if capture_pane_retry "$SESSION_NAME:0" "(waiting for workflow...)"; then
+# Check for "waiting for workflow" message
+if echo "$PANE_CONTENT" | grep -q "(waiting for workflow...)"; then
     pass "Shows 'waiting for workflow' message"
 else
     fail "Missing 'waiting for workflow' message"
@@ -122,7 +101,7 @@ EOF
 tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test"
 
 # Wait for display to refresh
-sleep 4
+sleep 6
 
 # Capture pane content
 PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
@@ -165,21 +144,33 @@ cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
 }
 EOF
 
-# Wait for display to refresh (needs longer for file change detection)
-sleep 6
-
-# Capture pane content
-PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+# Wait for display to refresh with retry loop (more robust under load)
+# Display refreshes every 2s, we'll retry up to 8 times (16 seconds total)
+PENDING_FOUND=false
+NOTE_FOUND=false
+for i in {1..8}; do
+    sleep 2
+    PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+    if echo "$PANE_CONTENT" | grep -q "\[pending\]"; then
+        PENDING_FOUND=true
+    fi
+    if echo "$PANE_CONTENT" | grep -q "Test check-in note"; then
+        NOTE_FOUND=true
+    fi
+    if [[ "$PENDING_FOUND" == "true" && "$NOTE_FOUND" == "true" ]]; then
+        break
+    fi
+done
 
 # Check for pending indicator
-if echo "$PANE_CONTENT" | grep -q "\[pending\]"; then
+if [[ "$PENDING_FOUND" == "true" ]]; then
     pass "Shows [pending] status"
 else
     fail "Missing [pending] status"
 fi
 
 # Check for note content
-if echo "$PANE_CONTENT" | grep -q "Test check-in note"; then
+if [[ "$NOTE_FOUND" == "true" ]]; then
     pass "Shows check-in note"
 else
     fail "Missing check-in note"
@@ -209,7 +200,7 @@ cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
 EOF
 
 # Wait for display to refresh
-sleep 4
+sleep 6
 
 # Capture pane content
 PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
