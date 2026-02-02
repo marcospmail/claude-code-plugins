@@ -100,14 +100,19 @@ EOF
 # Set WORKFLOW_NAME in tmux env
 tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test"
 
-# Wait for display to refresh
-sleep 6
-
-# Capture pane content
-PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+# Wait for display to refresh with retry loop (more robust under load)
+NO_CHECKINS_FOUND=false
+for i in {1..5}; do
+    sleep 3
+    PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+    if echo "$PANE_CONTENT" | grep -q "(no check-ins scheduled)"; then
+        NO_CHECKINS_FOUND=true
+        break
+    fi
+done
 
 # Check for "no check-ins scheduled" message
-if echo "$PANE_CONTENT" | grep -q "(no check-ins scheduled)"; then
+if [[ "$NO_CHECKINS_FOUND" == "true" ]]; then
     pass "Shows 'no check-ins scheduled' message"
 else
     fail "Missing 'no check-ins scheduled' message"
@@ -220,14 +225,14 @@ else
 fi
 
 # ============================================================
-# Test 5: Pane title updates correctly
+# Test 5: Pane title updates correctly (reads from status.yml)
 # ============================================================
 
 echo ""
 echo "Testing pane title updates..."
 
-# Create interval file
-echo "5" > "$TEST_DIR/.workflow/001-test/checkin_interval.txt"
+# Set interval in status.yml (the single source of truth)
+sed -i '' 's/checkin_interval_minutes:.*/checkin_interval_minutes: 5/' "$TEST_DIR/.workflow/001-test/status.yml"
 
 # Wait for title update
 sleep 4
@@ -236,7 +241,7 @@ sleep 4
 PANE_TITLE=$(tmux display-message -t "$SESSION_NAME:0" -p '#{pane_title}' 2>/dev/null)
 
 if echo "$PANE_TITLE" | grep -q "every 5m"; then
-    pass "Pane title shows interval"
+    pass "Pane title shows interval from status.yml"
 else
     fail "Pane title missing interval: $PANE_TITLE"
 fi
