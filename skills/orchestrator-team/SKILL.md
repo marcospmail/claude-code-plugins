@@ -1,16 +1,13 @@
 ---
 name: orchestrator-team
-description: Show all agents reporting to a specific PM
+description: Show all agents in the current workflow team
 user-invocable: false
 disable-model-invocation: true
 ---
 
-# Show PM's Team
+# Show Workflow Team
 
-You are viewing the team structure for a Project Manager.
-
-## Arguments
-- pm: PM agent ID in format session:window (e.g., myproject:1) (required)
+You are viewing the team structure for the current workflow.
 
 ## Steps
 
@@ -19,12 +16,16 @@ You are viewing the team structure for a Project Manager.
 YATO_PATH="$HOME/dev/tools/yato"
 ```
 
-2. **Get the team:**
+2. **Get the team (from project directory):**
 ```bash
-python3 $YATO_PATH/lib/claude_control.py team <pm>
+# From project directory (auto-detects workflow)
+python3 $YATO_PATH/lib/claude_control.py team
+
+# Or specify project path explicitly
+python3 $YATO_PATH/lib/claude_control.py -p /path/to/project team
 ```
 
 3. **Present the team hierarchy** showing:
-   - PM at the top
-   - All agents reporting to this PM
-   - Their roles and current status
+   - Workflow name
+   - PM at the top with target and model
+   - All team members with their roles, targets, and models

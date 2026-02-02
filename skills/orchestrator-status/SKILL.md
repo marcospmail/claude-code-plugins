@@ -16,9 +16,13 @@ You are checking the status of all orchestrator agents.
 YATO_PATH="$HOME/dev/tools/yato"
 ```
 
-2. **Show registered agents:**
+2. **Show registered agents for current workflow:**
 ```bash
+# From project directory (auto-detects workflow)
 python3 $YATO_PATH/lib/claude_control.py status
+
+# Or specify project path explicitly
+python3 $YATO_PATH/lib/claude_control.py -p /path/to/project status
 ```
 
 3. **List all tmux sessions and windows:**
@@ -27,7 +31,7 @@ python3 $YATO_PATH/lib/claude_control.py list -v
 ```
 
 4. **Present the results** in a clear table format showing:
+   - Workflow name
    - Active sessions
-   - Registered agents with their roles
-   - Which agents report to which PM
-   - Window names and paths
+   - Registered agents with their roles and models
+   - Window targets
