@@ -31,16 +31,21 @@ while true; do
     fi
 
     CHECKIN_FILE="$STATE_DIR/checkins.json"
-    INTERVAL_FILE="$STATE_DIR/checkin_interval.txt"
+    STATUS_FILE="$STATE_DIR/status.yml"
 
     # Get terminal width for proper formatting
     TERM_WIDTH=$(tput cols 2>/dev/null || echo 80)
 
     # Update pane title with interval info (appears in tmux pane border)
     # IMPORTANT: Must target our specific pane with -t, otherwise it updates the currently selected pane
-    if [[ -n "$STATE_DIR" && -f "$INTERVAL_FILE" ]]; then
-        INTERVAL=$(cat "$INTERVAL_FILE")
-        tmux select-pane -t "$MY_PANE" -T "Check-ins (every ${INTERVAL}m, refresh: 2s)" 2>/dev/null
+    # Read interval from status.yml (single source of truth)
+    if [[ -n "$STATE_DIR" && -f "$STATUS_FILE" ]]; then
+        INTERVAL=$(grep 'checkin_interval_minutes:' "$STATUS_FILE" 2>/dev/null | awk '{print $2}')
+        if [[ -n "$INTERVAL" && "$INTERVAL" != "_" ]]; then
+            tmux select-pane -t "$MY_PANE" -T "Check-ins (every ${INTERVAL}m, refresh: 2s)" 2>/dev/null
+        else
+            tmux select-pane -t "$MY_PANE" -T "Check-ins (refresh: 2s)" 2>/dev/null
+        fi
     else
         tmux select-pane -t "$MY_PANE" -T "Check-ins (refresh: 2s)" 2>/dev/null
     fi

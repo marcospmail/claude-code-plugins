@@ -37,7 +37,6 @@ class CheckinScheduler:
         """
         self.workflow_path = Path(workflow_path) if workflow_path else None
         self._checkins_file: Optional[Path] = None
-        self._interval_file: Optional[Path] = None
 
     @property
     def checkins_file(self) -> Path:
@@ -49,13 +48,11 @@ class CheckinScheduler:
         return self._checkins_file
 
     @property
-    def interval_file(self) -> Path:
-        """Get the path to the checkin_interval.txt file."""
-        if self._interval_file is None:
-            if self.workflow_path is None:
-                raise ValueError("Workflow path not set")
-            self._interval_file = self.workflow_path / "checkin_interval.txt"
-        return self._interval_file
+    def status_file(self) -> Path:
+        """Get the path to the status.yml file."""
+        if self.workflow_path is None:
+            raise ValueError("Workflow path not set")
+        return self.workflow_path / "status.yml"
 
     def _load_checkins(self) -> Dict[str, Any]:
         """Load check-ins from the JSON file."""
@@ -103,10 +100,7 @@ class CheckinScheduler:
             print("To force a new check-in, cancel the existing one first.")
             return None
 
-        # Store the interval
-        self.interval_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.interval_file, "w") as f:
-            f.write(str(minutes))
+        # Note: check-in interval is stored in status.yml (checkin_interval_minutes field)
 
         # Calculate scheduled time
         scheduled_for = datetime.now() + timedelta(minutes=minutes)
@@ -357,9 +351,7 @@ if Path(tasks_file).exists():
 
         self._save_checkins(data)
 
-        # Clear the interval file
-        if self.interval_file.exists():
-            self.interval_file.unlink()
+        # Note: check-in interval is stored in status.yml, no need to clear separate file
 
         print(f"Cancelled {cancelled_count} pending check-in(s).")
         print("Check-in loop stopped.")
@@ -385,12 +377,19 @@ if Path(tasks_file).exists():
         return checkins
 
     def get_interval(self) -> Optional[int]:
-        """Get the current check-in interval in minutes."""
-        if self.interval_file.exists():
+        """Get the current check-in interval in minutes from status.yml."""
+        if self.status_file.exists():
             try:
-                return int(self.interval_file.read_text().strip())
-            except ValueError:
-                return None
+                content = self.status_file.read_text()
+                for line in content.splitlines():
+                    if "checkin_interval_minutes:" in line:
+                        parts = line.split(":")
+                        if len(parts) >= 2:
+                            value = parts[1].strip()
+                            if value and value != "_":
+                                return int(value)
+            except (ValueError, IOError):
+                pass
         return None
 
 

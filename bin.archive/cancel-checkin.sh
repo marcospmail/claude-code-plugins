@@ -25,7 +25,6 @@ fi
 STATE_DIR=".workflow/$CURRENT_WORKFLOW"
 
 CHECKIN_FILE="$STATE_DIR/checkins.json"
-INTERVAL_FILE="$STATE_DIR/checkin_interval.txt"
 
 if [[ ! -f "$CHECKIN_FILE" ]]; then
     echo "No check-ins file found at $CHECKIN_FILE"
@@ -64,7 +63,6 @@ except Exception as e:
     print(f'Error: {e}')
 "
 
-# Clear the interval file so display shows no more scheduled
-rm -f "$INTERVAL_FILE"
+# Note: check-in interval is stored in status.yml, no need to clear separate file
 
 echo "Check-in loop stopped."

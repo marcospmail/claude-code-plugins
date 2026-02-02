@@ -146,8 +146,8 @@ status: in-progress
 title: "Add hourly cron"
 initial_request: |
   User's original request goes here...
-folder: "001-add-hourly-cron"
-checkin_interval_minutes: 15
+folder: "/path/to/project/.workflow/001-add-hourly-cron"  # Absolute path
+checkin_interval_minutes: _  # Placeholder until user selects interval (e.g., 3, 5, 10)
 session: "myproject"
 ```
 
