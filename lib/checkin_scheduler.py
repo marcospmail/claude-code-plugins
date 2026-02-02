@@ -234,10 +234,10 @@ try:
 except:
     pass
 
-# Send the check-in message
+# Send the check-in message with tasks.json update reminder
 subprocess.run([
     "bash", f"{{yato_path}}/bin/send-message.sh",
-    target, f"Time for check-in! Note: {{note}}"
+    target, f"Time for check-in! Note: {{note}}. REMINDER: If you received any [DONE] or [BLOCKED] notifications from agents, update tasks.json immediately (change task status to 'completed' or 'blocked')."
 ])
 
 # AUTO-CONTINUE: Check for incomplete tasks

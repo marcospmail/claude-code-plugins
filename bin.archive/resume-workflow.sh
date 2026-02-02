@@ -273,6 +273,20 @@ for i in "${!AGENT_NAMES[@]}"; do
     fi
 done
 
+# Start checkin-display.sh in the check-ins pane
+echo ""
+echo "Starting check-in display..."
+tmux send-keys -t "$CHECKINS_PANE" "$SCRIPT_DIR/checkin-display.sh" Enter
+
+# Start Claude in PM pane with opus model
+echo "Starting Claude in PM pane..."
+sleep 0.5
+tmux send-keys -t "$PM_PANE" "claude --dangerously-skip-permissions --model opus" Enter
+
+# Wait for Claude to initialize in PM pane
+echo "Waiting for Claude instances to initialize..."
+sleep 3
+
 # Update agents.yml with new window numbers
 echo ""
 echo "Updating agents.yml with new window numbers..."
@@ -365,8 +379,33 @@ for i in "${!AGENT_NAMES[@]}"; do
     AGENT_PANE_LIST+="  - ${AGENT_NAMES[$i]} (${AGENT_ROLES[$i]}): ${AGENT_IDS[$i]}"$'\n'
 done
 
-# PM pane is ready - Claude will be started by the skill/user
+# Brief the PM about the resumed workflow
 echo ""
+echo "Briefing PM about resumed workflow..."
+sleep 2  # Wait for Claude to be ready
+
+PM_BRIEFING="WORKFLOW RESUMED: $WORKFLOW_NAME
+
+You are the PM for this workflow. The session was restored.
+
+Project: $PROJECT_PATH
+Workflow: $WORKFLOW_NAME
+
+Your agents:
+$AGENT_PANE_LIST
+IMPORTANT ACTIONS:
+1. Read .workflow/$WORKFLOW_NAME/tasks.json to check current task status
+2. Check each agent's .workflow/$WORKFLOW_NAME/agents/<name>/agent-tasks.md for their progress
+3. When agents send [DONE] notifications, UPDATE tasks.json immediately:
+   - Read tasks.json
+   - Change the completed task status from 'pending' or 'in_progress' to 'completed'
+   - Write the updated tasks.json
+4. If all tasks are complete, inform the user
+
+Start by checking the current state of all tasks."
+
+"$SCRIPT_DIR/send-message.sh" "$PM_PANE" "$PM_BRIEFING" > /dev/null 2>&1
+
 echo "PM pane ready at: $PM_PANE"
 
 # Save layout to workflow for future resumes
