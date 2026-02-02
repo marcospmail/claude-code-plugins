@@ -36,10 +36,13 @@ WORKFLOW_NAME=$(create_workflow_folder "$PROJECT_PATH" "$TITLE")
 WORKFLOW_PATH="$PROJECT_PATH/.workflow/$WORKFLOW_NAME"
 
 # Set WORKFLOW_NAME in tmux environment (if in tmux)
-# This replaces the old .workflow/current file approach
 if [[ -n "$TMUX" ]]; then
     tmux setenv WORKFLOW_NAME "$WORKFLOW_NAME"
 fi
+
+# Also create .workflow/current file for backward compatibility
+# This allows scripts to work when called from outside tmux
+echo "$WORKFLOW_NAME" > "$PROJECT_PATH/.workflow/current"
 
 # Create PM instructions.md
 cat > "$WORKFLOW_PATH/agents/pm/instructions.md" <<'EOF'
@@ -55,7 +58,11 @@ SESSION=$(tmux display-message -p '#S') && ~/dev/tools/yato/bin/send-message.sh 
 ```
 
 Replace WINDOW and TASK_DESCRIPTION:
-- **WINDOW**: Get from agents.yml (e.g., for "qa" agent, window is "1")
+- **WINDOW**: Look up in agents.yml by AGENT NAME (not role). Example:
+  ```bash
+  grep -A 4 "name: discoverer" .workflow/*/agents.yml | grep "window:" | awk '{print $2}'
+  ```
+  Agent names come from tasks.json "agent" field (e.g., "discoverer", "impl", "qa")
 - **TASK_DESCRIPTION**: The task details from tasks.json
 
 Then say: "Delegated [task] to [agent name] at window [window]"

@@ -178,64 +178,85 @@ fi
 AGENT_ID="$SESSION:$WINDOW_INDEX"
 echo "Created window: $AGENT_ID"
 
-# Register the agent
-echo "Registering agent..."
-python3 "$LIB_DIR/claude_control.py" register "$AGENT_ID" "$ROLE" \
-    ${PM_WINDOW:+--pm-window "$PM_WINDOW"}
+# Register the agent in workflow agents.yml (uses workflow-utils.sh which was sourced earlier)
+echo "Registering agent in workflow..."
+if [[ -n "$PROJECT_PATH" ]]; then
+    # Use lowercase window name as agent name (e.g., "developer", "qa-1")
+    AGENT_NAME=$(echo "$WINDOW_NAME" | tr '[:upper:]' '[:lower:]')
+    add_agent_to_yml "$PROJECT_PATH" "$AGENT_NAME" "$ROLE" "$WINDOW_INDEX" "${MODEL:-sonnet}" "$SESSION"
+fi
 
-# Create agent identity file
+# Create or update agent identity file
 if [[ -n "$PROJECT_PATH" ]]; then
     # Get current workflow path
     WORKFLOW_PATH=$(get_current_workflow_path "$PROJECT_PATH")
     if [[ -n "$WORKFLOW_PATH" ]]; then
-        AGENT_DIR="${WORKFLOW_PATH}/agents/${ROLE}"
+        # Use agent name (lowercase window name) to find agent folder
+        AGENT_NAME_LOWER=$(echo "$WINDOW_NAME" | tr '[:upper:]' '[:lower:]')
+        AGENT_DIR="${WORKFLOW_PATH}/agents/${AGENT_NAME_LOWER}"
+
+        # Also check by role for backward compatibility
+        if [[ ! -d "$AGENT_DIR" ]]; then
+            AGENT_DIR="${WORKFLOW_PATH}/agents/${ROLE}"
+        fi
     else
         echo "Warning: No active workflow found. Creating agents directory."
         # Create a default agents directory under .workflow if no workflow exists
         mkdir -p "${PROJECT_PATH}/.workflow"
         AGENT_DIR="${PROJECT_PATH}/.workflow/agents/${ROLE}"
     fi
-    mkdir -p "$AGENT_DIR"
 
-    # Determine if agent can modify code based on role
-    CAN_MODIFY_CODE="true"
-    AGENT_PURPOSE="Implementation and development"
+    # Check if agent files were pre-created by init-agent-files.sh
+    IDENTITY_FILE="$AGENT_DIR/identity.yml"
+    if [[ -f "$IDENTITY_FILE" ]]; then
+        # Files exist - just update window and session in identity.yml
+        echo "Updating existing agent files with window info..."
+        sed -i '' "s/^window:.*/window: ${WINDOW_INDEX}/" "$IDENTITY_FILE"
+        sed -i '' "s/^session:.*/session: ${SESSION}/" "$IDENTITY_FILE"
+        echo "Updated identity file: $IDENTITY_FILE"
+    else
+        # Files don't exist - create everything (backward compatibility)
+        mkdir -p "$AGENT_DIR"
 
-    case "$ROLE" in
-        qa)
-            CAN_MODIFY_CODE="false"
-            AGENT_PURPOSE="Testing and quality assurance"
-            ;;
-        code-reviewer|reviewer|security-reviewer)
-            CAN_MODIFY_CODE="false"
-            AGENT_PURPOSE="Code review and security analysis"
-            ;;
-        developer|backend-developer|frontend-developer|fullstack-developer)
-            CAN_MODIFY_CODE="true"
-            AGENT_PURPOSE="Implementation and development"
-            ;;
-        devops)
-            CAN_MODIFY_CODE="true"
-            AGENT_PURPOSE="Infrastructure and deployment"
-            ;;
-        designer)
-            CAN_MODIFY_CODE="false"
-            AGENT_PURPOSE="Design and user experience"
-            ;;
-        *)
-            # Default: developers can modify, others cannot
-            if [[ "$ROLE" == *"developer"* ]] || [[ "$ROLE" == *"dev"* ]]; then
-                CAN_MODIFY_CODE="true"
-                AGENT_PURPOSE="Development and implementation"
-            else
+        # Determine if agent can modify code based on role
+        CAN_MODIFY_CODE="true"
+        AGENT_PURPOSE="Implementation and development"
+
+        case "$ROLE" in
+            qa)
                 CAN_MODIFY_CODE="false"
-                AGENT_PURPOSE="Support and analysis"
-            fi
-            ;;
-    esac
+                AGENT_PURPOSE="Testing and quality assurance"
+                ;;
+            code-reviewer|reviewer|security-reviewer)
+                CAN_MODIFY_CODE="false"
+                AGENT_PURPOSE="Code review and security analysis"
+                ;;
+            developer|backend-developer|frontend-developer|fullstack-developer)
+                CAN_MODIFY_CODE="true"
+                AGENT_PURPOSE="Implementation and development"
+                ;;
+            devops)
+                CAN_MODIFY_CODE="true"
+                AGENT_PURPOSE="Infrastructure and deployment"
+                ;;
+            designer)
+                CAN_MODIFY_CODE="false"
+                AGENT_PURPOSE="Design and user experience"
+                ;;
+            *)
+                # Default: developers can modify, others cannot
+                if [[ "$ROLE" == *"developer"* ]] || [[ "$ROLE" == *"dev"* ]]; then
+                    CAN_MODIFY_CODE="true"
+                    AGENT_PURPOSE="Development and implementation"
+                else
+                    CAN_MODIFY_CODE="false"
+                    AGENT_PURPOSE="Support and analysis"
+                fi
+                ;;
+        esac
 
-    # Create identity.yml (new window-based format)
-    cat > "$AGENT_DIR/identity.yml" <<EOF
+        # Create identity.yml (new window-based format)
+        cat > "$AGENT_DIR/identity.yml" <<EOF
 name: ${WINDOW_NAME}
 role: ${ROLE}
 model: ${MODEL:-sonnet}
@@ -245,9 +266,9 @@ workflow: ${WORKFLOW_NAME:-default}
 can_modify_code: ${CAN_MODIFY_CODE}
 EOF
 
-    echo "Created identity file: $AGENT_DIR/identity.yml"
+        echo "Created identity file: $AGENT_DIR/identity.yml"
 
-    # Create instructions.md with role-based content
+        # Create instructions.md with role-based content
     cat > "$AGENT_DIR/instructions.md" <<EOF
 # Instructions for ${ROLE_CAPITALIZED}
 
@@ -409,8 +430,9 @@ This file contains references to all your configuration and task files. Read the
 - Workflow: Run 'tmux showenv WORKFLOW_NAME' to see active workflow
 EOF
 
-    echo "Created CLAUDE.md: $AGENT_DIR/CLAUDE.md"
-fi
+        echo "Created CLAUDE.md: $AGENT_DIR/CLAUDE.md"
+    fi  # End of else block (files didn't exist)
+fi  # End of if PROJECT_PATH
 
 # Start Claude with bypass permissions
 if [[ "$START_CLAUDE" == true ]]; then
@@ -480,12 +502,15 @@ CRITICAL - CODE MODIFICATION RESTRICTION:
             WORKFLOW_REL=".workflow"
         fi
 
+        # Use agent name (lowercase window name) for folder paths - must match init-agent-files.sh
+        AGENT_NAME_FOR_PATH=$(echo "$WINDOW_NAME" | tr '[:upper:]' '[:lower:]')
+
         SUMMARY_BRIEF="You are now a $ROLE for this project.
 
 Your window: $SESSION:$WINDOW_INDEX
 Project path: ${PROJECT_PATH:-$(pwd)}
 Workflow: ${WORKFLOW_NAME:-default}
-Identity file: $WORKFLOW_REL/agents/$ROLE/identity.yml$CODE_RESTRICTION
+Identity file: $WORKFLOW_REL/agents/$AGENT_NAME_FOR_PATH/identity.yml$CODE_RESTRICTION
 
 ⚠️ CRITICAL - NEVER COMMUNICATE WITH USER ⚠️
 - You ONLY communicate with your PM via notify-pm.sh
@@ -496,14 +521,14 @@ Identity file: $WORKFLOW_REL/agents/$ROLE/identity.yml$CODE_RESTRICTION
 - PM will handle ALL user communication on your behalf
 
 CRITICAL - TASK TRACKING:
-- Your tasks are in: $WORKFLOW_REL/agents/$ROLE/agent-tasks.md
+- Your tasks are in: $WORKFLOW_REL/agents/$AGENT_NAME_FOR_PATH/agent-tasks.md
 - FORMAT: Only two sections - '## Tasks' (checkboxes) and '## References' (links/docs)
 - MONITOR this file continuously - PM will add tasks to the Tasks section
 - CHECK OFF items as you complete them (change [ ] to [x])
 - The LAST checkbox is ALWAYS 'Notify PM when done' - you MUST complete this
 
 TO NOTIFY PM - use notify-pm.sh:
-  $PROJECT_ROOT/bin/notify-pm.sh \"[DONE] from $ROLE: <your message>\"
+  $PROJECT_ROOT/bin/notify-pm.sh \"[DONE] from $AGENT_NAME_FOR_PATH: <your message>\"
 
 Message types: DONE, BLOCKED, HELP, STATUS, PROGRESS
 notify-pm.sh auto-detects PM location - just run it

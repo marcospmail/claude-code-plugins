@@ -40,6 +40,18 @@ if [[ -z "$WORKFLOW_PATH" ]]; then
     WORKFLOW_PATH="$PROJECT_PATH/.workflow"
 fi
 
+# Validate agent exists in team.yml (if team.yml exists)
+TEAM_FILE="$WORKFLOW_PATH/team.yml"
+if [[ -f "$TEAM_FILE" ]]; then
+    if ! grep -q "^  - name: $AGENT_NAME" "$TEAM_FILE"; then
+        echo "WARNING: Agent '$AGENT_NAME' not found in team.yml"
+        echo "Available agents:"
+        grep "^  - name:" "$TEAM_FILE" | sed 's/.*name: /  - /'
+        echo ""
+        echo "Continuing anyway (agent may be created later)..."
+    fi
+fi
+
 AGENTS_DIR="$WORKFLOW_PATH/agents"
 AGENT_DIR="$AGENTS_DIR/$AGENT_NAME"
 PROGRESS_FILE="$AGENT_DIR/agent-tasks.md"

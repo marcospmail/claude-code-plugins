@@ -4,6 +4,15 @@
 # Source this file in other scripts:
 #   source "$(dirname "$0")/workflow-utils.sh"
 
+# Capture the directory where this file lives (when sourced)
+# Handle both direct execution and sourcing from different contexts
+if [[ -n "${BASH_SOURCE[0]}" ]] && [[ "${BASH_SOURCE[0]}" == *"workflow-utils.sh"* ]]; then
+    WORKFLOW_UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    # Fallback: assume we're in the yato project and find bin/ directory
+    WORKFLOW_UTILS_DIR="$HOME/dev/tools/yato/bin"
+fi
+
 # Get the next workflow number (001, 002, etc.)
 get_next_workflow_number() {
     local project_path="$1"
@@ -260,8 +269,9 @@ EOF
     echo "Added $agent_name to agents.yml (window $window_number)"
 }
 
-# Save team structure to team.yml
+# Save team structure to team.yml and create agent files
 # This file is used by /parse-prd-to-tasks to know which agents are available
+# Also creates agent folders with identity.yml, instructions.md, agent-tasks.md, etc.
 # Usage: save_team_structure <project_path> <agents...>
 # Agent format: name:role:model (e.g., "impl:developer:opus" or "qa:qa:sonnet")
 save_team_structure() {
@@ -287,7 +297,7 @@ save_team_structure() {
 agents:
 EOF
 
-    # Add each agent
+    # Add each agent to team.yml and create their files
     for agent_spec in "${agents[@]}"; do
         # Parse agent spec: name:role:model
         IFS=':' read -r agent_name agent_role agent_model <<< "$agent_spec"
@@ -304,11 +314,15 @@ EOF
             agent_model="sonnet"
         fi
 
+        # Add to team.yml
         cat >> "$team_file" <<EOF
   - name: $agent_name
     role: $agent_role
     model: $agent_model
 EOF
+
+        # Create agent files (identity.yml, instructions.md, agent-tasks.md, etc.)
+        "$WORKFLOW_UTILS_DIR/init-agent-files.sh" "$project_path" "$agent_name" "$agent_role" "$agent_model"
     done
 
     echo "Saved team structure to: $team_file"

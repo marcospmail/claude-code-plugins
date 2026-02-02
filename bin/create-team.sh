@@ -130,8 +130,7 @@ create_agent() {
 
     if [[ $exit_code -eq 0 ]]; then
         CREATED_AGENTS+=("$name:$role:$window_num")
-        # Add to agents.yml
-        add_agent_to_yml "$PROJECT_PATH" "$name" "$role" "$window_num" "$model" "$SESSION"
+        # Note: Agent is already added to agents.yml by create-agent.sh
     else
         echo "WARNING: Failed to create $role"
     fi
