@@ -92,13 +92,15 @@ create_workflow_folder() {
     mkdir -p "$full_path/agents/pm"
 
     # Create status.yml (initial_request will be added by init-workflow.sh if exists)
+    # Note: checkin_interval_minutes uses "_" as placeholder until user selects interval
+    # Note: folder uses absolute path for clarity
     cat > "$full_path/status.yml" <<EOF
 # Workflow Status
 status: in-progress
 title: "$title"
 initial_request: ""
-folder: "$folder_name"
-checkin_interval_minutes: 15
+folder: "$full_path"
+checkin_interval_minutes: _
 created_at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 session: ""
 EOF

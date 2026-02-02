@@ -57,7 +57,6 @@ fi
 STATE_DIR=".workflow/$CURRENT_WORKFLOW"
 
 CHECKIN_FILE="$STATE_DIR/checkins.json"
-INTERVAL_FILE="$STATE_DIR/checkin_interval.txt"
 
 # Initialize checkin file if it doesn't exist
 mkdir -p "$STATE_DIR"
@@ -83,8 +82,7 @@ if [[ "$EXISTING_PENDING" -gt 0 ]]; then
     exit 0
 fi
 
-# Store the check-in interval for display
-echo "$MINUTES" > "$INTERVAL_FILE"
+# Note: check-in interval is stored in status.yml (checkin_interval_minutes field)
 
 # Calculate scheduled time
 SCHEDULED_FOR=$(date -v +${MINUTES}M +"%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "+${MINUTES} minutes" +"%Y-%m-%dT%H:%M:%S" 2>/dev/null)

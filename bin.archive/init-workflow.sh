@@ -107,12 +107,12 @@ constraints: ./constraints.md
 created_at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 EOF
 
-# Create PM constraints.example.md
-cat > "$WORKFLOW_PATH/agents/pm/constraints.example.md" <<'EOF'
-# PM Constraints (Example)
-# Copy this file to constraints.md and customize for your project
+# Create PM constraints.md with actual PM constraints
+cat > "$WORKFLOW_PATH/agents/pm/constraints.md" <<'EOF'
+# PM Constraints
 
 ## Forbidden Actions
+- You CANNOT modify any code files
 - Do NOT write implementation code
 - Do NOT run tests directly (delegate to QA agent)
 - Do NOT make git commits (delegate to agents)
@@ -321,9 +321,8 @@ echo "  └── agents/"
 echo "      └── pm/"
 echo "          ├── identity.yml"
 echo "          ├── instructions.md"
-echo "          └── constraints.example.md"
+echo "          └── constraints.md"
 echo ""
 echo "Files to create:"
 echo "  - prd.md       (Product Requirements Document)"
 echo "  - tasks.json   (Task tracking - JSON format)"
-echo "  - agents/pm/constraints.md (Copy from example and customize)"
