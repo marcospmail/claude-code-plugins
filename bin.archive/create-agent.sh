@@ -360,35 +360,18 @@ EOF
 
     echo "Created instructions file: $AGENT_DIR/instructions.md"
 
-    # Create constraints.example.md as a template
-    cat > "$AGENT_DIR/constraints.example.md" <<'EOF'
-# Constraints (Example)
-# Copy this file to constraints.md and customize for your project
-# The agent will follow rules in constraints.md (not this example file)
+    # Create constraints.md (empty by default - user can customize)
+    cat > "$AGENT_DIR/constraints.md" <<'EOF'
+# Constraints
 
-## Forbidden Actions
-# List things this agent must NOT do
-- Do NOT modify files in /config/
-- Do NOT make database schema changes
-- Do NOT commit directly to main branch
-
-## Off-Limits Areas
-# Directories or files the agent should not touch
-- /src/legacy/ - legacy code, do not modify
-- /.env* - environment files, do not read or modify
-
-## Technology Constraints
-# Libraries, patterns, or approaches to avoid
-- Do NOT use jQuery
-- Do NOT add new npm dependencies without PM approval
-
-## Process Constraints
-# Workflow rules
-- Do NOT merge PRs without code review approval
-- Do NOT deploy to production
+# Add project-specific constraints for this agent below.
+# Examples:
+# - Do NOT modify files in /config/
+# - Do NOT make database schema changes
+# - Do NOT use jQuery
 EOF
 
-    echo "Created constraints example: $AGENT_DIR/constraints.example.md"
+    echo "Created constraints file: $AGENT_DIR/constraints.md"
 
     # Create CLAUDE.md with references to all agent files
     cat > "$AGENT_DIR/CLAUDE.md" <<EOF
@@ -414,7 +397,6 @@ This file contains references to all your configuration and task files. Read the
 4. **Constraints** - Read fourth to understand your limits
    - File: [constraints.md](./constraints.md)
    - Contains: Forbidden actions, off-limits areas, and process constraints
-   - Note: If constraints.md doesn't exist, check constraints.example.md for template
 
 ## Important Notes
 

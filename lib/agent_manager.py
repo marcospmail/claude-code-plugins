@@ -312,9 +312,16 @@ class AgentManager:
         })
         (agent_dir / "instructions.md").write_text(instructions_content)
 
-        # Create constraints.example.md
-        constraints_content = self._render_template("constraints.example.md.j2", {})
-        (agent_dir / "constraints.example.md").write_text(constraints_content)
+        # Create constraints.md (empty by default - user can customize)
+        constraints_content = """# Constraints
+
+# Add project-specific constraints for this agent below.
+# Examples:
+# - Do NOT modify files in /config/
+# - Do NOT make database schema changes
+# - Do NOT use jQuery
+"""
+        (agent_dir / "constraints.md").write_text(constraints_content)
 
         # Create CLAUDE.md
         claude_content = self._render_template("agent_claude.md.j2", {
