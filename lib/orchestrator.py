@@ -499,7 +499,7 @@ class Orchestrator:
             f"     1. .workflow/[workflow]/agents/[role]/identity.yml "
             f"     2. .workflow/[workflow]/agents/[role]/instructions.md "
             f"     3. .workflow/[workflow]/agents/[role]/agent-tasks.md "
-            f"     4. .workflow/[workflow]/agents/[role]/constraints.md (if exists, else constraints.example.md) "
+            f"     4. .workflow/[workflow]/agents/[role]/constraints.md "
             f"   SUBSEQUENT MESSAGES: Just tell agent 'Check your agent-tasks.md for new tasks'. "
             f"   IMPORTANT: Tell agents to READ files themselves - do NOT send file contents in messages. "
             f"13) CRITICAL - When receiving agent notifications (e.g., '[DONE] from dev: ...'), IMMEDIATELY update tasks.json: "
