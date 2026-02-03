@@ -61,7 +61,7 @@ else
     exit 1
 fi
 
-if jq -r '.hooks.PreToolUse[0].hooks[0].command' "$HOOKS_JSON" 2>/dev/null | grep -q 'tasks-status-reminder.py'; then
+if jq -r '.hooks.PreToolUse[0].hooks[].command' "$HOOKS_JSON" 2>/dev/null | grep -q 'tasks-status-reminder.py'; then
     pass "Hook command references tasks-status-reminder.py"
 else
     fail "Hook command doesn't reference tasks-status-reminder.py"
