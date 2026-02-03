@@ -68,16 +68,37 @@ def main():
     # mechanism prevents infinite loops. The stop_after_times/stop_after_seconds
     # conditions will terminate the loop properly.
 
-    # Find all active loops from central registry (works regardless of cwd)
-    active_loops = get_all_active_loops()
-    debug_log(f"[LOOPS] Found {len(active_loops)} active loops")
+    # Determine the current project directory (Claude Code runs hooks in project cwd)
+    # Resolve to real path to handle macOS /private/var vs /var symlinks
+    current_project = str(Path(os.getcwd()).resolve())
+    debug_log(f"[CWD] Current project: {current_project}")
+
+    # Find all active loops from central registry
+    all_active_loops = get_all_active_loops()
+    debug_log(f"[LOOPS] Found {len(all_active_loops)} active loops globally")
+
+    # Filter to only loops belonging to the current project
+    active_loops = []
+    for loop in all_active_loops:
+        loop_project = loop.get("project_path", "")
+        # Resolve both paths for comparison (handles symlinks like /private/var vs /var)
+        try:
+            resolved_loop_project = str(Path(loop_project).resolve())
+        except (OSError, ValueError):
+            resolved_loop_project = loop_project
+        if resolved_loop_project == current_project:
+            active_loops.append(loop)
+        else:
+            debug_log(f"[SKIP] Loop project '{resolved_loop_project}' != current '{current_project}'")
+
+    debug_log(f"[LOOPS] {len(active_loops)} loops match current project")
 
     if not active_loops:
-        # No active loops anywhere, allow stop
-        debug_log(f"[STOP] No active loops, allowing stop")
+        # No active loops for this project, allow stop
+        debug_log(f"[STOP] No active loops for current project, allowing stop")
         return
 
-    # Use the first active loop (most common case: one active loop)
+    # Use the first active loop for this project
     loop_info = active_loops[0]
     loop_folder = Path(loop_info["folder"])
 
