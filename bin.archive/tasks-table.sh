@@ -21,18 +21,12 @@ fi
 if [[ -n "$CURRENT_WORKFLOW" && "$CURRENT_WORKFLOW" != "-WORKFLOW_NAME" ]]; then
     TASKS_FILE="$PROJECT_PATH/.workflow/$CURRENT_WORKFLOW/tasks.json"
 else
-    # Fallback: try to find current workflow from symlink or first workflow folder
-    if [[ -L "$PROJECT_PATH/.workflow/current" ]]; then
-        CURRENT_WORKFLOW=$(readlink "$PROJECT_PATH/.workflow/current" | xargs basename)
-        TASKS_FILE="$PROJECT_PATH/.workflow/$CURRENT_WORKFLOW/tasks.json"
+    # Fallback: find first numbered workflow folder (for display purposes only)
+    FIRST_WORKFLOW=$(ls "$PROJECT_PATH/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
+    if [[ -n "$FIRST_WORKFLOW" ]]; then
+        TASKS_FILE="$PROJECT_PATH/.workflow/$FIRST_WORKFLOW/tasks.json"
     else
-        # Last fallback: try to find first numbered workflow folder
-        FIRST_WORKFLOW=$(ls "$PROJECT_PATH/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
-        if [[ -n "$FIRST_WORKFLOW" ]]; then
-            TASKS_FILE="$PROJECT_PATH/.workflow/$FIRST_WORKFLOW/tasks.json"
-        else
-            TASKS_FILE="$PROJECT_PATH/.workflow/tasks.json"
-        fi
+        TASKS_FILE="$PROJECT_PATH/.workflow/tasks.json"
     fi
 fi
 

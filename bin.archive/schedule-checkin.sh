@@ -196,8 +196,17 @@ except Exception as e:
     pass
 "
 
+# Build check-in message with reminders
+CHECKIN_MSG="Time for check-in! ($NOTE)
+
+⚠️ PM REMINDERS:
+• DELEGATE work to agents - do NOT implement/code yourself
+• 'completed' = work was ACTUALLY DONE by an agent
+• 'blocked' stays blocked until resolved - you cannot skip tasks
+• If user says 'skip it', task stays BLOCKED (not completed)"
+
 # Send the check-in message using send-message.sh
-"$SCRIPT_DIR/send-message.sh" "$TARGET" "Time for check-in! Note: $NOTE"
+"$SCRIPT_DIR/send-message.sh" "$TARGET" "$CHECKIN_MSG"
 
 # AUTO-CONTINUE: Check if there are incomplete tasks in tasks.json
 # Use workflow name passed as parameter (TMUX env not available in detached process)

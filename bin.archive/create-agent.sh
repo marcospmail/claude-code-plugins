@@ -188,8 +188,8 @@ fi
 
 # Create or update agent identity file
 if [[ -n "$PROJECT_PATH" ]]; then
-    # Get current workflow path
-    WORKFLOW_PATH=$(get_current_workflow_path "$PROJECT_PATH")
+    # Get current workflow path (pass session name to query its env)
+    WORKFLOW_PATH=$(get_current_workflow_path "$PROJECT_PATH" "$SESSION")
     if [[ -n "$WORKFLOW_PATH" ]]; then
         # Use agent name (lowercase window name) to find agent folder
         AGENT_NAME_LOWER=$(echo "$WINDOW_NAME" | tr '[:upper:]' '[:lower:]')
@@ -477,7 +477,7 @@ CRITICAL - CODE MODIFICATION RESTRICTION:
         fi
 
         # Get workflow-relative path for display
-        WORKFLOW_NAME=$(get_current_workflow "$PROJECT_PATH")
+        WORKFLOW_NAME=$(get_current_workflow "$PROJECT_PATH" "$SESSION")
         if [[ -n "$WORKFLOW_NAME" ]]; then
             WORKFLOW_REL=".workflow/$WORKFLOW_NAME"
         else

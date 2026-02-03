@@ -108,33 +108,54 @@ EOF
     echo "$folder_name"
 }
 
-# Get current workflow folder name
-# Reads from tmux WORKFLOW_NAME env var (preferred) or falls back to .workflow/current file
+# Get current workflow folder name from tmux WORKFLOW_NAME env var
+# Args:
+#   $1: project_path (required)
+#   $2: session_name (optional) - if provided, queries that session's env
+# Returns workflow folder name or empty string
 get_current_workflow() {
     local project_path="$1"
+    local session_name="${2:-}"
 
-    # First try tmux environment variable (if in tmux)
-    if [[ -n "$TMUX" ]]; then
-        local tmux_workflow=$(tmux showenv WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
-        if [[ -n "$tmux_workflow" ]]; then
+    # If session name provided, query that session directly
+    if [[ -n "$session_name" ]]; then
+        local tmux_workflow=$(tmux showenv -t "$session_name" WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
+        if [[ -n "$tmux_workflow" && "$tmux_workflow" != "-WORKFLOW_NAME" ]]; then
             echo "$tmux_workflow"
             return
         fi
     fi
 
-    # Fallback to .workflow/current file (for backward compatibility)
-    local current_file="$project_path/.workflow/current"
-    if [[ -f "$current_file" ]]; then
-        cat "$current_file"
-    else
-        echo ""
+    # Try current tmux environment (requires being in tmux)
+    if [[ -n "$TMUX" ]]; then
+        local tmux_workflow=$(tmux showenv WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
+        if [[ -n "$tmux_workflow" && "$tmux_workflow" != "-WORKFLOW_NAME" ]]; then
+            echo "$tmux_workflow"
+            return
+        fi
     fi
+
+    # Fallback: discover most recent workflow folder (for scripts/tests running outside tmux)
+    if [[ -d "$project_path/.workflow" ]]; then
+        local latest=$(ls -td "$project_path/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1 | xargs basename 2>/dev/null)
+        if [[ -n "$latest" ]]; then
+            echo "$latest"
+            return
+        fi
+    fi
+
+    # No workflow found
+    echo ""
 }
 
 # Get full path to current workflow
+# Args:
+#   $1: project_path (required)
+#   $2: session_name (optional) - if provided, queries that session's env
 get_current_workflow_path() {
     local project_path="$1"
-    local current=$(get_current_workflow "$project_path")
+    local session_name="${2:-}"
+    local current=$(get_current_workflow "$project_path" "$session_name")
 
     if [[ -n "$current" ]]; then
         echo "$project_path/.workflow/$current"
@@ -235,7 +256,7 @@ add_agent_to_yml() {
     local model="$5"
     local session="$6"
 
-    local workflow_path=$(get_current_workflow_path "$project_path")
+    local workflow_path=$(get_current_workflow_path "$project_path" "$session")
     if [[ -z "$workflow_path" ]]; then
         echo "Error: No current workflow" >&2
         return 1
