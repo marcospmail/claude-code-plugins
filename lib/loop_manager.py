@@ -21,71 +21,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
-# Central registry for active loops (allows hook to find loops regardless of cwd)
-LOOPS_REGISTRY_FILE = Path.home() / ".yato" / "active-loops.json"
-
-
-def _load_loops_registry() -> List[str]:
-    """Load the central registry of active loop folders."""
-    if not LOOPS_REGISTRY_FILE.exists():
-        return []
-    try:
-        with open(LOOPS_REGISTRY_FILE, "r") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return []
-
-
-def _save_loops_registry(folders: List[str]) -> None:
-    """Save the central registry of active loop folders."""
-    LOOPS_REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(LOOPS_REGISTRY_FILE, "w") as f:
-        json.dump(folders, f, indent=2)
-
-
-def _register_loop(loop_folder: str) -> None:
-    """Add a loop folder to the central registry."""
-    folders = _load_loops_registry()
-    if loop_folder not in folders:
-        folders.append(loop_folder)
-        _save_loops_registry(folders)
-
-
-def _unregister_loop(loop_folder: str) -> None:
-    """Remove a loop folder from the central registry."""
-    folders = _load_loops_registry()
-    if loop_folder in folders:
-        folders.remove(loop_folder)
-        _save_loops_registry(folders)
-
-
-def get_all_active_loops() -> List[Dict[str, Any]]:
-    """Get all active loops from the central registry."""
-    folders = _load_loops_registry()
-    active_loops = []
-
-    for folder_path in folders:
-        folder = Path(folder_path)
-        meta_file = folder / "meta.json"
-
-        if not meta_file.exists():
-            continue
-
-        try:
-            with open(meta_file, "r") as f:
-                meta = json.load(f)
-
-            if meta.get("should_continue", False):
-                active_loops.append({
-                    "folder": folder_path,
-                    **meta
-                })
-        except (json.JSONDecodeError, IOError):
-            continue
-
-    return active_loops
-
-
 # ==================== Time Parser ====================
 
 
@@ -278,9 +213,8 @@ class LoopManager:
 
         loop_folder.mkdir(parents=True, exist_ok=True)
 
-        # Create meta.json - use resolved paths for consistency (macOS /tmp -> /private/tmp)
+        # Create meta.json
         now = datetime.now()
-        resolved_folder = str(loop_folder.resolve())
         meta = {
             "should_continue": True,
             "prompt": prompt,
@@ -288,8 +222,6 @@ class LoopManager:
             "stop_after_times": stop_after_times,
             "stop_after_seconds": stop_after_seconds,
             "session_id": session_id,
-            "project_path": str(self.project_path.resolve()),  # Store for hook to find
-            "loop_folder": resolved_folder,  # Absolute path to this loop
             "started_at": now.isoformat(),
             "last_executed_at": None,
             "execution_count": 0,
@@ -299,9 +231,6 @@ class LoopManager:
         meta_file = loop_folder / "meta.json"
         with open(meta_file, "w") as f:
             json.dump(meta, f, indent=2)
-
-        # Register in central registry so hook can find it regardless of cwd
-        _register_loop(resolved_folder)
 
         return folder_name, loop_folder
 
@@ -383,9 +312,6 @@ class LoopManager:
         meta["stopped_at"] = datetime.now().isoformat()
         meta["stop_reason"] = reason
         self.save_meta(loop_folder, meta)
-
-        # Unregister from central registry - use resolved path for consistency
-        _unregister_loop(str(loop_folder.resolve()))
 
     def list_loops(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """

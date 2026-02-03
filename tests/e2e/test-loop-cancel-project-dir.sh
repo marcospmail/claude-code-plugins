@@ -19,7 +19,6 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="loop-cancel-project-dir"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-$TEST_NAME-$$"
-REGISTRY_BACKUP="/tmp/e2e-registry-backup-$$.json"
 
 echo "======================================================================"
 echo "  E2E Test: Loop Cancel with --project parameter"
@@ -39,21 +38,8 @@ cleanup() {
     echo ""; echo "Cleaning up..."
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
-    # Restore original registry
-    if [[ -f "$REGISTRY_BACKUP" ]]; then
-        mv "$REGISTRY_BACKUP" ~/.yato/active-loops.json 2>/dev/null || true
-    else
-        echo "[]" > ~/.yato/active-loops.json 2>/dev/null || true
-    fi
 }
 trap cleanup EXIT
-
-# Backup existing registry
-mkdir -p ~/.yato
-if [[ -f ~/.yato/active-loops.json ]]; then
-    cp ~/.yato/active-loops.json "$REGISTRY_BACKUP"
-fi
-echo "[]" > ~/.yato/active-loops.json
 
 # Setup phase
 echo "Setting up test environment..."
@@ -209,33 +195,15 @@ echo
 echo
 echo "Test 3: Verifying loop was cancelled..."
 
-LOOP_CANCELLED=false
-
 if [[ -n "$LOOP_FOLDER" ]] && [[ -f "$LOOP_FOLDER/meta.json" ]]; then
     SHOULD_CONTINUE=$(python3 -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('should_continue', True))" 2>/dev/null)
     if [[ "$SHOULD_CONTINUE" == "False" ]]; then
         pass "Loop cancelled successfully (should_continue=False in meta.json)"
-        LOOP_CANCELLED=true
     else
         fail "Loop may not be cancelled, should_continue=$SHOULD_CONTINUE"
     fi
 else
-    # Loop folder may have been cleaned up - check registry instead
-    REG_COUNT=$(python3 -c "import json; print(len(json.load(open('$HOME/.yato/active-loops.json'))))" 2>/dev/null || echo "0")
-    if [[ "$REG_COUNT" == "0" ]]; then
-        pass "Loop cancelled (registry empty, folder may have been cleaned up)"
-        LOOP_CANCELLED=true
-    else
-        fail "Loop may not be cancelled, registry count: $REG_COUNT"
-    fi
-fi
-
-# Verify unregistered from registry
-REG_COUNT=$(python3 -c "import json; print(len(json.load(open('$HOME/.yato/active-loops.json'))))" 2>/dev/null || echo "0")
-if [[ "$REG_COUNT" == "0" ]]; then
-    pass "Loop unregistered from active-loops.json registry"
-else
-    fail "Loop still in registry after cancel (count: $REG_COUNT)"
+    fail "Loop folder not found for cancel verification"
 fi
 
 # ============================================================

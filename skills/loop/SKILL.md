@@ -35,34 +35,25 @@ Parse the user's request to extract:
 
 If the user wants to cancel (includes --cancel or says "cancel", "stop"):
 
-⚠️ **CRITICAL - YOU MUST CAPTURE PROJECT DIRECTORY FIRST** ⚠️
-
-Before ANY command, you MUST run `PROJECT_DIR=$(pwd)` to capture the user's current directory.
-Without this, the loop list/cancel commands will NOT find the loops.
-
-**WRONG (will fail):**
-```bash
-cd ~/dev/tools/yato && uv run yato loop list --status running
-```
-
-**CORRECT (will work):**
-```bash
-PROJECT_DIR=$(pwd) && cd ~/dev/tools/yato && uv run yato loop list --status running --project "$PROJECT_DIR"
-```
-
 ### Step 1: List running loops
 
-Run this EXACT command (do not modify or simplify):
+⚠️ **YOU MUST INCLUDE `--project`** ⚠️ - Without it, loops will NOT be found.
+
+Run this EXACT command - copy it character by character, do NOT simplify or remove any part:
 ```bash
 PROJECT_DIR=$(pwd) && cd ~/dev/tools/yato && uv run yato loop list --status running --project "$PROJECT_DIR"
 ```
+
+NEVER run `uv run yato loop list` without `--project "$PROJECT_DIR"`. The `--project` flag is REQUIRED.
 
 ### Step 2: Handle results
 
 - If no running loops found, output: "No active loops to cancel."
 - If loops found, proceed to Step 3.
 
-### Step 3: Show AskUserQuestion for loop selection
+### Step 3: ALWAYS show AskUserQuestion for loop selection
+
+⚠️ **MANDATORY**: You MUST use AskUserQuestion even if there is only ONE running loop. NEVER skip this step. NEVER auto-cancel without asking.
 
 Use **AskUserQuestion** to let the user choose which loop to cancel:
 - Show each running loop as an option (use the loop ID and first ~30 chars of prompt)
@@ -70,12 +61,12 @@ Use **AskUserQuestion** to let the user choose which loop to cancel:
 
 ### Step 4: Cancel the selected loop
 
-Based on user selection, run the appropriate cancel command:
+Based on user selection, run the cancel command. MUST include `--project`:
 ```bash
-# Cancel specific loop by ID (MUST include --project)
+# Cancel specific loop by ID
 PROJECT_DIR=$(pwd) && cd ~/dev/tools/yato && uv run yato loop cancel --loop-id "LOOP_ID" --project "$PROJECT_DIR"
 
-# Cancel all (MUST include --project)
+# Cancel all
 PROJECT_DIR=$(pwd) && cd ~/dev/tools/yato && uv run yato loop cancel --all --project "$PROJECT_DIR"
 ```
 

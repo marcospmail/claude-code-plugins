@@ -66,7 +66,7 @@ uv run yato loop start "check logs" --times 3
 ### Timing and Determinism
 - Wait appropriately for Claude to process (10-15 seconds for startup, 5-15 seconds per command)
 - Use unique session names with PID: `SESSION="e2e-test-$$"`
-- Backup and restore global state files like `~/.yato/active-loops.json`
+- Loop state is local to each project in `.workflow/loops/` (no global state files)
 - Tests must be deterministic and reproducible
 
 ### Test Structure

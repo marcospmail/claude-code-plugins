@@ -1,6 +1,6 @@
 ---
 name: manual-testing
-description: Manual testing guide for Yato. Use when you need to test workflows, monitor agents, or debug sessions.
+description: Manual testing guide for Yato. Use when you need to manually test Yato workflows.
 allowed-tools: Bash, Read
 user-invocable: true
 argument-hint: "[what to test]"
@@ -44,6 +44,7 @@ tmux kill-session -t <session>
 ## What to Check
 
 **Workflow files** in `.workflow/<name>/`:
+
 - `status.yml` - workflow status
 - `prd.md` - requirements
 - `team.yml` - proposed agents
@@ -51,6 +52,7 @@ tmux kill-session -t <session>
 - `agents.yml` - created agents
 
 **Tmux windows**:
+
 - Window 0: PM agent
 - Window 1+: Developer/QA agents
 

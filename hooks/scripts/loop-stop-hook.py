@@ -78,10 +78,10 @@ def find_active_loop_in_project(project_path: Path):
 def main():
     debug_log(f"[START] loop-stop-hook invoked")
 
-    # Read hook input from stdin
+    # Read hook input from stdin (Claude Code provides session context)
     try:
         hook_input = json.load(sys.stdin)
-        debug_log(f"[INPUT] Received: {json.dumps(hook_input)[:100]}")
+        debug_log(f"[INPUT] Received: {json.dumps(hook_input)[:200]}")
     except (json.JSONDecodeError, EOFError):
         # No valid input, allow stop
         debug_log(f"[INPUT] No valid JSON input, allowing stop")
@@ -91,10 +91,16 @@ def main():
         debug_log(f"[ERROR] Exception reading stdin: {e}")
         return
 
-    # Scan the current project's .workflow/loops/ directory directly.
-    # Claude Code runs hooks with cwd set to the project directory,
-    # so this only finds loops belonging to this project.
-    project_path = Path(os.getcwd())
+    # Prevent infinite loops: if Claude is already continuing due to a
+    # previous stop hook invocation, don't block again
+    if hook_input.get("stop_hook_active"):
+        debug_log(f"[SKIP] stop_hook_active=true, preventing infinite loop")
+        return
+
+    # Use the project directory from Claude Code's hook input (cwd field).
+    # This is the directory where Claude Code was started, giving natural
+    # project isolation — we only see loops in .workflow/loops/ for this project.
+    project_path = Path(hook_input.get("cwd") or os.getcwd())
     debug_log(f"[PROJECT] {project_path}")
 
     loop_folder, meta = find_active_loop_in_project(project_path)
