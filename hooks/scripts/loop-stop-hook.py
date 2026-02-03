@@ -40,8 +40,11 @@ def main():
     # Read hook input from stdin
     try:
         hook_input = json.load(sys.stdin)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, EOFError):
         # No valid input, allow stop
+        return
+    except Exception:
+        # Any other error reading stdin, allow stop
         return
 
     # NOTE: We don't check stop_hook_active because our execution_count
