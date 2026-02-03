@@ -19,6 +19,7 @@ import json
 import sys
 import time
 from pathlib import Path
+import os
 
 # Add lib to path for imports - use parent.parent to get to yato root
 YATO_ROOT = Path(__file__).parent.parent.parent
@@ -35,16 +36,32 @@ format_duration = loop_manager.format_duration
 get_all_active_loops = loop_manager.get_all_active_loops
 _unregister_loop = loop_manager._unregister_loop
 
+# Optional debug logging
+DEBUG = os.environ.get("YATO_LOOP_DEBUG", "").lower() == "true"
+LOG_FILE = Path.home() / ".yato" / "loop-stop-hook.log"
+
+def debug_log(message):
+    """Log debug messages to file if debugging enabled."""
+    if DEBUG:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(LOG_FILE, "a") as f:
+            f.write(f"{message}\n")
+
 
 def main():
+    debug_log(f"[START] loop-stop-hook invoked")
+
     # Read hook input from stdin
     try:
         hook_input = json.load(sys.stdin)
+        debug_log(f"[INPUT] Received: {json.dumps(hook_input)[:100]}")
     except (json.JSONDecodeError, EOFError):
         # No valid input, allow stop
+        debug_log(f"[INPUT] No valid JSON input, allowing stop")
         return
-    except Exception:
+    except Exception as e:
         # Any other error reading stdin, allow stop
+        debug_log(f"[ERROR] Exception reading stdin: {e}")
         return
 
     # NOTE: We don't check stop_hook_active because our execution_count
@@ -53,9 +70,11 @@ def main():
 
     # Find all active loops from central registry (works regardless of cwd)
     active_loops = get_all_active_loops()
+    debug_log(f"[LOOPS] Found {len(active_loops)} active loops")
 
     if not active_loops:
         # No active loops anywhere, allow stop
+        debug_log(f"[STOP] No active loops, allowing stop")
         return
 
     # Use the first active loop (most common case: one active loop)
@@ -72,22 +91,27 @@ def main():
 
     # Load fresh metadata
     meta = manager.load_meta(loop_folder)
+    debug_log(f"[META] Loaded: exec_count={meta.get('execution_count', 0) if meta else 'N/A'}")
 
     if not meta:
         # Invalid loop, allow stop
+        debug_log(f"[ERROR] Failed to load meta, allowing stop")
         return
 
     # Check if should_continue is false
     if not meta.get("should_continue", False):
         # Loop was cancelled, allow stop
+        debug_log(f"[CANCEL] Loop cancelled, allowing stop")
         return
 
     # Check stop conditions BEFORE doing anything
     should_stop, reason = manager.check_stop_conditions(meta)
+    debug_log(f"[CONDITIONS] should_stop={should_stop}, reason={reason}")
 
     if should_stop:
         # Stop conditions met, mark loop as stopped and allow stop
         manager.stop_loop(loop_folder, reason)
+        debug_log(f"[STOP] Conditions met, stopping loop")
         # Output nothing to allow Claude to stop
         return
 
@@ -138,6 +162,7 @@ def main():
         "reason": f"{status} {prompt}"
     }
 
+    debug_log(f"[OUTPUT] Continuing loop: {status}")
     print(json.dumps(output))
 
 
