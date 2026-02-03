@@ -97,15 +97,10 @@ class WorkflowRegistry:
             if workflow_path.exists():
                 return cls(workflow_path)
 
-        # Fallback: Read from .workflow/current file (legacy)
-        current_file = workflow_dir / "current"
-        if current_file.exists():
-            workflow_name = current_file.read_text().strip()
-            workflow_path = workflow_dir / workflow_name
-            if workflow_path.exists():
-                return cls(workflow_path)
+        # NOTE: We do NOT read .workflow/current file - it doesn't exist
+        # Multiple workflows can run simultaneously, there is no single "current"
 
-        # Fallback: Find most recent workflow folder
+        # Fallback: Find most recent workflow folder (for discovery only)
         workflows = sorted(workflow_dir.glob("[0-9][0-9][0-9]-*"), reverse=True)
         if workflows:
             return cls(workflows[0])

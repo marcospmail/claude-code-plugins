@@ -138,7 +138,9 @@ class WorkflowOps:
         """
         Get the current workflow folder name.
 
-        Reads from tmux WORKFLOW_NAME env var (preferred) or falls back to .workflow/current.
+        Tries in order:
+        1. tmux WORKFLOW_NAME env var (if in tmux)
+        2. Most recent workflow folder (fallback for scripts/tests)
 
         Args:
             project_path: Path to the project root
@@ -146,7 +148,7 @@ class WorkflowOps:
         Returns:
             Workflow folder name or None
         """
-        # First try tmux environment variable
+        # Get from tmux environment variable (requires being in tmux)
         if os.environ.get("TMUX"):
             try:
                 result = subprocess.run(
@@ -163,10 +165,12 @@ class WorkflowOps:
             except subprocess.CalledProcessError:
                 pass
 
-        # Fallback to .workflow/current file
-        current_file = Path(project_path) / ".workflow" / "current"
-        if current_file.exists():
-            return current_file.read_text().strip()
+        # Fallback: discover most recent workflow folder
+        workflow_dir = Path(project_path) / ".workflow"
+        if workflow_dir.exists():
+            workflows = sorted(workflow_dir.glob("[0-9][0-9][0-9]-*"), reverse=True)
+            if workflows and workflows[0].is_dir():
+                return workflows[0].name
 
         return None
 

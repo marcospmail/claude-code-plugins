@@ -505,9 +505,11 @@ class Orchestrator:
             f"13) CRITICAL - When receiving agent notifications (e.g., '[DONE] from dev: ...'), IMMEDIATELY update tasks.json: "
             f"   a) Read .workflow/$WORKFLOW_NAME/tasks.json "
             f"   b) Find the task(s) mentioned by the agent and update status: "
-            f"      - '[DONE]' notifications → set status to 'completed' "
+            f"      - '[DONE]' notifications → set status to 'completed' (work was ACTUALLY performed) "
             f"      - '[BLOCKED]' notifications → set status to 'blocked' "
             f"      - '[STATUS]' or '[PROGRESS]' → may update to 'in_progress' if pending "
+            f"   ⛔ NEVER mark a task 'completed' unless work was ACTUALLY DONE. "
+            f"   Blocked tasks stay 'blocked' until resolved - you cannot skip tasks. "
             f"   c) Write the updated tasks.json back to the file "
             f"   d) Acknowledge to the agent that you received their update "
             f"   EXAMPLE: If you receive '[DONE] from dev: Counter app complete', read tasks.json, "
@@ -521,8 +523,8 @@ class Orchestrator:
             f"   d) Reassign tasks to agents via their agent-tasks.md files using send-message.sh. "
             f"   CRITICAL: Do this whenever user adds features, changes scope, or clarifies requirements. "
             f"15) CHECK-IN LOOP AUTO-STOPS when all tasks in tasks.json are complete (no pending/in_progress/blocked). "
-            f"   If you need to stop early, user can invoke /cancel-checkin skill or you can run: "
-            f"   $HOME/dev/tools/yato/bin/cancel-checkin.sh "
+            f"   ⛔ NEVER call cancel-checkin.sh yourself - the loop stops AUTOMATICALLY when tasks complete. "
+            f"   Only the USER can stop early via /cancel-checkin skill if they choose to. "
             f"Start now: Check for .workflow/prd.md first, then begin discovery questions!"
         )
 
