@@ -247,13 +247,193 @@ def cmd_restart_checkin_display(args: argparse.Namespace) -> int:
     return 0 if success else 1
 
 
+# ==================== loop commands ====================
+
+
+def cmd_loop_start(args: argparse.Namespace) -> int:
+    """Start a new loop."""
+    from lib.loop_manager import start_loop, format_duration, parse_time_string
+
+    # Get session_id - this should be provided or we need to get it somehow
+    session_id = args.session
+    if not session_id:
+        print("Error: --session is required to identify the Claude session")
+        print("You can find it in the hook input or pass it explicitly")
+        return 1
+
+    try:
+        loop_id, folder = start_loop(
+            prompt=args.prompt,
+            session_id=session_id,
+            interval=args.every,
+            times=args.times,
+            duration=getattr(args, 'for', None) or args.duration,
+            project_path=args.project,
+        )
+
+        print(f"Loop started: {loop_id}")
+        print(f"Folder: {folder}")
+
+        interval_seconds = parse_time_string(args.every) if args.every else 0
+        if interval_seconds > 0:
+            print(f"Interval: {format_duration(interval_seconds)}")
+        else:
+            print("Interval: immediate (no delay)")
+
+        if args.times:
+            print(f"Will stop after: {args.times} executions")
+        if getattr(args, 'for', None) or args.duration:
+            dur = getattr(args, 'for', None) or args.duration
+            print(f"Will stop after: {dur}")
+
+        print("\nLoop is now active. The Stop hook will handle execution.")
+        return 0
+
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+
+
+def cmd_loop_cancel(args: argparse.Namespace) -> int:
+    """Cancel a loop."""
+    from lib.loop_manager import cancel_loop, list_loops, LoopManager, find_project_root
+    from pathlib import Path
+
+    # If specific args provided, use them directly
+    project_path = getattr(args, 'project', None)
+    if args.session or args.loop_id or args.all:
+        success = cancel_loop(
+            session_id=args.session,
+            loop_id=args.loop_id,
+            project_path=project_path,
+            cancel_all=args.all,
+        )
+        return 0 if success else 1
+
+    # Otherwise, show list of running loops for user to choose
+    running_loops = list_loops(status="running")
+
+    if not running_loops:
+        print("No running loops found.")
+        return 0
+
+    if len(running_loops) == 1:
+        # Only one loop, cancel it directly
+        loop = running_loops[0]
+        project = find_project_root()
+        manager = LoopManager(str(project))
+        loop_folder = Path(loop["folder"])
+        manager.stop_loop(loop_folder, "Cancelled by user")
+        print(f"Cancelled loop: {loop['id']}")
+        return 0
+
+    # Multiple loops - show selection
+    print("Running loops:\n")
+    for i, loop in enumerate(running_loops, 1):
+        prompt_preview = loop.get("prompt", "N/A")[:40]
+        exec_count = loop.get("execution_count", 0)
+        if loop.get("stop_after_times"):
+            progress = f"{exec_count}/{loop['stop_after_times']}"
+        else:
+            progress = str(exec_count)
+        print(f"  [{i}] {loop['id']}")
+        print(f"      Prompt: {prompt_preview}...")
+        print(f"      Progress: {progress} executions")
+        print()
+
+    print(f"  [a] Cancel ALL running loops")
+    print()
+
+    try:
+        choice = input("Select loop to cancel (number or 'a' for all): ").strip().lower()
+
+        if choice == 'a':
+            success = cancel_loop(cancel_all=True)
+            return 0 if success else 1
+
+        idx = int(choice) - 1
+        if 0 <= idx < len(running_loops):
+            loop = running_loops[idx]
+            project = find_project_root()
+            manager = LoopManager(str(project))
+            loop_folder = Path(loop["folder"])
+            manager.stop_loop(loop_folder, "Cancelled by user")
+            print(f"Cancelled loop: {loop['id']}")
+            return 0
+        else:
+            print("Invalid selection")
+            return 1
+
+    except (ValueError, KeyboardInterrupt):
+        print("\nCancelled")
+        return 1
+
+
+def cmd_loop_list(args: argparse.Namespace) -> int:
+    """List loops."""
+    from lib.loop_manager import list_loops, format_duration
+
+    project_path = getattr(args, 'project', None)
+    loops = list_loops(status=args.status, project_path=project_path)
+
+    if not loops:
+        print("No loops found")
+        return 0
+
+    for loop in loops:
+        status_icon = "🟢" if loop["status"] == "running" else "⏹️"
+        print(f"\n{status_icon} {loop['id']} [{loop['status']}]")
+        print(f"   Prompt: {loop.get('prompt', 'N/A')[:50]}...")
+
+        interval = loop.get("interval_seconds", 0)
+        print(f"   Interval: {format_duration(interval) if interval > 0 else 'immediate'}")
+
+        exec_count = loop.get("execution_count", 0)
+        if loop.get("stop_after_times"):
+            print(f"   Progress: {exec_count}/{loop['stop_after_times']} executions")
+        elif loop.get("stop_after_seconds"):
+            elapsed = loop.get("total_elapsed_seconds", 0)
+            print(f"   Progress: {format_duration(elapsed)}/{format_duration(loop['stop_after_seconds'])}")
+        else:
+            print(f"   Executions: {exec_count}")
+
+        print(f"   Session: {loop.get('session_id', 'N/A')}")
+
+    return 0
+
+
+def cmd_loop_status(args: argparse.Namespace) -> int:
+    """Show status of a specific loop."""
+    from lib.loop_manager import LoopManager, find_project_root
+    from pathlib import Path
+
+    project_path = getattr(args, 'project', None)
+    project = Path(project_path) if project_path else find_project_root()
+    manager = LoopManager(str(project))
+
+    if args.session:
+        loop_folder = manager.find_loop_by_session(args.session, only_running=False)
+    elif args.loop_id:
+        loop_folder = manager._get_loop_folder(args.loop_id)
+    else:
+        print("Specify --session or --loop-id")
+        return 1
+
+    if not loop_folder or not loop_folder.exists():
+        print("Loop not found")
+        return 1
+
+    print(manager.get_loop_status_display(loop_folder))
+    return 0
+
+
 def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(
         prog="yato",
         description="Yato - Yet Another Tmux Orchestrator",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 1.0.0")
+    parser.add_argument("--version", action="version", version="%(prog)s 1.1.0")
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
     # ==================== send ====================
@@ -377,6 +557,41 @@ def main() -> int:
     restart_parser.add_argument("--target", "-t", help="Target window")
     restart_parser.set_defaults(func=cmd_restart_checkin_display)
 
+    # ==================== loop ====================
+    loop_parser = subparsers.add_parser("loop", help="Loop management (repeating prompts)")
+    loop_sub = loop_parser.add_subparsers(dest="loop_cmd")
+
+    # loop start
+    loop_start = loop_sub.add_parser("start", help="Start a new loop")
+    loop_start.add_argument("prompt", help="Prompt to repeat")
+    loop_start.add_argument("--session", "-s", required=True, help="Claude session ID")
+    loop_start.add_argument("--project", "-p", help="Project path (defaults to cwd)")
+    loop_start.add_argument("--every", "-e", help="Interval (e.g., 5m, 30s, 1h). Optional, defaults to immediate.")
+    loop_start.add_argument("--times", "-t", type=int, help="Stop after N executions")
+    loop_start.add_argument("--for", "-f", "--duration", "-d", dest="duration", help="Stop after duration (e.g., 30m, 1h)")
+    loop_start.set_defaults(func=cmd_loop_start)
+
+    # loop cancel
+    loop_cancel = loop_sub.add_parser("cancel", help="Cancel a loop")
+    loop_cancel.add_argument("--session", "-s", help="Cancel loop for this session")
+    loop_cancel.add_argument("--loop-id", "-l", help="Cancel specific loop by ID")
+    loop_cancel.add_argument("--project", "-p", help="Project path (defaults to cwd)")
+    loop_cancel.add_argument("--all", "-a", action="store_true", help="Cancel all running loops")
+    loop_cancel.set_defaults(func=cmd_loop_cancel)
+
+    # loop list
+    loop_list = loop_sub.add_parser("list", help="List loops")
+    loop_list.add_argument("--status", help="Filter by status (running, stopped)")
+    loop_list.add_argument("--project", "-p", help="Project path (defaults to cwd)")
+    loop_list.set_defaults(func=cmd_loop_list)
+
+    # loop status
+    loop_status = loop_sub.add_parser("status", help="Show loop status")
+    loop_status.add_argument("--session", "-s", help="Session ID")
+    loop_status.add_argument("--loop-id", "-l", help="Loop ID")
+    loop_status.add_argument("--project", "-p", help="Project path (defaults to cwd)")
+    loop_status.set_defaults(func=cmd_loop_status)
+
     # Parse and execute
     args = parser.parse_args()
 
@@ -396,6 +611,9 @@ def main() -> int:
         return 0
     if args.command == "agent" and not hasattr(args, "func"):
         agent_parser.print_help()
+        return 0
+    if args.command == "loop" and not hasattr(args, "func"):
+        loop_parser.print_help()
         return 0
 
     return args.func(args)
