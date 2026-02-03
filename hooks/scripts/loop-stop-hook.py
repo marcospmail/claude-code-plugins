@@ -3,12 +3,15 @@
 Loop Stop Hook - Handles repeating loops via Claude Code's Stop hook.
 
 This script is called by Claude Code when the agent finishes responding.
-It checks for active loops and continues them by:
+It checks for active loops in the current project and continues them by:
 1. Reading input from stdin
-2. Finding active loops from central registry (~/.yato/active-loops.json)
+2. Scanning .workflow/loops/ in the current project directory
 3. Checking stop conditions
 4. Sleeping for the interval
 5. Returning {"decision": "block", "reason": prompt} to continue
+
+Project isolation: The hook only looks at loops inside the current working
+directory's .workflow/loops/ folder. Loops in other projects are never seen.
 
 Exit codes:
 - 0 with no JSON output: Allow Claude to stop
@@ -33,8 +36,6 @@ loop_manager = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(loop_manager)
 LoopManager = loop_manager.LoopManager
 format_duration = loop_manager.format_duration
-get_all_active_loops = loop_manager.get_all_active_loops
-_unregister_loop = loop_manager._unregister_loop
 
 # Optional debug logging
 DEBUG = os.environ.get("YATO_LOOP_DEBUG", "").lower() == "true"
@@ -46,6 +47,32 @@ def debug_log(message):
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(LOG_FILE, "a") as f:
             f.write(f"{message}\n")
+
+
+def find_active_loop_in_project(project_path: Path):
+    """Scan .workflow/loops/ in the project for an active loop.
+
+    Returns (loop_folder, meta) tuple if found, (None, None) otherwise.
+    """
+    loops_dir = project_path / ".workflow" / "loops"
+    if not loops_dir.exists():
+        return None, None
+
+    for d in sorted(loops_dir.iterdir()):
+        if not d.is_dir():
+            continue
+        meta_file = d / "meta.json"
+        if not meta_file.exists():
+            continue
+        try:
+            with open(meta_file, "r") as f:
+                meta = json.load(f)
+            if meta.get("should_continue", False):
+                return d, meta
+        except (json.JSONDecodeError, IOError):
+            continue
+
+    return None, None
 
 
 def main():
@@ -64,66 +91,24 @@ def main():
         debug_log(f"[ERROR] Exception reading stdin: {e}")
         return
 
-    # NOTE: We don't check stop_hook_active because our execution_count
-    # mechanism prevents infinite loops. The stop_after_times/stop_after_seconds
-    # conditions will terminate the loop properly.
+    # Scan the current project's .workflow/loops/ directory directly.
+    # Claude Code runs hooks with cwd set to the project directory,
+    # so this only finds loops belonging to this project.
+    project_path = Path(os.getcwd())
+    debug_log(f"[PROJECT] {project_path}")
 
-    # Determine the current project directory (Claude Code runs hooks in project cwd)
-    # Resolve to real path to handle macOS /private/var vs /var symlinks
-    current_project = str(Path(os.getcwd()).resolve())
-    debug_log(f"[CWD] Current project: {current_project}")
+    loop_folder, meta = find_active_loop_in_project(project_path)
 
-    # Find all active loops from central registry
-    all_active_loops = get_all_active_loops()
-    debug_log(f"[LOOPS] Found {len(all_active_loops)} active loops globally")
-
-    # Filter to only loops belonging to the current project
-    active_loops = []
-    for loop in all_active_loops:
-        loop_project = loop.get("project_path", "")
-        # Resolve both paths for comparison (handles symlinks like /private/var vs /var)
-        try:
-            resolved_loop_project = str(Path(loop_project).resolve())
-        except (OSError, ValueError):
-            resolved_loop_project = loop_project
-        if resolved_loop_project == current_project:
-            active_loops.append(loop)
-        else:
-            debug_log(f"[SKIP] Loop project '{resolved_loop_project}' != current '{current_project}'")
-
-    debug_log(f"[LOOPS] {len(active_loops)} loops match current project")
-
-    if not active_loops:
-        # No active loops for this project, allow stop
-        debug_log(f"[STOP] No active loops for current project, allowing stop")
+    if not loop_folder or not meta:
+        debug_log(f"[STOP] No active loops in {project_path / '.workflow' / 'loops'}")
         return
 
-    # Use the first active loop for this project
-    loop_info = active_loops[0]
-    loop_folder = Path(loop_info["folder"])
+    debug_log(f"[FOUND] Active loop: {loop_folder.name}")
 
-    # Get the project path for LoopManager
-    project_path = loop_info.get("project_path")
-    if not project_path:
-        # Fallback: derive from loop_folder (parent of .workflow/loops/xxx)
-        project_path = str(loop_folder.parent.parent.parent)
+    manager = LoopManager(str(project_path))
 
-    manager = LoopManager(project_path)
-
-    # Load fresh metadata
-    meta = manager.load_meta(loop_folder)
-    debug_log(f"[META] Loaded: exec_count={meta.get('execution_count', 0) if meta else 'N/A'}")
-
-    if not meta:
-        # Invalid loop, allow stop
-        debug_log(f"[ERROR] Failed to load meta, allowing stop")
-        return
-
-    # Check if should_continue is false
-    if not meta.get("should_continue", False):
-        # Loop was cancelled, allow stop
-        debug_log(f"[CANCEL] Loop cancelled, allowing stop")
-        return
+    # meta was already loaded and validated by find_active_loop_in_project
+    debug_log(f"[META] exec_count={meta.get('execution_count', 0)}")
 
     # Check stop conditions BEFORE doing anything
     should_stop, reason = manager.check_stop_conditions(meta)
