@@ -58,7 +58,7 @@ tmux new-session -d -s "$SESSION_NAME" -n "pm" -c "$TEST_DIR"
 
 "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test polling guidance" > /dev/null 2>&1
 
-WORKFLOW_NAME=$(cat "$TEST_DIR/.workflow/current")
+WORKFLOW_NAME=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1 | xargs basename)
 WORKFLOW_PATH="$TEST_DIR/.workflow/$WORKFLOW_NAME"
 
 source "$PROJECT_ROOT/bin/workflow-utils.sh"

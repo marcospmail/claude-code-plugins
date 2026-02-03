@@ -86,6 +86,19 @@ else
 fi
 
 # ============================================================
+# Test 2b: PM constraints.md contains cancel-checkin prohibition
+# ============================================================
+
+echo ""
+echo "Test 2b: Checking PM constraints.md cancel-checkin prohibition..."
+
+if grep -qi "never.*cancel-checkin\|cannot.*cancel-checkin" "$PM_CONSTRAINTS" 2>/dev/null; then
+    pass "PM constraints.md contains cancel-checkin prohibition"
+else
+    fail "PM constraints.md missing cancel-checkin prohibition"
+fi
+
+# ============================================================
 # Test 3: No constraints.example.md for PM
 # ============================================================
 
