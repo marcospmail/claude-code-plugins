@@ -278,6 +278,23 @@ echo ""
 echo "Starting check-in display..."
 tmux send-keys -t "$CHECKINS_PANE" "$SCRIPT_DIR/checkin-display.sh" Enter
 
+# Restart check-in daemon if there are incomplete tasks and no daemon running
+echo ""
+echo "Checking check-in daemon status..."
+DAEMON_STATUS=$(cd "$PROJECT_PATH" && uv run --project "$SCRIPT_DIR/.." python "$SCRIPT_DIR/../lib/checkin_scheduler.py" status --workflow "$WORKFLOW_NAME" 2>&1)
+DAEMON_RUNNING=$(echo "$DAEMON_STATUS" | grep "Daemon running:" | grep -c "True" || true)
+INCOMPLETE_TASKS=$(echo "$DAEMON_STATUS" | grep "Incomplete tasks:" | awk '{print $NF}')
+
+if [[ "$DAEMON_RUNNING" == "0" && -n "$INCOMPLETE_TASKS" && "$INCOMPLETE_TASKS" -gt 0 ]]; then
+    echo "Restarting check-in daemon ($INCOMPLETE_TASKS incomplete tasks)..."
+    cd "$PROJECT_PATH" && uv run --project "$SCRIPT_DIR/.." python "$SCRIPT_DIR/../lib/checkin_scheduler.py" start "$CHECKIN_INTERVAL" --note "Resumed workflow" --target "$PM_PANE" --workflow "$WORKFLOW_NAME" > /dev/null 2>&1
+    echo "Check-in daemon restarted."
+elif [[ "$DAEMON_RUNNING" == "1" ]]; then
+    echo "Check-in daemon already running."
+else
+    echo "No incomplete tasks, check-in daemon not needed."
+fi
+
 # Start Claude in PM pane with opus model
 echo "Starting Claude in PM pane..."
 sleep 0.5

@@ -4,6 +4,7 @@
 #
 # Reads WORKFLOW_NAME from tmux environment variable.
 # Displays check-ins from .workflow/$WORKFLOW_NAME/checkins.json
+# Checks daemon PID to show accurate running/stopped status.
 # Re-checks tmux env on each loop iteration (handles workflow creation after startup).
 
 # Get the pane ID this script is running in (must target this specific pane)
@@ -61,6 +62,7 @@ while true; do
         # Workflow and checkins.json both exist
         python3 -c "
 import json
+import os
 from datetime import datetime
 
 try:
@@ -68,6 +70,22 @@ try:
         data = json.load(f)
 
     checkins = data.get('checkins', [])
+    daemon_pid = data.get('daemon_pid')
+
+    # Check if daemon is actually running
+    daemon_running = False
+    if daemon_pid:
+        try:
+            os.kill(daemon_pid, 0)  # Signal 0 = check if process exists
+            daemon_running = True
+        except (OSError, ProcessLookupError):
+            daemon_running = False
+
+    # Show daemon status first
+    if daemon_pid and daemon_running:
+        print(f'[DAEMON]  PID {daemon_pid} running\033[K')
+    elif daemon_pid and not daemon_running:
+        print(f'[DAEMON]  PID {daemon_pid} (DEAD)\033[K')
 
     # Show stopped/resumed entries
     stopped = [c for c in checkins if c.get('status') == 'stopped']
@@ -76,22 +94,22 @@ try:
     if stopped:
         last_stopped = stopped[-1]
         created_at = last_stopped.get('created_at', '')
-        time = created_at.split('T')[1][:8] if 'T' in created_at else 'N/A'
+        time = created_at.split('T')[1][:8] if 'T' in created_at else ''
         print(f'[stopped] {time}  {last_stopped.get(\"note\", \"Stopped\")[:40]}\033[K')
 
     if resumed:
         last_resumed = resumed[-1]
         created_at = last_resumed.get('created_at', '')
-        time = created_at.split('T')[1][:8] if 'T' in created_at else 'N/A'
+        time = created_at.split('T')[1][:8] if 'T' in created_at else ''
         print(f'[resumed] {time}  {last_resumed.get(\"note\", \"Resumed\")[:40]}\033[K')
 
     # Show completed check-ins
     completed = [c for c in checkins if c.get('status') == 'done']
     completed.sort(key=lambda x: x.get('completed_at', ''))
 
-    for c in completed[-10:]:
+    for c in completed[-8:]:
         completed_at = c.get('completed_at', '')
-        time = completed_at.split('T')[1][:8] if 'T' in completed_at else 'N/A'
+        time = completed_at.split('T')[1][:8] if 'T' in completed_at else ''
         note = c.get('note', 'Check-in')[:40]
         print(f'[done]    {time}  {note}\033[K')
 
@@ -112,8 +130,13 @@ try:
             else:
                 remaining = 'NOW'
         except:
-            remaining = 'N/A'
-        print(f'[pending] {remaining:>8}  {note}\033[K')
+            remaining = 'soon'
+
+        # Show warning if pending but daemon not running
+        if not daemon_running:
+            print(f'[pending] {remaining:>8}  {note} (NO DAEMON!)\033[K')
+        else:
+            print(f'[pending] {remaining:>8}  {note}\033[K')
 
     if not completed and not pending and not stopped and not resumed:
         print('(no check-ins yet)\033[K')

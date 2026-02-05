@@ -137,7 +137,7 @@ get_current_workflow() {
 
     # Fallback: discover most recent workflow folder (for scripts/tests running outside tmux)
     if [[ -d "$project_path/.workflow" ]]; then
-        local latest=$(ls -td "$project_path/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1 | xargs basename 2>/dev/null)
+        local latest=$(command ls -td "$project_path/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1 | xargs basename 2>/dev/null)
         if [[ -n "$latest" ]]; then
             echo "$latest"
             return
