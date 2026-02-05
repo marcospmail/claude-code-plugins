@@ -6,7 +6,9 @@ This module provides a comprehensive interface for:
 - Managing tmux sessions and windows
 - Capturing and analyzing window content
 - Sending messages to agents
-- Integration with the session registry
+
+Note: Registry operations have been moved to WorkflowRegistry.
+This module focuses on pure tmux operations only.
 """
 
 import subprocess
@@ -15,10 +17,6 @@ import time
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
-
-# Import session registry
-from session_registry import SessionRegistry, Agent
 
 
 @dataclass
@@ -46,14 +44,14 @@ class TmuxOrchestrator:
     - Session/window management
     - Content capture and analysis
     - Message sending to agents
-    - Registry integration
+
+    Note: Registry operations have been moved to WorkflowRegistry.
     """
 
-    def __init__(self, registry_path: Optional[Path] = None):
+    def __init__(self):
         self.safety_mode = True
         self.max_lines_capture = 1000
         self.message_delay = 0.5  # Delay between message and Enter
-        self.registry = SessionRegistry(registry_path)
 
     # ==================== Session/Window Management ====================
 
@@ -181,7 +179,7 @@ class TmuxOrchestrator:
             return f"Error capturing window content: {e}"
 
     def capture_agent_output(self, agent_id: str, num_lines: int = 50) -> str:
-        """Capture output from a registered agent.
+        """Capture output from an agent target.
 
         Supports both window format (session:window) and pane format (session:window.pane).
         """
@@ -233,6 +231,68 @@ class TmuxOrchestrator:
 
     # ==================== Message Sending ====================
 
+    def send_message(self, target: str, message: str, enter: bool = True) -> bool:
+        """
+        Send a message to a tmux target (session:window or session:window.pane).
+
+        This is the primary message sending function, matching send-message.sh behavior:
+        1. Select the target pane to ensure it's active
+        2. Exit copy mode if active (prevents search mode trigger from / in paths)
+        3. Wait briefly for UI
+        4. Send the message text
+        5. Wait for UI to process
+        6. Optionally send Enter to submit
+
+        Args:
+            target: Target in format "session:window" or "session:window.pane"
+            message: The message text to send
+            enter: Whether to send Enter after the message (default True)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Step 1: Select the target pane to ensure it's active
+            subprocess.run(
+                ["tmux", "select-pane", "-t", target],
+                capture_output=True,
+                check=False  # Don't fail if pane can't be selected
+            )
+
+            # Step 2: Exit copy mode if active (prevents / triggering search)
+            subprocess.run(
+                ["tmux", "send-keys", "-t", target, "-X", "cancel"],
+                capture_output=True,
+                check=False  # Don't fail if not in copy mode
+            )
+
+            # Step 3: Brief wait for UI
+            time.sleep(0.5)
+
+            # Step 4: Send the message text
+            cmd = ["tmux", "send-keys", "-t", target, message]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"Error sending message: {result.stderr}")
+                return False
+
+            if enter:
+                # Step 5: Wait for UI to process the text
+                time.sleep(1.0)
+
+                # Step 6: Send Enter to submit
+                cmd = ["tmux", "send-keys", "-t", target, "Enter"]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    print(f"Error sending Enter: {result.stderr}")
+                    return False
+
+            return True
+
+        except Exception as e:
+            print(f"Error in send_message: {e}")
+            return False
+
     def send_keys_to_window(self, session_name: str, window_index: int, keys: str, confirm: bool = True) -> bool:
         """Safely send keys to a tmux window with confirmation."""
         if self.safety_mode and confirm:
@@ -269,7 +329,7 @@ class TmuxOrchestrator:
             return False
 
     def send_message_to_agent(self, agent_id: str, message: str, confirm: bool = False) -> bool:
-        """Send a message to a registered agent.
+        """Send a message to an agent target.
 
         Supports both window format (session:window) and pane format (session:window.pane).
         """
@@ -317,71 +377,6 @@ class TmuxOrchestrator:
             print(f"Error sending to pane: {e}")
             return False
 
-    # ==================== Agent Registry Integration ====================
-
-    def register_agent(
-        self,
-        session_name: str,
-        window_index: int,
-        role: str,
-        pm_window: Optional[str] = None,
-        project_path: Optional[str] = None,
-        name: Optional[str] = None,
-        focus: Optional[str] = None,
-        skills: Optional[List[str]] = None,
-        briefing: Optional[str] = None,
-        model: Optional[str] = None,
-        pane_index: Optional[int] = None
-    ) -> Agent:
-        """Register a new agent in the registry."""
-        return self.registry.register_agent(
-            session_name=session_name,
-            window_index=window_index,
-            role=role,
-            pm_window=pm_window,
-            project_path=project_path,
-            name=name,
-            focus=focus,
-            skills=skills,
-            briefing=briefing,
-            model=model,
-            pane_index=pane_index
-        )
-
-    def unregister_agent(self, agent_id: str) -> bool:
-        """Remove an agent from the registry."""
-        return self.registry.unregister_agent(agent_id)
-
-    def get_agent(self, agent_id: str) -> Optional[Agent]:
-        """Get an agent by ID."""
-        return self.registry.get_agent(agent_id)
-
-    def list_agents(self, role: Optional[str] = None, session: Optional[str] = None) -> List[Agent]:
-        """List all registered agents."""
-        return self.registry.list_agents(role=role, session=session)
-
-    def get_pm_for_agent(self, agent_id: str) -> Optional[Agent]:
-        """Get the PM for a given agent."""
-        return self.registry.get_pm_for_agent(agent_id)
-
-    def get_team_for_pm(self, pm_id: str) -> List[Agent]:
-        """Get all agents reporting to a PM."""
-        return self.registry.get_team_for_pm(pm_id)
-
-    def get_agents_with_status(self) -> List[Dict]:
-        """Get all agents with their current window status."""
-        agents = self.registry.list_agents()
-        result = []
-
-        for agent in agents:
-            window_info = self.get_window_info(agent.session_name, agent.window_index)
-            result.append({
-                "agent": agent.to_dict(),
-                "window_info": window_info
-            })
-
-        return result
-
     # ==================== Status and Monitoring ====================
 
     def get_all_windows_status(self) -> Dict:
@@ -402,15 +397,11 @@ class TmuxOrchestrator:
             for window in session.windows:
                 window_info = self.get_window_info(session.name, window.window_index)
 
-                # Check if this window has a registered agent
-                agent = self.registry.get_agent(f"{session.name}:{window.window_index}")
-
                 window_data = {
                     "index": window.window_index,
                     "name": window.window_name,
                     "active": window.active,
-                    "info": window_info,
-                    "agent": agent.to_dict() if agent else None
+                    "info": window_info
                 }
                 session_data["windows"].append(window_data)
 
@@ -447,10 +438,6 @@ class TmuxOrchestrator:
                 if window['active']:
                     snapshot += " (ACTIVE)"
 
-                # Show agent info if registered
-                if window['agent']:
-                    snapshot += f" [{window['agent']['role']}]"
-
                 snapshot += "\n"
 
                 if 'content' in window['info']:
@@ -463,62 +450,202 @@ class TmuxOrchestrator:
                             snapshot += f"    | {line}\n"
                 snapshot += "\n"
 
-        # Add registered agents summary
-        agents = self.registry.list_agents()
-        if agents:
-            snapshot += "\n" + "=" * 60 + "\n"
-            snapshot += "Registered Agents\n"
-            snapshot += "-" * 40 + "\n"
-            for agent in agents:
-                pm_info = f" → {agent.pm_window}" if agent.pm_window else ""
-                snapshot += f"  {agent.agent_id}: {agent.role}{pm_info}\n"
-
         return snapshot
 
-    # ==================== Team Management ====================
 
-    def notify_pm(self, agent_id: str, message_type: str, message: str) -> bool:
-        """Send a notification from an agent to their PM."""
-        agent = self.registry.get_agent(agent_id)
-        if not agent or not agent.pm_window:
-            print(f"Agent {agent_id} has no PM assigned")
+# ==================== Module-level functions ====================
+# These provide simple function-based interface without needing to instantiate the class
+
+_default_orchestrator = None
+
+
+def _get_orchestrator() -> TmuxOrchestrator:
+    """Get or create the default orchestrator instance."""
+    global _default_orchestrator
+    if _default_orchestrator is None:
+        _default_orchestrator = TmuxOrchestrator()
+        _default_orchestrator.safety_mode = False
+    return _default_orchestrator
+
+
+def send_message(target: str, message: str, enter: bool = True) -> bool:
+    """
+    Send a message to a tmux target.
+
+    This is a convenience function that wraps TmuxOrchestrator.send_message().
+
+    Args:
+        target: Target in format "session:window" or "session:window.pane"
+        message: The message text to send
+        enter: Whether to send Enter after the message (default True)
+
+    Returns:
+        True if successful, False otherwise
+    """
+    return _get_orchestrator().send_message(target, message, enter)
+
+
+def get_current_session() -> Optional[str]:
+    """
+    Get the current tmux session name.
+
+    Returns:
+        Session name if running in tmux, None otherwise
+    """
+    try:
+        result = subprocess.run(
+            ["tmux", "display-message", "-p", "#S"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        session = result.stdout.strip()
+        return session if session else None
+    except subprocess.CalledProcessError:
+        return None
+
+
+def restart_checkin_display(target: Optional[str] = None, yato_path: Optional[str] = None) -> bool:
+    """
+    Restart the check-in display in pane 0 of the PM window.
+
+    The check-in display runs in pane 0 of window 0, showing scheduled check-ins.
+
+    Args:
+        target: Target window (session:window), auto-detected if not provided.
+                Pane 0 will be used automatically.
+        yato_path: Path to yato installation (for finding checkin-display.sh).
+                   Defaults to YATO_PATH env var or ~/dev/tools/yato.
+
+    Returns:
+        True if successful, False otherwise
+    """
+    # Determine target
+    if target is None:
+        session = get_current_session()
+        if session is None:
+            print("Error: Not in tmux and no target specified")
+            return False
+        target = f"{session}:0"
+
+    # Add pane 0 if not specified
+    if "." not in target:
+        target = f"{target}.0"
+
+    # Determine yato path
+    if yato_path is None:
+        import os
+        yato_path = os.environ.get("YATO_PATH", os.path.expanduser("~/dev/tools/yato"))
+
+    print(f"Restarting check-in display in {target}...")
+
+    try:
+        # Kill any existing process in the pane (Ctrl-C)
+        subprocess.run(["tmux", "send-keys", "-t", target, "C-c"], check=False)
+        time.sleep(0.3)
+
+        # Clear the pane
+        subprocess.run(["tmux", "send-keys", "-t", target, "clear", "Enter"], check=True)
+        time.sleep(0.2)
+
+        # Start the display script
+        # For now, call the bash script. This will be replaced with Python later.
+        display_script = f"{yato_path}/bin/checkin-display.sh"
+        subprocess.run(["tmux", "send-keys", "-t", target, f"bash {display_script}", "Enter"], check=True)
+
+        print(f"Check-in display restarted in {target}")
+        return True
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error restarting check-in display: {e}")
+        return False
+
+
+def notify_pm(message: str, session: Optional[str] = None) -> bool:
+    """
+    Send a notification message to the Project Manager.
+
+    PM is always at window 0, pane 1 (pane 0 is the check-ins display).
+
+    Message format conventions:
+    - [DONE] - Task completed
+    - [BLOCKED] - Blocked on something
+    - [HELP] - Need assistance
+    - [STATUS] - Status update
+    - [PROGRESS] - Progress report
+
+    Args:
+        message: The notification message (can include prefix like [DONE])
+        session: Session name (auto-detected if not provided)
+
+    Returns:
+        True if successful, False otherwise
+    """
+    if session is None:
+        session = get_current_session()
+        if session is None:
+            print("Error: Not running in a tmux session and no session specified")
             return False
 
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        formatted = f"[{message_type}] from {agent_id} at {timestamp}: {message}"
-
-        return self.send_message_to_agent(agent.pm_window, formatted)
-
-    def broadcast_to_team(self, pm_id: str, message: str) -> Dict[str, bool]:
-        """Send a message to all agents reporting to a PM."""
-        team = self.registry.get_team_for_pm(pm_id)
-        results = {}
-
-        for agent in team:
-            results[agent.agent_id] = self.send_message_to_agent(agent.agent_id, message)
-
-        return results
-
-    def check_team_status(self, pm_id: str, num_lines: int = 20) -> Dict[str, str]:
-        """Capture recent output from all team members."""
-        team = self.registry.get_team_for_pm(pm_id)
-        status = {}
-
-        for agent in team:
-            status[agent.agent_id] = self.capture_agent_output(agent.agent_id, num_lines)
-
-        return status
+    # PM is always at window 0, pane 1
+    pm_target = f"{session}:0.1"
+    return send_message(pm_target, message)
 
 
 if __name__ == "__main__":
-    orchestrator = TmuxOrchestrator()
+    import sys
+    import argparse
 
-    # Disable safety mode for testing
-    orchestrator.safety_mode = False
+    parser = argparse.ArgumentParser(description="Tmux utilities for Yato")
+    subparsers = parser.add_subparsers(dest="command", help="Commands")
 
-    # Print status
-    status = orchestrator.get_all_windows_status()
-    print(json.dumps(status, indent=2))
+    # send command
+    send_parser = subparsers.add_parser("send", help="Send message to target")
+    send_parser.add_argument("target", help="Target (session:window or session:window.pane)")
+    send_parser.add_argument("message", nargs="+", help="Message to send")
+    send_parser.add_argument("--no-enter", action="store_true", help="Don't send Enter after message")
 
-    # Print monitoring snapshot
-    print("\n" + orchestrator.create_monitoring_snapshot())
+    # notify command
+    notify_parser = subparsers.add_parser("notify", help="Notify PM")
+    notify_parser.add_argument("message", nargs="+", help="Message to send to PM")
+    notify_parser.add_argument("--session", "-s", help="Session name (auto-detected if not provided)")
+
+    # restart-checkin-display command
+    restart_parser = subparsers.add_parser("restart-checkin-display", help="Restart check-in display")
+    restart_parser.add_argument("--target", "-t", help="Target window (session:window), auto-detected if not provided")
+    restart_parser.add_argument("--yato-path", help="Path to yato installation")
+
+    # status command
+    status_parser = subparsers.add_parser("status", help="Show tmux status")
+
+    args = parser.parse_args()
+
+    if args.command == "send":
+        message = " ".join(args.message)
+        success = send_message(args.target, message, enter=not args.no_enter)
+        if success:
+            print(f"Message sent to {args.target}: {message}")
+        else:
+            print(f"Failed to send message to {args.target}")
+            sys.exit(1)
+    elif args.command == "notify":
+        message = " ".join(args.message)
+        success = notify_pm(message, session=args.session)
+        if success:
+            session = args.session or get_current_session()
+            print(f"Notification sent to PM ({session}:0.1): {message}")
+        else:
+            print("Failed to notify PM")
+            sys.exit(1)
+    elif args.command == "restart-checkin-display":
+        success = restart_checkin_display(target=args.target, yato_path=args.yato_path)
+        if not success:
+            sys.exit(1)
+    elif args.command == "status":
+        orchestrator = TmuxOrchestrator()
+        orchestrator.safety_mode = False
+        status = orchestrator.get_all_windows_status()
+        print(json.dumps(status, indent=2))
+        print("\n" + orchestrator.create_monitoring_snapshot())
+    else:
+        parser.print_help()

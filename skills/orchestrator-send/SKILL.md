@@ -15,19 +15,14 @@ You are sending a message to an orchestrator agent.
 
 ## Steps
 
-1. **Set the orchestrator path:**
+1. **Send the message:**
 ```bash
-YATO_PATH="$HOME/dev/tools/yato"
+cd ~/dev/tools/yato && uv run python lib/tmux_utils.py send <target> "<message>"
 ```
 
-2. **Send the message:**
+2. **Optionally read the response** after a few seconds:
 ```bash
-$YATO_PATH/bin/send-message.sh <target> "<message>"
+cd ~/dev/tools/yato && uv run python lib/claude_control.py read <target> -n 30
 ```
 
-3. **Optionally read the response** after a few seconds:
-```bash
-python3 $YATO_PATH/lib/claude_control.py read <target> -n 30
-```
-
-4. **Confirm to the user** that the message was sent and show how to check for responses.
+3. **Confirm to the user** that the message was sent and show how to check for responses.

@@ -42,7 +42,12 @@ cleanup() {
     echo ""
     echo "Cleaning up..."
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux kill-session -t "e2e-helper-$$" 2>/dev/null || true
+    tmux kill-session -t "e2e-agent-names-$$" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
+    rm -rf "/tmp/e2e-agent-test-$$" 2>/dev/null || true
+    rm -f /tmp/e2e-deploy-$$.txt 2>/dev/null || true
+    rm -f /tmp/e2e-init-$$.txt 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -55,15 +60,48 @@ echo ""
 mkdir -p "$TEST_DIR"
 echo "test file" > "$TEST_DIR/test.txt"
 
-# Deploy PM
-python3 "$PROJECT_ROOT/lib/orchestrator.py" deploy-pm "$SESSION_NAME" -p "$TEST_DIR" > /dev/null 2>&1
-
-# Wait for checkin-display.sh to run at least once
+# Deploy PM via helper session (since deploy-pm creates its own session)
+HELPER_SESSION="e2e-helper-$$"
+tmux new-session -d -s "$HELPER_SESSION" -c "$PROJECT_ROOT"
+tmux send-keys -t "$HELPER_SESSION" "cd $PROJECT_ROOT && uv run python lib/orchestrator.py deploy-pm '$SESSION_NAME' -p '$TEST_DIR' > /tmp/e2e-deploy-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-deploy-$$.txt" Enter
 sleep 5
 
-# Check pane titles
-PANE_0_TITLE=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^0:" | cut -d: -f2-)
-PANE_1_TITLE=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
+# Check if deploy succeeded
+DEPLOY_OUTPUT=$(cat /tmp/e2e-deploy-$$.txt 2>/dev/null | grep -v "^EXIT:" || true)
+DEPLOY_EXIT=$(grep "^EXIT:" /tmp/e2e-deploy-$$.txt 2>/dev/null | cut -d: -f2 || echo "1")
+if [[ $DEPLOY_EXIT -ne 0 ]]; then
+    echo "deploy-pm failed with exit code $DEPLOY_EXIT"
+    echo "Output: $DEPLOY_OUTPUT"
+fi
+
+# Wait for session to be created and verify it exists
+sleep 2
+for i in {1..10}; do
+    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+        break
+    fi
+    sleep 1
+done
+
+if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    fail "Session '$SESSION_NAME' was not created by deploy-pm"
+    exit 1
+fi
+
+# Wait for checkin-display.sh to run and set pane titles
+sleep 5
+
+# Check pane titles with retry (titles may take a moment to be set)
+PANE_0_TITLE=""
+PANE_1_TITLE=""
+for i in {1..5}; do
+    PANE_0_TITLE=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^0:" | cut -d: -f2-)
+    PANE_1_TITLE=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
+    if [[ -n "$PANE_0_TITLE" && -n "$PANE_1_TITLE" ]]; then
+        break
+    fi
+    sleep 1
+done
 
 echo "Testing pane 0 (Check-ins)..."
 if [[ "$PANE_0_TITLE" == *"Check-ins"* ]]; then
@@ -126,8 +164,9 @@ echo "test" > "$AGENT_TEST_DIR/test.txt"
 # Create plain tmux session with shell
 tmux new-session -d -s "$AGENT_SESSION" -n "pm-checkins" -c "$AGENT_TEST_DIR"
 
-# Initialize workflow
-"$PROJECT_ROOT/bin/init-workflow.sh" "$AGENT_TEST_DIR" "Test agent windows" > /dev/null 2>&1
+# Initialize workflow via tmux send-keys
+tmux send-keys -t "$AGENT_SESSION" "$PROJECT_ROOT/bin/init-workflow.sh '$AGENT_TEST_DIR' 'Test agent windows' > /tmp/e2e-init-$$.txt 2>&1" Enter
+sleep 3
 
 # Get workflow name and set it in the tmux session environment
 WORKFLOW_NAME=$(ls "$AGENT_TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
@@ -177,8 +216,15 @@ echo ""
 echo "Phase 4: Final PM pane persistence check..."
 echo ""
 
-# Final check that PM pane name is still correct
-PANE_1_FINAL=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
+# Final check that PM pane name is still correct (with retry)
+PANE_1_FINAL=""
+for i in {1..5}; do
+    PANE_1_FINAL=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
+    if [[ -n "$PANE_1_FINAL" ]]; then
+        break
+    fi
+    sleep 1
+done
 
 if [[ "$PANE_1_FINAL" == "PM" ]]; then
     pass "PM pane still named 'PM'"

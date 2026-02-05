@@ -3,23 +3,29 @@
 Claude Control CLI - Command-line interface for managing Claude agents.
 
 This provides a unified interface for:
-- Viewing agent status
+- Viewing agent status (workflow-scoped)
 - Listing tmux sessions/windows
 - Sending messages to agents
 - Reading agent output
-- Creating new agents
+- Managing agents within workflows
 """
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Optional, List
 
-# Add lib directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
-from session_registry import SessionRegistry, Agent
+# Handle imports for both `uv run` and direct `python3 lib/claude_control.py` execution
+try:
+    from lib.session_registry import Agent
+    from lib.workflow_registry import WorkflowRegistry
+except ModuleNotFoundError:
+    # Running as script, add parent directory to path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from lib.session_registry import Agent
+    from lib.workflow_registry import WorkflowRegistry
 
 
 class TmuxController:
@@ -134,25 +140,50 @@ class TmuxController:
 class ClaudeControl:
     """Main CLI controller for Claude agents."""
 
-    def __init__(self):
-        self.registry = SessionRegistry()
+    def __init__(self, project_path: Optional[str] = None, workflow_name: Optional[str] = None):
+        """
+        Initialize controller.
+
+        Args:
+            project_path: Path to project (for workflow-scoped operations)
+            workflow_name: Specific workflow name (optional, auto-detected if not provided)
+        """
         self.tmux = TmuxController()
+        self.project_path = Path(project_path).expanduser().resolve() if project_path else None
+        self.workflow_name = workflow_name
+        self._registry = None
+
+    @property
+    def registry(self) -> Optional[WorkflowRegistry]:
+        """Get workflow registry (lazy-loaded)."""
+        if self._registry is None and self.project_path:
+            self._registry = WorkflowRegistry.from_project(self.project_path, self.workflow_name)
+        return self._registry
 
     def cmd_status(self, args: argparse.Namespace) -> int:
-        """Show status of all registered agents."""
+        """Show status of all registered agents in the current workflow."""
+        if not self.registry:
+            print("No workflow found. Use --project-path to specify a project.")
+            print("Or run from a project directory with a .workflow folder.")
+            return 0
+
         agents = self.registry.list_agents()
 
         if not agents:
-            print("No registered agents.")
+            print("No registered agents in this workflow.")
             return 0
 
-        print(f"\n{'='*60}")
-        print(f"{'AGENT ID':<25} {'ROLE':<12} {'STATUS':<10} {'PM'}")
+        workflow_name = self.registry.workflow_path.name
+        print(f"\nWorkflow: {workflow_name}")
+        print(f"{'='*60}")
+        print(f"{'NAME':<20} {'ROLE':<12} {'TARGET':<20} {'MODEL'}")
         print(f"{'='*60}")
 
         for agent in agents:
-            pm = agent.pm_window or "-"
-            print(f"{agent.agent_id:<25} {agent.role:<12} {agent.status:<10} {pm}")
+            name = agent.name or agent.role
+            target = agent.target
+            model = agent.model or "sonnet"
+            print(f"{name:<20} {agent.role:<12} {target:<20} {model}")
 
         print(f"{'='*60}")
         print(f"Total: {len(agents)} agent(s)\n")
@@ -176,8 +207,14 @@ class ClaudeControl:
             windows = self.tmux.list_windows(session["name"])
             for window in windows:
                 target = f"{session['name']}:{window['index']}"
-                agent = self.registry.get_agent(target)
-                agent_info = f" [{agent.role}]" if agent else ""
+
+                # Try to find agent in registry if available
+                agent_info = ""
+                if self.registry:
+                    agent = self.registry.get_agent_by_target(session["name"], window["index"])
+                    if agent:
+                        agent_info = f" [{agent.role}]"
+
                 print(f"  {window['index']}: {window['name']}{agent_info}")
                 if args.verbose:
                     print(f"      Path: {window['path']}")
@@ -221,9 +258,10 @@ class ClaudeControl:
         """Create and register a new agent."""
         session = args.session
         role = args.role
-        name = args.name or f"Claude-{role.title()}"
+        name = args.name or role.title()
         path = args.path
         pm_window = args.pm_window
+        model = args.model or "sonnet"
 
         # Check session exists
         if not self.tmux.session_exists(session):
@@ -237,18 +275,26 @@ class ClaudeControl:
             print(f"Error: Failed to create window in session '{session}'")
             return 1
 
-        # Register agent
-        agent = self.registry.register_agent(
-            session_name=session,
-            window_index=window_index,
-            role=role,
-            pm_window=pm_window,
-            project_path=path
-        )
+        # Register agent in workflow if available
+        if self.registry:
+            agent = Agent(
+                session_name=session,
+                window_index=window_index,
+                role=role,
+                pm_window=pm_window,
+                project_path=path,
+                name=name,
+                model=model
+            )
+            self.registry.add_agent(agent)
+            print(f"Created and registered agent: {agent.agent_id}")
+        else:
+            print(f"Created window: {session}:{window_index}")
+            print(f"Warning: No workflow found, agent not registered")
 
-        print(f"Created agent: {agent.agent_id}")
         print(f"  Role: {role}")
         print(f"  Window: {name}")
+        print(f"  Model: {model}")
         if pm_window:
             print(f"  Reports to: {pm_window}")
         if path:
@@ -256,17 +302,23 @@ class ClaudeControl:
 
         # Start Claude if requested
         if args.start_claude:
-            target = agent.target
+            target = f"{session}:{window_index}"
             print(f"Starting Claude in {target}...")
-            self.tmux.send_keys(target, "claude", send_enter=True)
+            claude_cmd = f"claude --dangerously-skip-permissions --model {model}"
+            self.tmux.send_keys(target, claude_cmd, send_enter=True)
 
         return 0
 
     def cmd_register(self, args: argparse.Namespace) -> int:
         """Register an existing window or pane as an agent."""
+        if not self.registry:
+            print("Error: No workflow found. Use --project-path to specify a project.")
+            return 1
+
         target = args.target
         role = args.role
-        pm_window = args.pm_window
+        name = args.name or role.title()
+        model = args.model or "sonnet"
 
         if ":" not in target:
             print(f"Error: Invalid target format. Use 'session:window' or 'session:window.pane'")
@@ -293,47 +345,57 @@ class ClaudeControl:
                 print(f"Error: Window must be a number")
                 return 1
 
-        agent = self.registry.register_agent(
+        agent = Agent(
             session_name=session,
             window_index=window,
             role=role,
-            pm_window=pm_window,
+            name=name,
+            model=model,
             pane_index=pane_index
         )
+        self.registry.add_agent(agent)
 
         print(f"Registered agent: {agent.agent_id} as {role}")
         return 0
 
     def cmd_unregister(self, args: argparse.Namespace) -> int:
         """Unregister an agent."""
-        agent_id = args.agent_id
+        if not self.registry:
+            print("Error: No workflow found. Use --project-path to specify a project.")
+            return 1
 
-        if self.registry.unregister_agent(agent_id):
-            print(f"Unregistered agent: {agent_id}")
+        name = args.name
+
+        if self.registry.remove_agent(name):
+            print(f"Unregistered agent: {name}")
             return 0
         else:
-            print(f"Agent not found: {agent_id}")
+            print(f"Agent not found: {name}")
             return 1
 
     def cmd_team(self, args: argparse.Namespace) -> int:
         """Show team for a PM."""
-        pm_id = args.pm_id
-
-        pm = self.registry.get_agent(pm_id)
-        if not pm:
-            print(f"PM not found: {pm_id}")
+        if not self.registry:
+            print("Error: No workflow found. Use --project-path to specify a project.")
             return 1
 
-        team = self.registry.get_team_for_pm(pm_id)
+        pm = self.registry.get_pm()
+        if not pm:
+            print("No PM found in this workflow")
+            return 1
 
-        print(f"\nTeam for PM {pm_id}:")
+        team = self.registry.get_team()
+
+        print(f"\nWorkflow: {self.registry.workflow_path.name}")
+        print(f"PM: {pm.name or 'PM'} at {pm.target}")
         print(f"{'-'*50}")
 
         if not team:
             print("  No team members registered")
         else:
             for agent in team:
-                print(f"  {agent.agent_id} ({agent.role})")
+                name = agent.name or agent.role
+                print(f"  {name}: {agent.role} at {agent.target} ({agent.model or 'sonnet'})")
 
         print()
         return 0
@@ -345,10 +407,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
+    # Global options for workflow context
+    parser.add_argument("-p", "--project-path", help="Project path for workflow-scoped operations")
+    parser.add_argument("-w", "--workflow", help="Specific workflow name (auto-detected if not provided)")
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # status command
-    status_parser = subparsers.add_parser("status", help="Show all registered agents")
+    status_parser = subparsers.add_parser("status", help="Show all registered agents in workflow")
 
     # list command
     list_parser = subparsers.add_parser("list", help="List tmux sessions and windows")
@@ -368,8 +434,9 @@ def main():
     create_parser = subparsers.add_parser("create", help="Create a new agent window")
     create_parser.add_argument("session", help="Session name")
     create_parser.add_argument("role", help="Agent role (pm, developer, qa, etc.)")
-    create_parser.add_argument("-n", "--name", help="Window name")
-    create_parser.add_argument("-p", "--path", help="Working directory path")
+    create_parser.add_argument("-n", "--name", help="Agent name (default: role)")
+    create_parser.add_argument("--path", help="Working directory path")
+    create_parser.add_argument("-m", "--model", help="Claude model (opus, sonnet, haiku)")
     create_parser.add_argument("--pm-window", help="PM window this agent reports to")
     create_parser.add_argument("--start-claude", action="store_true", help="Start Claude after creating")
 
@@ -377,15 +444,15 @@ def main():
     register_parser = subparsers.add_parser("register", help="Register existing window as agent")
     register_parser.add_argument("target", help="Target (session:window)")
     register_parser.add_argument("role", help="Agent role")
-    register_parser.add_argument("--pm-window", help="PM window this agent reports to")
+    register_parser.add_argument("-n", "--name", help="Agent name (default: role)")
+    register_parser.add_argument("-m", "--model", help="Claude model (opus, sonnet, haiku)")
 
     # unregister command
     unregister_parser = subparsers.add_parser("unregister", help="Unregister an agent")
-    unregister_parser.add_argument("agent_id", help="Agent ID (session:window)")
+    unregister_parser.add_argument("name", help="Agent name")
 
     # team command
-    team_parser = subparsers.add_parser("team", help="Show team for a PM")
-    team_parser.add_argument("pm_id", help="PM agent ID (session:window)")
+    team_parser = subparsers.add_parser("team", help="Show team for workflow")
 
     args = parser.parse_args()
 
@@ -393,7 +460,15 @@ def main():
         parser.print_help()
         return 0
 
-    controller = ClaudeControl()
+    # Determine project path
+    project_path = args.project_path
+    if not project_path:
+        # Try current directory
+        cwd = Path.cwd()
+        if (cwd / ".workflow").exists():
+            project_path = str(cwd)
+
+    controller = ClaudeControl(project_path=project_path, workflow_name=args.workflow)
 
     # Dispatch to command handler
     cmd_map = {

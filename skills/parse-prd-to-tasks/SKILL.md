@@ -2,7 +2,7 @@
 name: parse-prd-to-tasks
 description: Parse PRD into tasks.json with agent assignments. Used by PM after PRD is complete.
 user-invocable: false
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools: Bash,Read,Write,Glob,Grep
 argument-hint: [workflow-path]
 ---
@@ -39,7 +39,33 @@ Read the PRD file using the Read tool.
 
 ## Step 2: Identify Available Agents
 
-Reference the standard Yato team structure:
+First, check if team.yml exists in the workflow folder. This file defines the ACTUAL agents that will be created.
+
+Read team.yml from workflow folder:
+- TEAM_FILE="$WORKFLOW_PATH/team.yml"
+- If team.yml exists, use ONLY the agents defined there for task assignment
+- If team.yml does NOT exist, fall back to standard agents (developer, qa, code-reviewer)
+
+**If team.yml exists**, extract agents:
+```bash
+# Get agent names from team.yml
+grep "^  - name:" $WORKFLOW_PATH/team.yml | sed 's/.*name: //'
+```
+
+The agents in team.yml have this structure:
+```yaml
+agents:
+  - name: developer
+    role: developer
+    model: sonnet
+  - name: qa
+    role: qa
+    model: sonnet
+```
+
+CRITICAL: Only assign tasks to agents that exist in team.yml. If team.yml has only "developer" and "qa", do NOT create tasks for "code-reviewer".
+
+**Standard agent roles reference** (use if team.yml doesn't exist):
 
 | Agent | Role | Can Modify Code | Typical Tasks |
 |-------|------|-----------------|---------------|
@@ -47,7 +73,7 @@ Reference the standard Yato team structure:
 | qa | Testing | NO | Write tests, verify functionality, report issues |
 | code-reviewer | Review | NO | Review code, check security, approve changes |
 
-Optional specialized agents (if mentioned in PRD):
+Optional specialized agents (if mentioned in PRD or team.yml):
 - backend-developer, frontend-developer, designer, devops
 
 ## Step 3: Analyze PRD and Create Tasks
@@ -106,7 +132,7 @@ Use the Write tool to create the tasks.json file in the workflow folder with thi
 **Task Fields:**
 - `id`: Unique identifier (T1, T2, T3...)
 - `subject`: Brief imperative title (e.g., "Implement login endpoint")
-- `description`: Detailed requirements and acceptance criteria
+- `description`: Detailed requirements and acceptance criteria. **CRITICAL: For tasks that produce output files, include explicit OUTPUT_PATH with FULL path from project root** (e.g., "OUTPUT_PATH: e2e/COVERAGE-GAPS.md" or "OUTPUT_PATH: .workflow/001-xyz/analysis.md")
 - `activeForm`: Present continuous form for display (e.g., "Implementing login endpoint")
 - `agent`: Single agent assignment (developer, qa, code-reviewer)
 - `status`: Always starts as "pending" (other values: in_progress, blocked, completed)
@@ -132,6 +158,7 @@ After generating tasks.json, provide a clear summary:
 - Reference specific functions, files, or sections from the PRD
 - Use consistent naming conventions for task IDs (T1, T2, T3...)
 - Write activeForm in present continuous tense
+- **For tasks that produce files:** Include "OUTPUT_PATH: <path>" in description with FULL path from project root. Example: "Create coverage analysis. OUTPUT_PATH: e2e/COVERAGE-GAPS.md" - this prevents agents from using wrong paths
 
 **DON'T:**
 - Create vague tasks like "Implement feature" or "Fix bugs"
@@ -143,8 +170,11 @@ After generating tasks.json, provide a clear summary:
 
 <constraints>
 - Always read the full PRD before creating tasks
-- Every implementation task should have a corresponding QA task
-- Code changes should have a review task
+- CRITICAL: Read team.yml FIRST to know which agents are available
+- Only assign tasks to agents that exist in team.yml (or standard agents if no team.yml)
+- If team.yml has only developer and qa, do NOT create code-reviewer tasks
+- Every implementation task should have a corresponding QA task (if qa agent exists)
+- Code changes should have a review task (if code-reviewer agent exists)
 - Use specific file paths when mentioned in PRD
 - blockedBy/blocks must reference valid task IDs
 - Status should always start as "pending"

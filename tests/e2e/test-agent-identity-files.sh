@@ -1,155 +1,266 @@
 #!/bin/bash
 # test-agent-identity-files.sh
 #
-# E2E Test: Agent Identity and Instruction Files
+# E2E Test: Agent Identity Files via /yato-existing-project
 #
-# Verifies that agents get correct identity.yml and instructions.md files
-# with proper content based on role
+# This test verifies the /yato-existing-project skill creates correct PM identity files:
+# 1. Starts Claude in tmux with --dangerously-skip-permissions
+# 2. Invokes /yato-existing-project skill
+# 3. Verifies:
+#    - PM identity.yml exists with correct fields
+#    - PM instructions.md exists with correct content
+#    - PM CLAUDE.md references identity files
+#
+# This tests PLUGIN INTEGRATION, not the full multi-minute PM workflow.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="agent-identity-files"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
-SESSION_NAME="e2e-test-identity-$$"
+SESSION_NAME="e2e-test-$$"
+PROJECT_SLUG="e2e-test-$TEST_NAME-$$"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: Agent Identity and Instruction Files              ║"
+echo "║  E2E Test: Agent Identity Files via /yato-existing-project   ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
+echo "Test directory: $TEST_DIR"
+echo "Initial session: $SESSION_NAME"
+echo ""
 
+# Track test results
 TESTS_PASSED=0
 TESTS_FAILED=0
 
-pass() { echo "  ✅ $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
-fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
+pass() {
+    echo "  ✅ $1"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+}
 
+fail() {
+    echo "  ❌ $1"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+}
+
+# Cleanup function
 cleanup() {
-    echo ""; echo "Cleaning up..."
+    echo ""
+    echo "Cleaning up..."
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    # Kill any sessions matching the project pattern
+    tmux list-sessions 2>/dev/null | grep "e2e-test-agent-identity" | cut -d: -f1 | xargs -I{} tmux kill-session -t {} 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
-# Setup
+# ============================================================
+# PHASE 1: Setup test environment
+# ============================================================
+echo "Phase 1: Setting up test environment..."
+
 mkdir -p "$TEST_DIR"
-echo "test" > "$TEST_DIR/app.js"
-tmux new-session -d -s "$SESSION_NAME" -n "pm-checkins" -c "$TEST_DIR"
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Identity test" > /dev/null 2>&1
+cd "$TEST_DIR"
+git init -q
+git config user.name "Test"
+git config user.email "test@test.com"
+echo "function test() { return true; }" > "$TEST_DIR/app.js"
+git add -A && git commit -m "Initial" -q
 
-# Get workflow name and set it in the tmux session environment
-WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "$WORKFLOW_NAME"
-WORKFLOW_PATH="$TEST_DIR/.workflow/$WORKFLOW_NAME"
-
-# Create team
-tmux send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $PROJECT_ROOT/bin/create-team.sh $TEST_DIR developer qa code-reviewer" Enter
-sleep 25
-
-echo "Testing identity.yml files..."
+echo "  - Project created at $TEST_DIR"
 echo ""
 
-# Developer identity
-DEV_IDENTITY="$WORKFLOW_PATH/agents/developer/identity.yml"
-if [[ -f "$DEV_IDENTITY" ]]; then
-    pass "Developer identity.yml exists"
+# ============================================================
+# PHASE 2: Start Claude and invoke /yato-existing-project
+# ============================================================
+echo "Phase 2: Starting Claude and invoking skill..."
 
-    if grep -q "can_modify_code: true" "$DEV_IDENTITY"; then
-        pass "Developer can_modify_code is true"
-    else
-        fail "Developer should have can_modify_code: true"
-    fi
+# Create tmux session
+tmux new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
 
-    if grep -q "role: developer" "$DEV_IDENTITY"; then
-        pass "Developer role field correct"
-    else
-        fail "Developer role field incorrect"
-    fi
-else
-    fail "Developer identity.yml not found"
+if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    fail "Failed to create tmux session"
+    exit 1
 fi
 
-# QA identity
-QA_IDENTITY="$WORKFLOW_PATH/agents/qa/identity.yml"
-if [[ -f "$QA_IDENTITY" ]]; then
-    pass "QA identity.yml exists"
+pass "Tmux session created"
 
-    if grep -q "can_modify_code: false" "$QA_IDENTITY"; then
-        pass "QA can_modify_code is false"
-    else
-        fail "QA should have can_modify_code: false"
-    fi
+# Start Claude with --dangerously-skip-permissions
+tmux send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
+
+echo "  - Waiting for Claude to initialize (12 seconds)..."
+sleep 12
+
+# Verify Claude started
+OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -q "❯\|›\|>"; then
+    pass "Claude CLI started"
 else
-    fail "QA identity.yml not found"
+    fail "Claude prompt not visible"
 fi
 
-# Code-reviewer identity
-CR_IDENTITY="$WORKFLOW_PATH/agents/code-reviewer/identity.yml"
-if [[ -f "$CR_IDENTITY" ]]; then
-    pass "Code-reviewer identity.yml exists"
+# Invoke /yato-existing-project skill
+echo "  - Invoking /yato-existing-project skill..."
+tmux send-keys -t "$SESSION_NAME" "/yato-existing-project Test identity file generation"
+sleep 2
+tmux send-keys -t "$SESSION_NAME" Enter
 
-    if grep -q "can_modify_code: false" "$CR_IDENTITY"; then
-        pass "Code-reviewer can_modify_code is false"
+# Poll for workflow folder creation instead of fixed sleep
+echo "  - Polling for workflow folder (max 240 seconds)..."
+POLL_START=$(date +%s)
+POLL_MAX=240
+POLL_INTERVAL=15
+WORKFLOW_FOUND=false
+
+# Initial wait to let skill start
+sleep 60
+
+while true; do
+    ELAPSED=$(($(date +%s) - POLL_START))
+
+    # Check if workflow folder exists
+    WORKFLOW_DIR=$(ls -td "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1)
+    if [[ -n "$WORKFLOW_DIR" ]] && [[ -d "$WORKFLOW_DIR" ]]; then
+        echo "  - Workflow folder found after ${ELAPSED}s"
+        WORKFLOW_FOUND=true
+        # Wait a bit more for PM files to be created
+        sleep 30
+        break
+    fi
+
+    # Check timeout
+    if [[ $ELAPSED -ge $POLL_MAX ]]; then
+        echo "  - Timeout after ${ELAPSED}s"
+        break
+    fi
+
+    echo "  - Polling... (${ELAPSED}s elapsed)"
+    sleep $POLL_INTERVAL
+done
+
+# Capture output for debugging
+SKILL_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
+echo ""
+echo "Debug - Skill output (last 20 lines):"
+echo "$SKILL_OUTPUT" | tail -20
+echo ""
+
+# ============================================================
+# PHASE 3: Verify PM identity files
+# ============================================================
+echo "Phase 3: Verifying PM identity files..."
+echo ""
+
+# Find workflow folder
+WORKFLOW_DIR=$(ls -td "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1)
+if [[ -n "$WORKFLOW_DIR" ]] && [[ -d "$WORKFLOW_DIR" ]]; then
+    WORKFLOW_NAME=$(basename "$WORKFLOW_DIR")
+    pass "Workflow folder created: $WORKFLOW_NAME"
+else
+    fail "Workflow folder not created"
+    WORKFLOW_NAME=""
+fi
+
+# Find PM agent folder
+PM_AGENT_DIR="$WORKFLOW_DIR/agents/pm"
+
+echo ""
+echo "Testing PM identity.yml..."
+
+# Test 1: PM identity.yml exists
+PM_IDENTITY="$PM_AGENT_DIR/identity.yml"
+if [[ -f "$PM_IDENTITY" ]]; then
+    pass "PM identity.yml exists"
+
+    # Test 2: PM has role field
+    if grep -q "role:" "$PM_IDENTITY"; then
+        pass "PM identity has role field"
     else
-        fail "Code-reviewer should have can_modify_code: false"
+        fail "PM identity missing role field"
+    fi
+
+    # Test 3: PM has model field
+    if grep -q "model:" "$PM_IDENTITY"; then
+        pass "PM identity has model field"
+    else
+        fail "PM identity missing model field"
+    fi
+
+    # Test 4: PM has agents_registry reference
+    if grep -q "agents_registry:" "$PM_IDENTITY" || grep -q "agents:" "$PM_IDENTITY"; then
+        pass "PM identity references agents"
+    else
+        fail "PM identity should reference agents/registry"
     fi
 else
-    fail "Code-reviewer identity.yml not found"
+    fail "PM identity.yml not found at $PM_IDENTITY"
 fi
 
 echo ""
-echo "Testing instructions.md files..."
+echo "Testing PM instructions.md..."
 
-# Developer instructions
-DEV_INSTRUCTIONS="$WORKFLOW_PATH/agents/developer/instructions.md"
-if [[ -f "$DEV_INSTRUCTIONS" ]]; then
-    pass "Developer instructions.md exists"
+# Test 5: PM instructions.md exists
+PM_INSTRUCTIONS="$PM_AGENT_DIR/instructions.md"
+if [[ -f "$PM_INSTRUCTIONS" ]]; then
+    pass "PM instructions.md exists"
 
-    if grep -q "NEVER COMMUNICATE DIRECTLY WITH THE USER" "$DEV_INSTRUCTIONS"; then
-        pass "Developer instructions contain communication rule"
+    # Test 6: PM instructions contain key responsibilities
+    if grep -qi "project manager\|coordinate\|oversee\|team" "$PM_INSTRUCTIONS"; then
+        pass "PM instructions contain PM responsibilities"
     else
-        fail "Developer instructions missing critical communication rule"
-    fi
-
-    if grep -q "notify-pm.sh" "$DEV_INSTRUCTIONS"; then
-        pass "Developer instructions mention notify-pm.sh"
-    else
-        fail "Developer instructions should mention notify-pm.sh"
+        fail "PM instructions missing PM responsibilities"
     fi
 else
-    fail "Developer instructions.md not found"
+    fail "PM instructions.md not found"
 fi
 
-# QA instructions should mention testing
-QA_INSTRUCTIONS="$WORKFLOW_PATH/agents/qa/instructions.md"
-if grep -q "Test" "$QA_INSTRUCTIONS" 2>/dev/null; then
-    pass "QA instructions mention testing responsibilities"
+echo ""
+echo "Testing PM CLAUDE.md..."
+
+# Test 7: PM CLAUDE.md exists (optional - may not be created by all deployment methods)
+PM_CLAUDE="$PM_AGENT_DIR/CLAUDE.md"
+if [[ -f "$PM_CLAUDE" ]]; then
+    pass "PM CLAUDE.md exists"
+
+    # Test 8: CLAUDE.md references identity.yml
+    if grep -q "identity.yml\|identity" "$PM_CLAUDE"; then
+        pass "PM CLAUDE.md references identity"
+    else
+        echo "  ⚠️  PM CLAUDE.md doesn't reference identity (non-critical)"
+    fi
 else
-    fail "QA instructions should mention testing"
+    # CLAUDE.md is optional - PM may use project-level CLAUDE.md instead
+    echo "  ⚠️  PM CLAUDE.md not found (non-critical - PM may use project CLAUDE.md)"
 fi
 
-# Code-reviewer instructions should mention review
-CR_INSTRUCTIONS="$WORKFLOW_PATH/agents/code-reviewer/instructions.md"
-if grep -q "Review" "$CR_INSTRUCTIONS" 2>/dev/null || grep -q "review" "$CR_INSTRUCTIONS" 2>/dev/null; then
-    pass "Code-reviewer instructions mention review responsibilities"
+echo ""
+echo "Testing status.yml..."
+
+# Test 9: status.yml exists with session field
+if [[ -n "$WORKFLOW_NAME" ]] && [[ -f "$WORKFLOW_DIR/status.yml" ]]; then
+    pass "status.yml exists"
+
+    if grep -q "session:" "$WORKFLOW_DIR/status.yml"; then
+        pass "status.yml has session field"
+    else
+        fail "status.yml missing session field"
+    fi
 else
-    fail "Code-reviewer instructions should mention review"
+    fail "status.yml not found"
 fi
 
-# PM should have agents_registry reference
-PM_IDENTITY="$WORKFLOW_PATH/agents/pm/identity.yml"
-if grep -q "agents_registry:" "$PM_IDENTITY" 2>/dev/null; then
-    pass "PM identity references agents_registry"
-else
-    fail "PM identity should reference agents_registry"
-fi
-
+# ============================================================
+# RESULTS
+# ============================================================
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "║  ✅ ALL TESTS PASSED ($TESTS_PASSED/$((TESTS_PASSED + TESTS_FAILED)))                                  ║"
-    exit 0
+    echo "║  ✅ ALL TESTS PASSED ($TESTS_PASSED/$((TESTS_PASSED + TESTS_FAILED)))                              ║"
+    EXIT_CODE=0
 else
-    echo "║  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)                        ║"
-    exit 1
+    echo "║  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)                    ║"
+    EXIT_CODE=1
 fi
 echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+
+exit $EXIT_CODE

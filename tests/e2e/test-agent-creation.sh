@@ -1,32 +1,31 @@
 #!/bin/bash
 # test-agent-creation.sh
 #
-# E2E Test: Agent Creation
+# E2E Test: Yato Existing Project Skill
 #
-# This test:
-# 1. Sets up a project with a workflow
-# 2. Spawns Claude to create a team (developer + qa)
-# 3. Verifies with SHELL (not Claude):
-#    - Tmux windows created correctly
-#    - agents.yml has correct entries
-#    - Smart naming applied (no numbers for single roles)
-#    - Agent identity files exist
-
-# Don't use set -e because we want to continue testing even if some checks fail
-# set -e
+# This test verifies the /yato-existing-project skill works correctly:
+# 1. Starts Claude in tmux with --dangerously-skip-permissions
+# 2. Invokes /yato-existing-project skill
+# 3. Verifies:
+#    - Workflow folder created
+#    - PM session exists with correct naming
+#    - Status.yml created with initial request
+#
+# This tests PLUGIN INTEGRATION, not the full multi-minute PM workflow.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="agent-creation"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-test-$$"
+PROJECT_SLUG="e2e-test-$TEST_NAME-$$"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: Agent Creation                                    ║"
+echo "║  E2E Test: Yato Existing Project Skill                       ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "Test directory: $TEST_DIR"
-echo "Session: $SESSION_NAME"
+echo "Initial session: $SESSION_NAME"
 echo ""
 
 # Track test results
@@ -48,159 +47,127 @@ cleanup() {
     echo ""
     echo "Cleaning up..."
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    # Kill any sessions matching the project pattern
+    tmux list-sessions 2>/dev/null | grep "e2e-test-agent-creation" | cut -d: -f1 | xargs -I{} tmux kill-session -t {} 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # ============================================================
-# PHASE 1: Setup test environment (shell)
+# PHASE 1: Setup test environment
 # ============================================================
 echo "Phase 1: Setting up test environment..."
 
 mkdir -p "$TEST_DIR"
+cd "$TEST_DIR"
+git init -q
+git config user.name "Test"
+git config user.email "test@test.com"
 echo "function test() { return true; }" > "$TEST_DIR/app.js"
-
-# Create tmux session
-tmux new-session -d -s "$SESSION_NAME" -n "pm-checkins" -c "$TEST_DIR"
-
-# Initialize workflow
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test agent creation feature" > /dev/null 2>&1
-
-# Get workflow name and set it in the tmux session environment
-WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "$WORKFLOW_NAME"
+git add -A && git commit -m "Initial" -q
 
 echo "  - Project created at $TEST_DIR"
-echo "  - Tmux session: $SESSION_NAME"
-echo "  - Workflow: $WORKFLOW_NAME"
 echo ""
 
 # ============================================================
-# PHASE 2: Use Claude to create team (simulating real user)
+# PHASE 2: Start Claude and invoke /yato-existing-project
 # ============================================================
-echo "Phase 2: Creating team via Claude..."
+echo "Phase 2: Starting Claude and invoking skill..."
 
-# Send command to tmux session to create team
-tmux send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $PROJECT_ROOT/bin/create-team.sh $TEST_DIR developer qa" Enter
+# Create tmux session
+tmux new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
 
-# Wait for team creation to complete
-sleep 20
+if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    fail "Failed to create tmux session"
+    exit 1
+fi
+
+pass "Tmux session created"
+
+# Start Claude with --dangerously-skip-permissions
+tmux send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
+
+echo "  - Waiting for Claude to initialize (12 seconds)..."
+sleep 12
+
+# Verify Claude started
+OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -q "❯\|›\|>"; then
+    pass "Claude CLI started"
+else
+    fail "Claude prompt not visible"
+fi
+
+# Invoke /yato-existing-project skill
+echo "  - Invoking /yato-existing-project skill..."
+tmux send-keys -t "$SESSION_NAME" "/yato-existing-project Test agent creation feature"
+sleep 2
+tmux send-keys -t "$SESSION_NAME" Enter
+
+echo "  - Waiting for skill to execute (120 seconds)..."
+sleep 120
 
 # Capture output for debugging
-TEAM_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME:0" -p)
-echo "  - Team creation command executed"
+SKILL_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
+echo ""
+echo "Debug - Skill output (last 20 lines):"
+echo "$SKILL_OUTPUT" | tail -20
 echo ""
 
 # ============================================================
-# PHASE 3: Verify results with SHELL (not Claude)
+# PHASE 3: Verify results
 # ============================================================
 echo "Phase 3: Verifying results..."
 echo ""
 
-# Get workflow path (discover folder directly, no longer uses .workflow/current)
-WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
-WORKFLOW_PATH="$TEST_DIR/.workflow/$WORKFLOW_NAME"
-AGENTS_YML="$WORKFLOW_PATH/agents.yml"
-
-# Test 1: Check tmux windows exist
-echo "Testing tmux windows..."
-WINDOWS=$(tmux list-windows -t "$SESSION_NAME" 2>/dev/null | wc -l | tr -d ' ')
-if [[ "$WINDOWS" -ge 3 ]]; then
-    pass "Created 3+ windows (PM + 2 agents)"
+# Test 1: Check workflow folder was created
+echo "Testing workflow folder creation..."
+WORKFLOW_DIR=$(ls -td "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1)
+if [[ -n "$WORKFLOW_DIR" ]] && [[ -d "$WORKFLOW_DIR" ]]; then
+    WORKFLOW_NAME=$(basename "$WORKFLOW_DIR")
+    pass "Workflow folder created: $WORKFLOW_NAME"
 else
-    fail "Expected 3+ windows, got $WINDOWS"
+    fail "Workflow folder not created"
+    WORKFLOW_NAME=""
 fi
 
-# Test 2: Check window names
-WINDOW_LIST=$(tmux list-windows -t "$SESSION_NAME" -F "#{window_index}:#{window_name}" 2>/dev/null)
-if echo "$WINDOW_LIST" | grep -q "1:developer"; then
-    pass "Window 1 named 'developer'"
+# Test 2: Check status.yml exists
+if [[ -n "$WORKFLOW_NAME" ]] && [[ -f "$TEST_DIR/.workflow/$WORKFLOW_NAME/status.yml" ]]; then
+    pass "status.yml exists"
 else
-    fail "Window 1 should be named 'developer'"
+    fail "status.yml not found"
 fi
 
-if echo "$WINDOW_LIST" | grep -q "2:qa"; then
-    pass "Window 2 named 'qa'"
+# Test 3: Check status.yml has session name
+if [[ -n "$WORKFLOW_NAME" ]] && grep -q "session:" "$TEST_DIR/.workflow/$WORKFLOW_NAME/status.yml" 2>/dev/null; then
+    pass "status.yml has session field"
 else
-    fail "Window 2 should be named 'qa'"
+    fail "status.yml missing session field"
 fi
 
-# Test 3: Check agents.yml exists
+# Test 4: Check PM session was created (project_workflow format)
 echo ""
-echo "Testing agents.yml..."
-if [[ -f "$AGENTS_YML" ]]; then
-    pass "agents.yml file exists"
+echo "Testing PM session creation..."
+# Look for session matching our test project (e2e-test-agent-creation-PID_001-xxx)
+PM_SESSIONS=$(tmux list-sessions 2>/dev/null | grep "e2e-test-agent-creation-$$" | cut -d: -f1)
+if [[ -n "$PM_SESSIONS" ]]; then
+    pass "PM session exists: $(echo "$PM_SESSIONS" | head -1)"
 else
-    fail "agents.yml file not found at $AGENTS_YML"
+    # Check if output mentions session creation
+    if echo "$SKILL_OUTPUT" | grep -qi "Session ready\|tmux attach\|Switching to PM"; then
+        pass "Skill reported session creation"
+    else
+        fail "PM session not found and skill didn't report creation"
+    fi
 fi
 
-# Test 4: Check agents.yml content - PM entry
-if grep -q "^pm:" "$AGENTS_YML" 2>/dev/null; then
-    pass "PM entry exists in agents.yml"
-else
-    fail "PM entry missing from agents.yml"
-fi
-
-# Test 5: Check agents.yml content - developer entry (no number = smart naming)
-if grep -q "name: developer$" "$AGENTS_YML" 2>/dev/null; then
-    pass "Developer agent has smart naming (no number suffix)"
-else
-    fail "Developer should be named 'developer' not 'developer-1'"
-fi
-
-# Test 6: Check agents.yml content - qa entry (no number = smart naming)
-if grep -q "name: qa$" "$AGENTS_YML" 2>/dev/null; then
-    pass "QA agent has smart naming (no number suffix)"
-else
-    fail "QA should be named 'qa' not 'qa-1'"
-fi
-
-# Test 7: Check developer window number in agents.yml
-DEV_WINDOW=$(grep -A 3 "name: developer$" "$AGENTS_YML" 2>/dev/null | grep "window:" | awk '{print $2}')
-if [[ "$DEV_WINDOW" == "1" ]]; then
-    pass "Developer assigned to window 1"
-else
-    fail "Developer should be in window 1, got: $DEV_WINDOW"
-fi
-
-# Test 8: Check qa window number in agents.yml
-QA_WINDOW=$(grep -A 3 "name: qa$" "$AGENTS_YML" 2>/dev/null | grep "window:" | awk '{print $2}')
-if [[ "$QA_WINDOW" == "2" ]]; then
-    pass "QA assigned to window 2"
-else
-    fail "QA should be in window 2, got: $QA_WINDOW"
-fi
-
-# Test 9: Check agent identity files exist
+# Test 5: Check skill completed (look for completion indicators)
 echo ""
-echo "Testing agent identity files..."
-if [[ -f "$WORKFLOW_PATH/agents/developer/identity.yml" ]]; then
-    pass "Developer identity.yml exists"
+echo "Testing skill completion..."
+if echo "$SKILL_OUTPUT" | grep -qi "Session ready\|tmux attach\|Switching to PM\|PM session\|Deploy"; then
+    pass "Skill completed (session/deploy message found)"
 else
-    fail "Developer identity.yml not found"
-fi
-
-if [[ -f "$WORKFLOW_PATH/agents/qa/identity.yml" ]]; then
-    pass "QA identity.yml exists"
-else
-    fail "QA identity.yml not found"
-fi
-
-# Test 10: Check instructions contain critical rule
-echo ""
-echo "Testing agent instructions..."
-DEV_INSTRUCTIONS="$WORKFLOW_PATH/agents/developer/instructions.md"
-if grep -q "NEVER COMMUNICATE DIRECTLY WITH THE USER" "$DEV_INSTRUCTIONS" 2>/dev/null; then
-    pass "Developer instructions contain 'never communicate with user' rule"
-else
-    fail "Developer instructions missing critical communication rule"
-fi
-
-QA_INSTRUCTIONS="$WORKFLOW_PATH/agents/qa/instructions.md"
-if grep -q "NEVER COMMUNICATE DIRECTLY WITH THE USER" "$QA_INSTRUCTIONS" 2>/dev/null; then
-    pass "QA instructions contain 'never communicate with user' rule"
-else
-    fail "QA instructions missing critical communication rule"
+    fail "Skill completion message not found"
 fi
 
 # ============================================================

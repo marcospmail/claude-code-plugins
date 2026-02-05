@@ -10,12 +10,11 @@
 # 4. Confirming understanding before proceeding
 # 5. Summarizing and asking for confirmation
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="pm-discovery-questions"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
+SESSION_NAME="e2e-$TEST_NAME-$$"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: PM Discovery Questions Behavior                   ║"
@@ -35,12 +34,14 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 cleanup() {
     echo ""
     echo "Cleaning up..."
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # Setup test environment
 mkdir -p "$TEST_DIR"
+tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
 
 # Read the PM briefing from orchestrator.py
 # The briefing is in the start_pm_with_planning_briefing method - read entire method

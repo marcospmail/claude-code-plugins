@@ -1,0 +1,1 @@
+../bin.archive/init-agent-files.sh

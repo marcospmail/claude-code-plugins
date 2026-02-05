@@ -28,7 +28,7 @@ Yato (Yet Another Tmux Orchestrator) is a Claude Code plugin that enables multip
 └───────┘ └───────┘  └───────┘ └───────┘  └───────┘ └───────┘
     ↑         ↑          ↑         ↑          ↑         ↑
     └─────────┴──────────┴─────────┴──────────┴─────────┘
-                    notify-pm.sh (reports up)
+                    notify_pm() (reports up)
 ```
 
 ### Key Components
@@ -36,86 +36,165 @@ Yato (Yet Another Tmux Orchestrator) is a Claude Code plugin that enables multip
 | Directory | Purpose |
 |-----------|---------|
 | `lib/` | Python modules - core orchestration logic |
-| `bin/` | Shell scripts - agent communication and management |
-| `commands/` | Claude Code slash commands (`/orc-*`) |
+| `lib/templates/` | Jinja2 templates for agent files |
+| `skills/` | Claude Code skills for orchestration |
 | `agents/` | Agent role definitions (pm.md, developer.md, qa.md) |
-| `templates/` | Briefing templates for agents |
-| `.yato/` | Runtime state (registry.json, checkins.json) |
+| `.workflow/` | Per-workflow state (status.yml, tasks.json, agents.yml) |
 
 ### Python Module Hierarchy
 
 ```
 lib/
-├── orchestrator.py      # High-level API: init, deploy, status
-├── claude_control.py    # CLI interface: status, list, send, read, team
-├── session_registry.py  # Agent registry: Agent class, JSON persistence
-├── tmux_utils.py        # Tmux operations: sessions, windows, panes
-└── project_planner.py   # Project planning utilities
+├── __init__.py           # Package exports
+├── cli.py                # Unified CLI entry point (yato command)
+├── orchestrator.py       # High-level API: init, deploy, status
+├── claude_control.py     # CLI interface: status, list, send, read, team
+├── session_registry.py   # Agent class definition
+├── workflow_registry.py  # Workflow-scoped agent management
+├── tmux_utils.py         # Tmux operations + send_message, notify_pm
+├── workflow_ops.py       # Workflow folder/slug utilities
+├── checkin_scheduler.py  # Check-in scheduling and management
+├── loop_manager.py       # Generic repeating loops (workflow-independent)
+├── task_manager.py       # Task assignment and display
+├── agent_manager.py      # Agent creation and file generation
+└── templates/            # Jinja2 templates for agent files
+    ├── agent_identity.yml.j2
+    ├── agent_instructions.md.j2
+    ├── agent_claude.md.j2
+    ├── agent_tasks.md.j2
+    └── constraints.example.md.j2
 ```
 
-**Dependency flow**: `orchestrator.py` → `session_registry.py` + `tmux_utils.py`
+**Dependency flow**: `orchestrator.py` → `workflow_ops.py` + `agent_manager.py` + `tmux_utils.py`
 
 ### Data Flow
 
-1. **Commands** (`commands/*.md`) invoke Python CLI or shell scripts
-2. **Python CLI** (`lib/claude_control.py`) manages agent lifecycle
-3. **Shell scripts** (`bin/*.sh`) handle tmux communication
-4. **Registry** (`.yato/registry.json`) tracks all agents
-5. **Check-ins** (`.yato/checkins.json`) schedules oversight
+1. **Skills** (`skills/*.md`) invoke Python CLI
+2. **Python CLI** (`lib/cli.py`) routes to appropriate modules
+3. **Modules** handle tmux operations, file management, scheduling
+4. **Workflow state** (`.workflow/<name>/`) tracks agents, tasks, check-ins
 
-## Common Commands
+## Running Commands
 
-### Running the CLI
+All commands run via `uv` from the yato directory:
+
 ```bash
-# Agent status
-python3 lib/claude_control.py status
+cd ~/dev/tools/yato
 
-# List tmux sessions/windows
-python3 lib/claude_control.py list -v
-
-# Initialize project with PM + developer
-python3 lib/orchestrator.py init <session> -p <path>
-
-# Deploy team
-python3 lib/orchestrator.py deploy <session> -p <path> -c team.json
-```
-
-### Shell Scripts
-```bash
 # Send message to agent
-bin/send-message.sh <session>:<window> "message"
+uv run python lib/tmux_utils.py send <session:window> "message"
 
-# Create agent
-bin/create-agent.sh <session> <role> -p <path> --pm-window <session>:<window>
+# Notify PM
+uv run python lib/tmux_utils.py notify "[DONE] Task completed"
 
-# Schedule check-in
-bin/schedule-checkin.sh <minutes> "<note>" [target_window]
+# Check-in management (daemon-based)
+uv run python lib/checkin_scheduler.py start 15 --note "Progress check" --target "session:0" --workflow "001-name"
+uv run python lib/checkin_scheduler.py cancel --workflow "001-name"
+uv run python lib/checkin_scheduler.py status --workflow "001-name"
 
-# Cancel check-ins
-bin/cancel-checkin.sh
+# Task management
+uv run python lib/task_manager.py assign developer "Implement feature X"
+uv run python lib/task_manager.py table
+uv run python lib/task_manager.py list
+
+# Workflow operations
+uv run python lib/workflow_ops.py list
+uv run python lib/workflow_ops.py current
+uv run python lib/workflow_ops.py create "Add feature Y"
+
+# Agent management
+uv run python lib/agent_manager.py create myproject developer -p ~/myproject
+uv run python lib/agent_manager.py init-files dev developer
+
+# System status
+uv run python lib/claude_control.py status
+uv run python lib/claude_control.py status --json
+
+# Orchestrator
+uv run python lib/orchestrator.py init <session> -p <path>
+uv run python lib/orchestrator.py deploy <session> -p <path>
+uv run python lib/orchestrator.py status
 ```
 
 ## Key Concepts
 
-### Agent Registry
-Agents are tracked in `.yato/registry.json`:
+### Workflow System
+Projects use `.workflow/` directories:
+```
+project/.workflow/
+├── current                    # Active workflow name (symlink or file)
+└── 001-feature-name/
+    ├── status.yml             # Workflow status (includes initial_request)
+    ├── prd.md                 # Requirements
+    ├── team.yml               # Proposed team structure (agents to create)
+    ├── tasks.json             # Generated tasks (JSON format, assigned to team.yml agents)
+    ├── agents.yml             # Runtime agent registry (created agents)
+    ├── checkins.json          # Check-in schedule and history
+    └── agents/                # Agent configs
+        ├── developer/
+        │   ├── identity.yml
+        │   ├── instructions.md
+        │   ├── constraints.example.md
+        │   ├── CLAUDE.md
+        │   └── agent-tasks.md
+        └── qa/
+            └── ...
+```
+
+**status.yml** contains all workflow metadata:
+```yaml
+status: in-progress
+title: "Add hourly cron"
+initial_request: |
+  User's original request goes here...
+folder: "/path/to/project/.workflow/001-add-hourly-cron"  # Absolute path
+checkin_interval_minutes: _  # Placeholder until user selects interval (e.g., 3, 5, 10)
+session: "myproject"
+```
+
+**team.yml** defines the proposed team structure:
+```yaml
+agents:
+  - name: developer
+    role: developer
+    model: sonnet
+  - name: qa
+    role: qa
+    model: sonnet
+```
+
+**tasks.json** assigns tasks to agents:
 ```json
 {
-  "agents": [
+  "tasks": [
     {
-      "agent_id": "myproject:1",
-      "session_name": "myproject",
-      "window_index": 1,
-      "role": "pm",
-      "pm_window": null,
-      "status": "active"
+      "id": "T1",
+      "subject": "Implement feature X",
+      "description": "Detailed description...",
+      "agent": "developer",
+      "status": "pending",
+      "blockedBy": [],
+      "blocks": ["T2"]
     }
   ]
 }
 ```
 
 ### Check-in System
-Scheduled check-ins in `.yato/checkins.json`:
+
+The check-in system uses a **single long-running daemon process** that:
+1. Runs in background, polling every 10 seconds
+2. Sends check-in messages to the PM at configured intervals
+3. Auto-stops when all tasks are completed
+4. Stores its PID in `checkins.json` for reliable control
+
+**Check-in lifecycle:**
+- Started by PM via `/schedule-checkin` or auto-started by `tasks-change-hook.py`
+- Daemon sends check-ins at the interval specified in `status.yml`
+- Cancelled via `/cancel-checkin` (kills the daemon process)
+- Auto-restarts via hook when tasks.json is edited and daemon is dead
+
+**checkins.json structure:**
 ```json
 {
   "checkins": [
@@ -125,59 +204,120 @@ Scheduled check-ins in `.yato/checkins.json`:
       "scheduled_for": "2026-01-23T15:30:00",
       "note": "Check developer progress",
       "target": "myproject:0"
+    },
+    {
+      "id": "123457",
+      "status": "done",
+      "scheduled_for": "2026-01-23T15:45:00",
+      "completed_at": "2026-01-23T15:45:02",
+      "note": "Auto check-in",
+      "target": "myproject:0"
     }
-  ]
+  ],
+  "daemon_pid": 12345
 }
 ```
 
-### Workflow System
-Projects use `.workflow/` directories:
-```
-project/.workflow/
-├── current                    # Active workflow name
-└── 001-feature-name/
-    ├── status.yml             # Workflow status (includes initial_request)
-    ├── prd.md                 # Requirements
-    ├── tasks.json             # Generated tasks (JSON format)
-    └── agents/                # Agent configs
+**Check-in statuses:** `pending`, `done`, `cancelled`, `stopped`, `resumed`
+
+**CLI Commands:**
+```bash
+# Start check-in daemon
+uv run python lib/checkin_scheduler.py start 5 --note "Progress check" --target "session:0" --workflow "001-name"
+
+# Cancel check-in daemon
+uv run python lib/checkin_scheduler.py cancel --workflow "001-name"
+
+# Check status
+uv run python lib/checkin_scheduler.py status --workflow "001-name"
 ```
 
-**status.yml** contains all workflow metadata:
-```yaml
-status: in-progress
-title: "Add hourly cron"
-initial_request: |
-  User's original request goes here...
-folder: "001-add-hourly-cron"
-checkin_interval_minutes: 15
-session: "myproject"
+### Loop System (Generic Repeating Prompts)
+
+Loops are independent of workflows and allow repeating any prompt at intervals.
+Stored in `.workflow/loops/<NNN-name>/meta.json`:
+
+```json
+{
+  "should_continue": true,
+  "prompt": "check the logs for errors",
+  "interval_seconds": 300,
+  "execution_count": 2,
+  "stop_after_times": 5,
+  "stop_after_seconds": null,
+  "session_id": "abc123",
+  "started_at": "2026-02-02T15:00:00",
+  "last_executed_at": "2026-02-02T15:10:00",
+  "total_elapsed_seconds": 600
+}
 ```
+
+**CLI Commands:**
+```bash
+# Start a loop (--times, --for, or neither for forever mode)
+uv run python lib/loop_manager.py start "check logs" --session $SESSION --times 3
+uv run python lib/loop_manager.py start "run tests" --session $SESSION --for 30m --every 5m
+uv run python lib/loop_manager.py start "monitor" --session $SESSION --every 10m  # forever
+
+# Cancel loops
+uv run python lib/loop_manager.py cancel --all
+uv run python lib/loop_manager.py cancel --session $SESSION
+
+# List loops
+uv run python lib/loop_manager.py list
+uv run python lib/loop_manager.py list --status running
+```
+
+**Skill Usage:**
+```
+/loop check the logs --times 3
+/loop run tests --every 5m --for 1h
+/loop monitor builds --forever --every 10m
+/loop --cancel
+```
+
+**How it works:**
+1. `/loop` skill creates `meta.json` with `should_continue: true`
+2. Claude Code's Stop hook checks the meta file when agent finishes
+3. If `should_continue` is true and conditions not met: sleep for interval, inject prompt
+4. If conditions met (times/duration): set `should_continue: false`, allow stop
+5. Cancel sets `should_continue: false` in meta file
+
+**Time format:** `30s` (seconds), `5m` (minutes), `2h` (hours), `1h30m` (compound)
 
 ## Agent Communication
 
 ### Orchestrator → Agent
-```bash
-bin/send-message.sh session:window "Your message"
+```python
+from lib import send_message
+send_message("session:window", "Your message")
 ```
 
-### Agent → PM (Two-way)
+Or via CLI:
+```bash
+uv run python lib/tmux_utils.py send session:window "Your message"
+```
+
+### Agent → PM
 Agents report up using notification types:
 ```bash
-bin/notify-pm.sh DONE "Completed task"
-bin/notify-pm.sh BLOCKED "Waiting for X"
-bin/notify-pm.sh HELP "Need guidance"
-bin/notify-pm.sh STATUS "50% complete"
-bin/notify-pm.sh PROGRESS "3 of 5 tasks done"
+# From agent's terminal
+~/dev/tools/yato/bin.archive/notify-pm.sh "[DONE] Completed task"
 ```
 
-## YATO_PATH Variable
-
-Always set this at the start of Yato sessions:
-```bash
-YATO_PATH="$HOME/dev/tools/yato"
+Or via Python:
+```python
+from lib import notify_pm
+notify_pm("[DONE] Completed task")
 ```
+
+Notification types: DONE, BLOCKED, HELP, STATUS, PROGRESS
 
 ## Tmux Patterns
+
+### Agent Target Format
+- Window-based: `session:window` (e.g., `myproject:1`)
+- Pane-based: `session:window.pane` (e.g., `myproject:0.1`)
 
 ### Creating Windows with Correct Directory
 ```bash
@@ -185,28 +325,13 @@ YATO_PATH="$HOME/dev/tools/yato"
 tmux new-window -t session -n "name" -c "/path/to/project"
 ```
 
-### Verifying Command Execution
-```bash
-tmux send-keys -t session:window "command" Enter
-sleep 2
-tmux capture-pane -t session:window -p | tail -20
-```
-
-### Agent Target Format
-- Window-based: `session:window` (e.g., `myproject:1`)
-- Pane-based: `session:window.pane` (e.g., `myproject:0.1`)
-
 ### Bash Command Chaining (IMPORTANT)
 
 When running multiple bash commands, **always chain them on a single line** using `&&` or `;`. Never use newlines between commands.
 
 **CORRECT:**
 ```bash
-# Chain with && (run if previous succeeds)
 tmux capture-pane -t "$SESSION:1" -p | tail -30 && echo "=== Next ===" && tmux capture-pane -t "$SESSION:2" -p | tail -20
-
-# Chain with ; (run regardless)
-git status; git diff --stat; echo "Done"
 ```
 
 **INCORRECT (causes parsing errors):**
@@ -214,7 +339,24 @@ git status; git diff --stat; echo "Done"
 # BAD: Newlines break command parsing
 tmux capture-pane -t "$SESSION:1" -p | tail -30
 echo "=== Next ==="
-tmux capture-pane -t "$SESSION:2" -p | tail -20
 ```
 
-The incorrect approach causes errors like `tail: echo: No such file or directory` because tmux `send-keys` doesn't handle newlines properly - each line after the first gets passed as arguments to the previous command.
+## Development
+
+### Running Tests
+```bash
+# E2E tests
+bash tests/e2e/run-all-tests.sh
+```
+
+### Package Structure
+The project uses `pyproject.toml` with uv for dependency management:
+- `pyyaml>=6.0` - YAML parsing
+- `jinja2>=3.1` - Template rendering
+
+### Archived Bash Scripts
+Legacy bash scripts are preserved in `bin.archive/` for reference. See `bin.archive/README.md` for the migration mapping.
+
+Symlinks in `bin/` point to `bin.archive/` for backward compatibility with:
+- E2E tests that call `bin/*.sh` scripts
+- PM/agent briefings that reference `bin/*.sh` commands

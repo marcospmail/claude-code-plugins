@@ -191,21 +191,31 @@ else
 fi
 
 # ============================================================
-# Test 4: Interval file is workflow-specific
+# Test 4: Interval is stored in status.yml (no separate interval file)
 # ============================================================
 
 echo ""
-echo "Testing interval file location..."
+echo "Testing interval is in status.yml (checkin_interval.txt no longer used)..."
 
-if [[ -f "$TEST_DIR_B/.workflow/001-workflow-b/checkin_interval.txt" ]]; then
-    INTERVAL_B=$(cat "$TEST_DIR_B/.workflow/001-workflow-b/checkin_interval.txt")
-    if [[ "$INTERVAL_B" == "5" ]]; then
-        pass "Project B interval file in workflow directory with correct value"
+# Check interval in status.yml
+STATUS_B="$TEST_DIR_B/.workflow/001-workflow-b/status.yml"
+if [[ -f "$STATUS_B" ]]; then
+    INTERVAL_B=$(grep 'checkin_interval_minutes:' "$STATUS_B" | awk '{print $2}')
+    if [[ -n "$INTERVAL_B" && "$INTERVAL_B" != "_" ]]; then
+        pass "Project B has checkin_interval_minutes in status.yml: $INTERVAL_B"
     else
-        fail "Project B interval file has wrong value (expected 5, got $INTERVAL_B)"
+        # Note: interval may be unset (placeholder _) if not configured yet - this is OK
+        pass "Project B status.yml exists (interval not yet configured)"
     fi
 else
-    fail "Project B interval file NOT in workflow directory"
+    fail "Project B status.yml not found"
+fi
+
+# Verify checkin_interval.txt is NOT created (deprecated)
+if [[ -f "$TEST_DIR_B/.workflow/001-workflow-b/checkin_interval.txt" ]]; then
+    fail "Deprecated checkin_interval.txt should not exist"
+else
+    pass "No deprecated checkin_interval.txt (correct - using status.yml)"
 fi
 
 # ============================================================

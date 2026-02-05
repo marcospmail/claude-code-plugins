@@ -651,54 +651,27 @@ else
 fi
 
 # ============================================================
-# Test 14: .workflow/current symlink fallback
+# Test 14: No .workflow/current file used (multiple workflows support)
 # ============================================================
 
 echo ""
-echo "Testing .workflow/current symlink fallback..."
+echo "Testing that .workflow/current is not used..."
 
-# Create a new session without WORKFLOW_NAME set
-FALLBACK_SESSION="e2e-fallback-$TEST_ID"
-tmux new-session -d -s "$FALLBACK_SESSION" -c "$TEST_DIR"
-# Do NOT set WORKFLOW_NAME - testing fallback
+# Verify no .workflow/current file exists after workflow init
+if [[ ! -f "$TEST_DIR/.workflow/current" ]] && [[ ! -L "$TEST_DIR/.workflow/current" ]]; then
+    pass "No .workflow/current file exists (correct - multiple workflows can run)"
+else
+    fail ".workflow/current exists but should not"
+fi
 
-# Create the symlink
-ln -sf "001-test-workflow" "$TEST_DIR/.workflow/current"
-
-# Restore valid tasks.json
+# Restore valid tasks.json for remaining tests
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {
   "tasks": [
-    {"id": "T1", "subject": "Fallback test task", "agent": "dev", "status": "pending", "blockedBy": [], "blocks": []}
+    {"id": "T1", "subject": "Test task", "agent": "dev", "status": "pending", "blockedBy": [], "blocks": []}
   ]
 }
 EOF
-
-# Test the fallback logic directly
-FALLBACK_RESULT=$(python3 -c "
-import os
-import subprocess
-
-# Simulate the bash logic for fallback
-current_workflow = ''
-project_path = '$TEST_DIR'
-
-# Check symlink
-current_link = f'{project_path}/.workflow/current'
-if os.path.islink(current_link):
-    current_workflow = os.path.basename(os.readlink(current_link))
-
-print(current_workflow)
-" 2>/dev/null)
-
-tmux kill-session -t "$FALLBACK_SESSION" 2>/dev/null || true
-rm -f "$TEST_DIR/.workflow/current"
-
-if [[ "$FALLBACK_RESULT" == "001-test-workflow" ]]; then
-    pass "Symlink fallback resolves to correct workflow"
-else
-    fail "Symlink fallback failed: got '$FALLBACK_RESULT'"
-fi
 
 # ============================================================
 # Test 15: Missing tasks key in JSON
