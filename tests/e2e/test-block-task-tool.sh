@@ -522,7 +522,7 @@ fi
 
 # Send prompt that would trigger Task tool usage
 echo "Sending request to use Task tool..."
-tmux send-keys -t "$SESSION_NAME" "Use the Task tool to spawn a sub-agent that explores this codebase and reports back"
+tmux send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
 sleep 1
 tmux send-keys -t "$SESSION_NAME" Enter
 
@@ -563,6 +563,9 @@ if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     exit 1
 fi
 
+# Set WORKFLOW_NAME at session level (needed for workflow path discovery)
+tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+
 # Export env vars and start Claude
 tmux send-keys -t "$SESSION_NAME" "export AGENT_ROLE=developer AGENT_NAME=developer WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter
 
@@ -581,7 +584,7 @@ fi
 
 # Send same Task tool request
 echo "Sending request to use Task tool..."
-tmux send-keys -t "$SESSION_NAME" "Use the Task tool to spawn a sub-agent that explores this codebase and reports back"
+tmux send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
 sleep 1
 tmux send-keys -t "$SESSION_NAME" Enter
 
@@ -640,7 +643,7 @@ fi
 
 # Send Task tool request
 echo "Sending request to use Task tool..."
-tmux send-keys -t "$SESSION_NAME" "Use the Task tool to spawn a sub-agent that explores this codebase and reports back"
+tmux send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
 sleep 1
 tmux send-keys -t "$SESSION_NAME" Enter
 

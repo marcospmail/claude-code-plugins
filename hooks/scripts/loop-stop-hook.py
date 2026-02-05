@@ -52,8 +52,13 @@ def debug_log(message):
 def find_active_loop_in_project(project_path: Path, session_id: str = None):
     """Scan .workflow/loops/ in the project for an active loop matching this session.
 
-    Only returns a loop if session_id matches - this ensures each Claude session
-    only continues its own loop, preventing cross-session interference.
+    Session matching:
+    - If session_id provided: Only return loop if session_id matches exactly
+    - If session_id NOT provided AND exactly ONE active loop: Return it (fallback)
+    - If session_id NOT provided AND multiple active loops: Return None (ambiguous)
+
+    This ensures each Claude session only continues its own loop while providing
+    a fallback for older Claude Code versions or missing session context.
 
     Returns (loop_folder, meta) tuple if found, (None, None) otherwise.
     """
@@ -61,6 +66,8 @@ def find_active_loop_in_project(project_path: Path, session_id: str = None):
     if not loops_dir.exists():
         return None, None
 
+    # Collect all active loops
+    active_loops = []
     for d in sorted(loops_dir.iterdir()):
         if not d.is_dir():
             continue
@@ -71,14 +78,28 @@ def find_active_loop_in_project(project_path: Path, session_id: str = None):
             with open(meta_file, "r") as f:
                 meta = json.load(f)
             if meta.get("should_continue", False):
-                # Only return if session_id matches
-                if session_id and meta.get("session_id") == session_id:
-                    return d, meta
-                elif session_id:
-                    debug_log(f"[SKIP] Loop session {meta.get('session_id')} != current {session_id}")
+                active_loops.append((d, meta))
         except (json.JSONDecodeError, IOError):
             continue
 
+    if not active_loops:
+        return None, None
+
+    # If session_id provided, find exact match
+    if session_id:
+        for folder, meta in active_loops:
+            if meta.get("session_id") == session_id:
+                return folder, meta
+            debug_log(f"[SKIP] Loop session {meta.get('session_id')} != current {session_id}")
+        return None, None
+
+    # No session_id provided - use fallback only if exactly ONE active loop
+    if len(active_loops) == 1:
+        debug_log(f"[FALLBACK] No session_id, returning single active loop")
+        return active_loops[0]
+
+    # Multiple active loops with no session_id - ambiguous, return none
+    debug_log(f"[SKIP] No session_id and {len(active_loops)} active loops - ambiguous")
     return None, None
 
 
