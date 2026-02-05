@@ -35,5 +35,5 @@ cd ~/dev/tools/yato && uv run python lib/orchestrator.py start
 
 After initialization, the user should brief the PM:
 ```bash
-cd ~/dev/tools/yato && uv run yato send <session>:1 "Your project requirements here"
+cd ~/dev/tools/yato && uv run python lib/tmux_utils.py send <session>:1 "Your project requirements here"
 ```

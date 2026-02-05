@@ -17,7 +17,7 @@ You are sending a message to an orchestrator agent.
 
 1. **Send the message:**
 ```bash
-cd ~/dev/tools/yato && uv run yato send <target> "<message>"
+cd ~/dev/tools/yato && uv run python lib/tmux_utils.py send <target> "<message>"
 ```
 
 2. **Optionally read the response** after a few seconds:

@@ -20,7 +20,7 @@ Check-ins are stored per-workflow in the project's `.workflow/<workflow>/checkin
 Run the cancel-checkin command from the project directory:
 
 ```bash
-cd ~/dev/tools/yato && uv run yato checkin cancel
+cd ~/dev/tools/yato && uv run python lib/checkin_scheduler.py cancel
 ```
 
 This cancels check-ins for the current project's active workflow (uses relative paths).
