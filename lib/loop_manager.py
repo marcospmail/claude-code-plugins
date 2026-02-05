@@ -200,8 +200,7 @@ class LoopManager:
         # Validate stop conditions
         if stop_after_times and stop_after_seconds:
             raise ValueError("Cannot use both --times and --for together. Choose one.")
-        if not stop_after_times and not stop_after_seconds:
-            raise ValueError("Must specify either --times or --for to limit the loop.")
+        # Both can be None for "forever" mode (cancelled manually with /loop --cancel)
 
         self._ensure_loops_dir()
 
@@ -403,8 +402,10 @@ class LoopManager:
 
         if meta.get("stop_after_times"):
             lines.append(f"Stop after: {meta['stop_after_times']} times")
-        if meta.get("stop_after_seconds"):
+        elif meta.get("stop_after_seconds"):
             lines.append(f"Stop after: {format_duration(meta['stop_after_seconds'])}")
+        else:
+            lines.append("Stop after: runs forever (cancel with /loop --cancel)")
 
         if meta.get("total_elapsed_seconds"):
             lines.append(f"Elapsed: {format_duration(meta['total_elapsed_seconds'])}")
@@ -557,6 +558,7 @@ if __name__ == "__main__":
     start_cmd = subparsers.add_parser("start", help="Start a loop")
     start_cmd.add_argument("prompt", help="Prompt to repeat")
     start_cmd.add_argument("--session", "-s", required=True, help="Session ID")
+    start_cmd.add_argument("--project", "-p", help="Project path (defaults to cwd)")
     start_cmd.add_argument("--every", "-e", help="Interval (e.g., 5m)")
     start_cmd.add_argument("--times", "-t", type=int, help="Stop after N times")
     start_cmd.add_argument("--for", "-f", dest="duration", help="Stop after duration")
@@ -565,11 +567,13 @@ if __name__ == "__main__":
     cancel_cmd = subparsers.add_parser("cancel", help="Cancel a loop")
     cancel_cmd.add_argument("--session", "-s", help="Session ID")
     cancel_cmd.add_argument("--loop-id", "-l", help="Loop ID")
+    cancel_cmd.add_argument("--project", "-p", help="Project path (defaults to cwd)")
     cancel_cmd.add_argument("--all", "-a", action="store_true", help="Cancel all")
 
     # list
     list_cmd = subparsers.add_parser("list", help="List loops")
     list_cmd.add_argument("--status", help="Filter by status")
+    list_cmd.add_argument("--project", "-p", help="Project path (defaults to cwd)")
 
     args = parser.parse_args()
 
@@ -588,6 +592,7 @@ if __name__ == "__main__":
                 interval=args.every,
                 times=args.times,
                 duration=args.duration,
+                project_path=args.project,
             )
             print(f"Created loop: {loop_id}")
             print(f"Folder: {folder}")
@@ -599,11 +604,12 @@ if __name__ == "__main__":
         cancel_loop(
             session_id=args.session,
             loop_id=args.loop_id,
+            project_path=args.project,
             cancel_all=args.all,
         )
 
     elif args.action == "list":
-        loops = list_loops(status=args.status)
+        loops = list_loops(status=args.status, project_path=args.project)
         if not loops:
             print("No loops found")
         else:
