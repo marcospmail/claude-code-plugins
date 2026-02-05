@@ -3,9 +3,9 @@
 PostToolUse hook that detects changes to tasks.json and restarts check-ins if needed.
 
 When tasks.json is modified:
-1. Check if the check-in loop is stopped/paused
+1. Check if the check-in daemon is stopped (PID not running)
 2. Check if there are incomplete tasks (pending, in_progress, blocked)
-3. If both conditions are true, restart the check-in loop
+3. If both conditions are true, restart the check-in daemon
 
 This handles the scenario where:
 - Check-in stops (tasks complete or manually cancelled)
@@ -15,10 +15,11 @@ This handles the scenario where:
 
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
+
+import yaml
 
 
 def find_workflow_from_path(file_path: str) -> Optional[Tuple[Path, str]]:
@@ -46,51 +47,33 @@ def find_workflow_from_path(file_path: str) -> Optional[Tuple[Path, str]]:
     return workflow_dir, workflow_dir.name
 
 
-def is_checkin_stopped(workflow_path: Path) -> bool:
+def is_daemon_running(workflow_path: Path) -> bool:
     """
-    Check if the check-in loop is stopped.
+    Check if the check-in daemon is currently running.
 
-    Returns True if the last status entry is 'stopped' (not followed by 'resumed').
+    Uses the daemon_pid stored in checkins.json and verifies the process exists.
     """
     checkins_file = workflow_path / "checkins.json"
 
     if not checkins_file.exists():
-        # No check-ins file means no loop was ever started
-        return True
+        return False
 
     try:
         with open(checkins_file, "r") as f:
             data = json.load(f)
     except (json.JSONDecodeError, IOError):
+        return False
+
+    pid = data.get("daemon_pid")
+    if pid is None:
+        return False
+
+    try:
+        # Signal 0 checks if process exists without killing it
+        os.kill(pid, 0)
         return True
-
-    checkins = data.get("checkins", [])
-    if not checkins:
-        return True
-
-    # Find the last stop/resume entry
-    last_stop = None
-    last_resume = None
-
-    for c in checkins:
-        status = c.get("status")
-        created = c.get("created_at", "")
-
-        if status == "stopped":
-            last_stop = created
-        elif status == "resumed":
-            last_resume = created
-
-    # If there's a stop and no resume after it, the loop is stopped
-    if last_stop and (not last_resume or last_stop > last_resume):
-        return True
-
-    # Also check if there are NO pending check-ins (loop naturally ended)
-    pending = [c for c in checkins if c.get("status") == "pending"]
-    if not pending:
-        return True
-
-    return False
+    except (OSError, ProcessLookupError):
+        return False
 
 
 def has_incomplete_tasks(workflow_path: Path) -> Tuple[bool, int]:
@@ -125,15 +108,13 @@ def get_checkin_interval(workflow_path: Path) -> int:
         return 5
 
     try:
-        content = status_file.read_text()
-        for line in content.splitlines():
-            if "checkin_interval_minutes:" in line:
-                parts = line.split(":")
-                if len(parts) >= 2:
-                    value = parts[1].strip()
-                    if value and value != "_":
-                        return int(value)
-    except (ValueError, IOError):
+        with open(status_file, "r") as f:
+            data = yaml.safe_load(f)
+        if data and isinstance(data, dict):
+            value = data.get("checkin_interval_minutes")
+            if value is not None and value != "_":
+                return int(value)
+    except (ValueError, IOError, yaml.YAMLError):
         pass
 
     return 5
@@ -147,22 +128,20 @@ def get_session_target(workflow_path: Path) -> str:
         return "tmux-orc:0"
 
     try:
-        content = status_file.read_text()
-        for line in content.splitlines():
-            if line.startswith("session:"):
-                parts = line.split(":", 1)
-                if len(parts) >= 2:
-                    session = parts[1].strip()
-                    if session:
-                        return f"{session}:0"
-    except IOError:
+        with open(status_file, "r") as f:
+            data = yaml.safe_load(f)
+        if data and isinstance(data, dict):
+            session = data.get("session", "")
+            if session:
+                return f"{session}:0.1"
+    except (IOError, yaml.YAMLError):
         pass
 
     return "tmux-orc:0"
 
 
 def restart_checkin(workflow_path: Path, workflow_name: str, task_count: int) -> None:
-    """Restart the check-in loop using Python API directly."""
+    """Restart the check-in daemon using Python API directly."""
     interval = get_checkin_interval(workflow_path)
     target = get_session_target(workflow_path)
 
@@ -178,10 +157,10 @@ def restart_checkin(workflow_path: Path, workflow_name: str, task_count: int) ->
     checkin_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(checkin_module)
 
-    # Use the CheckinScheduler directly
+    # Use the CheckinScheduler's start() method (new daemon-based approach)
     scheduler = checkin_module.CheckinScheduler(str(workflow_path))
-    scheduler.schedule(
-        minutes=interval,
+    scheduler.start(
+        interval_minutes=interval,
         note=f"Auto-restart: tasks.json modified ({task_count} incomplete tasks)",
         target=target,
         yato_path=yato_path,
@@ -211,9 +190,9 @@ def main():
 
     workflow_path, workflow_name = result
 
-    # Check if check-in is stopped
-    if not is_checkin_stopped(workflow_path):
-        # Check-in loop is already running, nothing to do
+    # Check if daemon is running using PID
+    if is_daemon_running(workflow_path):
+        # Daemon is already running, nothing to do
         return 0
 
     # Check if there are incomplete tasks
@@ -222,11 +201,11 @@ def main():
         # No incomplete tasks, nothing to restart
         return 0
 
-    # Restart the check-in loop
+    # Restart the check-in daemon
     restart_checkin(workflow_path, workflow_name, count)
 
     # Output a message to stderr (won't affect hook result)
-    print(f"[tasks-change-hook] Restarted check-in: {count} incomplete tasks detected", file=sys.stderr)
+    print(f"[tasks-change-hook] Started check-in daemon: {count} incomplete tasks detected", file=sys.stderr)
 
     return 0
 

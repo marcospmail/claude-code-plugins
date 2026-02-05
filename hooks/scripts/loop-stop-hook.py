@@ -37,20 +37,23 @@ spec.loader.exec_module(loop_manager)
 LoopManager = loop_manager.LoopManager
 format_duration = loop_manager.format_duration
 
-# Optional debug logging
-DEBUG = os.environ.get("YATO_LOOP_DEBUG", "").lower() == "true"
+# Always-on logging for debugging
 LOG_FILE = Path.home() / ".yato" / "loop-stop-hook.log"
 
 def debug_log(message):
-    """Log debug messages to file if debugging enabled."""
-    if DEBUG:
-        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(LOG_FILE, "a") as f:
-            f.write(f"{message}\n")
+    """Always log to file for debugging."""
+    from datetime import datetime
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    with open(LOG_FILE, "a") as f:
+        f.write(f"[{timestamp}] {message}\n")
 
 
-def find_active_loop_in_project(project_path: Path):
-    """Scan .workflow/loops/ in the project for an active loop.
+def find_active_loop_in_project(project_path: Path, session_id: str = None):
+    """Scan .workflow/loops/ in the project for an active loop matching this session.
+
+    Only returns a loop if session_id matches - this ensures each Claude session
+    only continues its own loop, preventing cross-session interference.
 
     Returns (loop_folder, meta) tuple if found, (None, None) otherwise.
     """
@@ -68,7 +71,11 @@ def find_active_loop_in_project(project_path: Path):
             with open(meta_file, "r") as f:
                 meta = json.load(f)
             if meta.get("should_continue", False):
-                return d, meta
+                # Only return if session_id matches
+                if session_id and meta.get("session_id") == session_id:
+                    return d, meta
+                elif session_id:
+                    debug_log(f"[SKIP] Loop session {meta.get('session_id')} != current {session_id}")
         except (json.JSONDecodeError, IOError):
             continue
 
@@ -91,19 +98,21 @@ def main():
         debug_log(f"[ERROR] Exception reading stdin: {e}")
         return
 
-    # Prevent infinite loops: if Claude is already continuing due to a
-    # previous stop hook invocation, don't block again
-    if hook_input.get("stop_hook_active"):
-        debug_log(f"[SKIP] stop_hook_active=true, preventing infinite loop")
-        return
+    # NOTE: We intentionally do NOT check stop_hook_active here.
+    # Claude Code sets stop_hook_active=true after a Stop hook blocks,
+    # which is designed to prevent infinite loops. However, for the loop
+    # system, continuing IS the intended behavior — the loop has its own
+    # stop conditions (times limit, duration limit, manual cancel).
 
     # Use the project directory from Claude Code's hook input (cwd field).
     # This is the directory where Claude Code was started, giving natural
     # project isolation — we only see loops in .workflow/loops/ for this project.
     project_path = Path(hook_input.get("cwd") or os.getcwd())
+    session_id = hook_input.get("session_id")
     debug_log(f"[PROJECT] {project_path}")
+    debug_log(f"[SESSION] {session_id}")
 
-    loop_folder, meta = find_active_loop_in_project(project_path)
+    loop_folder, meta = find_active_loop_in_project(project_path, session_id)
 
     if not loop_folder or not meta:
         debug_log(f"[STOP] No active loops in {project_path / '.workflow' / 'loops'}")
@@ -142,7 +151,9 @@ def main():
     # Sleep for the interval ONLY if this is NOT the first execution
     # First execution should happen immediately, subsequent ones wait
     if interval_seconds > 0 and exec_count > 1:
+        debug_log(f"[SLEEP] Waiting {interval_seconds}s before next execution")
         time.sleep(interval_seconds)
+        debug_log(f"[WAKE] Sleep completed, checking conditions")
 
         # Re-check stop conditions AFTER sleeping (user might have cancelled during sleep)
         meta = manager.load_meta(loop_folder)
