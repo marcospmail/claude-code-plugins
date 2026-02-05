@@ -523,7 +523,7 @@ class Orchestrator:
             f"   d) Reassign tasks to agents via their agent-tasks.md files using send-message.sh. "
             f"   CRITICAL: Do this whenever user adds features, changes scope, or clarifies requirements. "
             f"15) CHECK-IN LOOP AUTO-STOPS when all tasks in tasks.json are complete (no pending/in_progress/blocked). "
-            f"   ⛔ NEVER call cancel-checkin.sh yourself - the loop stops AUTOMATICALLY when tasks complete. "
+            f"   ⛔ NEVER call checkin_scheduler.py cancel yourself - the loop stops AUTOMATICALLY when tasks complete."
             f"   Only the USER can stop early via /cancel-checkin skill if they choose to. "
             f"Start now: Check for .workflow/prd.md first, then begin discovery questions!"
         )
