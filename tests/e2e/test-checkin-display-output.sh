@@ -1,12 +1,13 @@
 #!/bin/bash
 # test-checkin-display-output.sh
 #
-# E2E Test: checkin-display.sh output formatting
+# E2E Test: checkin-display.sh output formatting with daemon model
 #
 # Verifies:
 # 1. Display doesn't show script path in output
 # 2. Text displays cleanly without concatenation issues
 # 3. Status messages display correctly
+# 4. Daemon PID status is shown
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -14,6 +15,7 @@ TEST_NAME="checkin-display-output"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 BIN_DIR="$PROJECT_ROOT/bin"
+LIB_DIR="$PROJECT_ROOT/lib"
 SESSION_NAME="e2e-display-$TEST_ID"
 
 echo "======================================================================"
@@ -29,6 +31,23 @@ fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
+    # Kill any daemon processes
+    if [[ -f "$TEST_DIR/.workflow/001-test/checkins.json" ]]; then
+        PID=$(python3 -c "
+import json
+try:
+    with open('$TEST_DIR/.workflow/001-test/checkins.json', 'r') as f:
+        data = json.load(f)
+    pid = data.get('daemon_pid')
+    if pid:
+        print(pid)
+except:
+    pass
+" 2>/dev/null)
+        if [[ -n "$PID" ]]; then
+            kill -9 "$PID" 2>/dev/null || true
+        fi
+    fi
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
@@ -126,33 +145,24 @@ else
 fi
 
 # ============================================================
-# Test 3: Display shows check-in status correctly
+# Test 3: Display shows check-in status correctly with daemon
 # ============================================================
 
 echo ""
-echo "Testing display with pending check-in..."
+echo "Testing display with pending check-in and daemon..."
 
-# Create checkins.json with a pending check-in
+# Create checkins.json with a pending check-in AND daemon_pid
 FUTURE_TIME=$(date -v +5M +"%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "+5 minutes" +"%Y-%m-%dT%H:%M:%S")
-cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
-{
-  "checkins": [
-    {
-      "id": "test123",
-      "status": "pending",
-      "scheduled_for": "$FUTURE_TIME",
-      "note": "Test check-in note",
-      "target": "$SESSION_NAME:0",
-      "created_at": "$(date +%Y-%m-%dT%H:%M:%S)"
-    }
-  ]
-}
-EOF
+
+# Start the daemon to get a real PID
+cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" start 5 --note "Test check-in note" --target "$SESSION_NAME:0" --workflow "001-test" > /dev/null 2>&1
+sleep 2
 
 # Wait for display to refresh with retry loop (more robust under load)
 # Display refreshes every 2s, we'll retry up to 8 times (16 seconds total)
 PENDING_FOUND=false
 NOTE_FOUND=false
+DAEMON_FOUND=false
 for i in {1..8}; do
     sleep 2
     PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
@@ -162,7 +172,10 @@ for i in {1..8}; do
     if echo "$PANE_CONTENT" | grep -q "Test check-in note"; then
         NOTE_FOUND=true
     fi
-    if [[ "$PENDING_FOUND" == "true" && "$NOTE_FOUND" == "true" ]]; then
+    if echo "$PANE_CONTENT" | grep -q "\[DAEMON\].*running"; then
+        DAEMON_FOUND=true
+    fi
+    if [[ "$PENDING_FOUND" == "true" && "$NOTE_FOUND" == "true" && "$DAEMON_FOUND" == "true" ]]; then
         break
     fi
 done
@@ -181,6 +194,13 @@ else
     fail "Missing check-in note"
 fi
 
+# Check for daemon status
+if [[ "$DAEMON_FOUND" == "true" ]]; then
+    pass "Shows [DAEMON] running status"
+else
+    fail "Missing [DAEMON] running status"
+fi
+
 # ============================================================
 # Test 4: Display clears properly between updates
 # ============================================================
@@ -188,7 +208,11 @@ fi
 echo ""
 echo "Testing display clears properly..."
 
-# Update checkins.json to change content
+# Cancel daemon and update checkins
+cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" cancel --workflow "001-test" > /dev/null 2>&1
+sleep 1
+
+# Manually update checkins.json to show done entries
 cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
 {
   "checkins": [
@@ -200,7 +224,8 @@ cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
       "note": "Completed check-in",
       "target": "$SESSION_NAME:0"
     }
-  ]
+  ],
+  "daemon_pid": null
 }
 EOF
 
@@ -244,6 +269,44 @@ if echo "$PANE_TITLE" | grep -q "every 5m"; then
     pass "Pane title shows interval from status.yml"
 else
     fail "Pane title missing interval: $PANE_TITLE"
+fi
+
+# ============================================================
+# Test 6: Display shows DEAD daemon status
+# ============================================================
+
+echo ""
+echo "Testing display shows dead daemon..."
+
+# Set a fake PID that doesn't exist
+cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
+{
+  "checkins": [
+    {
+      "id": "test789",
+      "status": "pending",
+      "scheduled_for": "$(date -v +5M +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -d '+5 minutes' +%Y-%m-%dT%H:%M:%S)",
+      "note": "Dead daemon test",
+      "target": "$SESSION_NAME:0"
+    }
+  ],
+  "daemon_pid": 999999
+}
+EOF
+
+sleep 4
+
+PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+
+if echo "$PANE_CONTENT" | grep -q "(DEAD)\|(NO DAEMON)"; then
+    pass "Shows dead daemon indicator"
+else
+    # Check for NO DAEMON warning on pending
+    if echo "$PANE_CONTENT" | grep -q "NO DAEMON"; then
+        pass "Shows NO DAEMON warning"
+    else
+        fail "Should show dead daemon or NO DAEMON warning"
+    fi
 fi
 
 # ============================================================

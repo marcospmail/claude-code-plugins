@@ -41,6 +41,7 @@ cleanup() {
     echo "Cleaning up..."
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
+    rm -f /tmp/e2e-wfcurrent-$$.txt 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -50,16 +51,15 @@ trap cleanup EXIT
 echo "Phase 1: Setting up test environment..."
 
 mkdir -p "$TEST_DIR"
-cd "$TEST_DIR"
-git init -q
-git config user.name "Test"
-git config user.email "test@test.com"
 
-# Create session
+# Create session and initialize git
 tmux new-session -d -s "$SESSION_NAME" -n "pm" -c "$TEST_DIR"
+tmux send-keys -t "$SESSION_NAME" "git init -q && git config user.name 'Test' && git config user.email 'test@test.com'" Enter
+sleep 2
 
 # Initialize first workflow
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "First workflow" > /dev/null 2>&1
+tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'First workflow'" Enter
+sleep 3
 
 echo "  - First workflow initialized"
 
@@ -83,7 +83,8 @@ fi
 echo ""
 echo "Test 2: Creating second workflow (no conflict expected)..."
 
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Second workflow" > /dev/null 2>&1
+tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Second workflow'" Enter
+sleep 3
 
 # Count workflow folders
 WORKFLOW_COUNT=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | wc -l | tr -d ' ')
@@ -130,17 +131,10 @@ fi
 echo ""
 echo "Test 5: get_current_workflow discovers workflow folder outside tmux..."
 
-# Source workflow-utils.sh outside of tmux context
-ORIGINAL_TMUX="$TMUX"
-unset TMUX
-
-source "$PROJECT_ROOT/bin/workflow-utils.sh"
-RESULT=$(get_current_workflow "$TEST_DIR")
-
-# Restore TMUX
-if [[ -n "$ORIGINAL_TMUX" ]]; then
-    export TMUX="$ORIGINAL_TMUX"
-fi
+# Run get_current_workflow without TMUX context via send-keys
+tmux send-keys -t "$SESSION_NAME" "unset TMUX && source $PROJECT_ROOT/bin/workflow-utils.sh && get_current_workflow '$TEST_DIR' > /tmp/e2e-wfcurrent-$$.txt 2>&1; echo DONE" Enter
+sleep 3
+RESULT=$(cat /tmp/e2e-wfcurrent-$$.txt 2>/dev/null | grep -v "DONE" | head -1)
 
 # Should discover the most recent workflow folder (fallback for scripts/tests)
 if [[ "$RESULT" =~ ^[0-9]{3}- ]]; then

@@ -45,7 +45,7 @@ sleep 2
 echo "Testing send-message to different windows..."
 echo ""
 
-# Test 1: Send to window 0
+# Test 1: Send to window 0 (direct call - testing the script itself, not a Claude skill)
 MSG1="TEST_MSG_WIN0_$(date +%s)"
 "$PROJECT_ROOT/bin/send-message.sh" "$SESSION_NAME:0" "$MSG1"
 sleep 2
@@ -56,7 +56,7 @@ else
     fail "Message not found in window 0"
 fi
 
-# Test 2: Send to window 1
+# Test 2: Send to window 1 (direct call - testing the script itself)
 MSG2="TEST_MSG_WIN1_$(date +%s)"
 "$PROJECT_ROOT/bin/send-message.sh" "$SESSION_NAME:1" "$MSG2"
 sleep 2
@@ -67,7 +67,7 @@ else
     fail "Message not found in window 1"
 fi
 
-# Test 3: Send to window 2
+# Test 3: Send to window 2 (direct call - testing the script itself)
 MSG3="TEST_MSG_WIN2_$(date +%s)"
 "$PROJECT_ROOT/bin/send-message.sh" "$SESSION_NAME:2" "$MSG3"
 sleep 2
@@ -85,7 +85,7 @@ else
     pass "Messages properly isolated (no cross-contamination)"
 fi
 
-# Test 5: Test with special characters
+# Test 5: Test with special characters (direct call - testing the script itself)
 SPECIAL_MSG="Test with 'quotes' and \"double quotes\""
 "$PROJECT_ROOT/bin/send-message.sh" "$SESSION_NAME:0" "$SPECIAL_MSG"
 sleep 2

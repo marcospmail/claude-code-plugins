@@ -44,6 +44,9 @@ cleanup() {
     echo "Cleaning up..."
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
+    rm -f /tmp/e2e-init-$$.txt 2>/dev/null || true
+    rm -f /tmp/e2e-save-$$.txt 2>/dev/null || true
+    rm -f /tmp/e2e-create-agent-$$.txt 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -58,8 +61,9 @@ echo "test" > "$TEST_DIR/app.js"
 # Create tmux session
 tmux new-session -d -s "$SESSION_NAME" -n "orchestrator" -c "$TEST_DIR"
 
-# Initialize workflow
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test briefing paths" > /dev/null 2>&1
+# Initialize workflow via tmux send-keys
+tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test briefing paths' > /tmp/e2e-init-$$.txt 2>&1" Enter
+sleep 3
 
 # Get workflow name
 WORKFLOW_NAME=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1 | xargs basename)
@@ -73,8 +77,9 @@ echo ""
 # ============================================================
 echo "Phase 2: Creating team with custom agent names..."
 
-source "$PROJECT_ROOT/bin/workflow-utils.sh"
-save_team_structure "$TEST_DIR" discoverer:qa:opus > /dev/null 2>&1
+# Run save_team_structure via tmux send-keys
+tmux send-keys -t "$SESSION_NAME" "source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' discoverer:qa:opus > /tmp/e2e-save-$$.txt 2>&1" Enter
+sleep 3
 
 echo "  - Team structure saved"
 echo ""
@@ -119,13 +124,9 @@ echo ""
 # ============================================================
 echo "Phase 4: Creating team windows and verifying registry..."
 
-# Create the team (with --no-start to skip Claude for faster testing)
-"$PROJECT_ROOT/bin/create-agent.sh" "$SESSION_NAME" qa \
-    -n discoverer \
-    -p "$TEST_DIR" \
-    --pm-window "$SESSION_NAME:0.1" \
-    --no-start \
-    --no-brief > /dev/null 2>&1
+# Create the team via tmux send-keys (with --no-start to skip Claude for faster testing)
+tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/create-agent.sh $SESSION_NAME qa -n discoverer -p '$TEST_DIR' --pm-window $SESSION_NAME:0.1 --no-start --no-brief > /tmp/e2e-create-agent-$$.txt 2>&1" Enter
+sleep 5
 
 # Test 5: agents.yml has agent entry with correct name
 if grep -q "name: discoverer$" "$WORKFLOW_PATH/agents.yml" 2>/dev/null; then

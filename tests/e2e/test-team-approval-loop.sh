@@ -9,11 +9,11 @@
 # 3. Re-asking after user provides changes via "Other"
 # 4. Never saving team until user explicitly approves
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="team-approval-loop"
+TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
+SESSION_NAME="e2e-$TEST_NAME-$$"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: Team Approval Loop                                ║"
@@ -27,6 +27,19 @@ TESTS_FAILED=0
 
 pass() { echo "  ✅ $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
 fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
+
+# Cleanup function
+cleanup() {
+    echo ""
+    echo "Cleaning up..."
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    rm -rf "$TEST_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# Setup test environment
+mkdir -p "$TEST_DIR"
+tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
 
 ORCHESTRATOR_FILE="$PROJECT_ROOT/lib/orchestrator.py"
 

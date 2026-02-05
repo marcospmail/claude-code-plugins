@@ -33,6 +33,7 @@ fail() {
 cleanup() {
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR"
+    rm -f /tmp/e2e-init-workflow-$$.txt /tmp/e2e-create-agent-$$.txt 2>/dev/null || true
 }
 
 trap cleanup EXIT
@@ -49,10 +50,9 @@ echo "Test directory: $TEST_DIR"
 echo ""
 
 mkdir -p "$TEST_DIR"
-cd "$TEST_DIR"
-git init -q
-git config user.name "Test"
-git config user.email "test@test.com"
+tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux send-keys -t "$SESSION_NAME" "git init -q && git config user.name Test && git config user.email test@test.com" Enter
+sleep 2
 
 # ============================================================
 # Test 1: PM constraints.md exists after workflow init
@@ -60,7 +60,8 @@ git config user.email "test@test.com"
 
 echo "Test 1: Creating workflow and checking PM constraints.md..."
 
-$BIN_DIR/init-workflow.sh "$TEST_DIR" "test-constraints" > /dev/null
+tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/init-workflow.sh '$TEST_DIR' 'test-constraints' > /tmp/e2e-init-workflow-$$.txt 2>&1" Enter
+sleep 3
 
 # Find the workflow directory
 WORKFLOW_DIR=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1)
@@ -119,16 +120,13 @@ fi
 echo ""
 echo "Test 4: Creating agent and checking constraints.md..."
 
-# Create a tmux session for the agent
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+# Set WORKFLOW_NAME env var in tmux session
 tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "$(basename "$WORKFLOW_DIR")"
 
-# Create a developer agent
+# Create a developer agent via tmux
 WORKFLOW_NAME="$(basename "$WORKFLOW_DIR")"
-$BIN_DIR/create-agent.sh "$SESSION_NAME" developer -p "$TEST_DIR" --pm-window "$SESSION_NAME:0" --no-start 2>&1 | head -20 || true
-
-# Wait a moment
-sleep 2
+tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/create-agent.sh '$SESSION_NAME' developer -p '$TEST_DIR' --pm-window '$SESSION_NAME:0' --no-start > /tmp/e2e-create-agent-$$.txt 2>&1" Enter
+sleep 5
 
 # Check for constraints.md in developer directory
 DEV_CONSTRAINTS="$WORKFLOW_DIR/agents/developer/constraints.md"

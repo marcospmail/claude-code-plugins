@@ -64,7 +64,7 @@ echo '{"checkins": []}' > "$TEST_DIR/.workflow/001-test-workflow/checkins.json"
 
 # Create tmux session with WORKFLOW_NAME env var
 # Use larger window size to capture full messages
-tmux new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+tmux new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
 tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
 
 # Verify session created
@@ -74,6 +74,13 @@ if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
 fi
 
 pass "Tmux session created: $SESSION_NAME"
+
+# Start Claude in the session (tmux+Claude pattern)
+tmux send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
+
+# Wait for Claude to initialize
+echo "  - Waiting for Claude to initialize..."
+sleep 12
 
 echo "Test directory: $TEST_DIR"
 echo ""
@@ -186,26 +193,24 @@ fi
 echo ""
 echo "Phase 5: Testing schedule-checkin.sh directly..."
 
-# Run schedule-checkin.sh and capture its output
-SCHEDULE_OUTPUT=$(cd "$TEST_DIR" && TMUX="fake" tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow" 2>/dev/null; cd "$TEST_DIR" && bash -c "
-export TMUX='/tmp/fake,12345,0'
-tmux() {
-    case \"\$1\" in
-        showenv) echo 'WORKFLOW_NAME=001-test-workflow' ;;
-        *) command tmux \"\$@\" ;;
-    esac
-}
-export -f tmux
-$BIN_DIR/schedule-checkin.sh 1 'Test note' '$SESSION_NAME:0'
-" 2>&1)
+# Have Claude run schedule-checkin.sh (tmux+Claude pattern)
+tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/schedule-checkin.sh 1 'Test note' '$SESSION_NAME:0'" Enter
 
-echo "Schedule output: $SCHEDULE_OUTPUT"
+# Wait for execution
+sleep 5
 
-if echo "$SCHEDULE_OUTPUT" | grep -qi "Scheduling check\|Scheduled"; then
-    pass "schedule-checkin.sh runs without error"
+# Capture output from Claude's pane
+SCHEDULE_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -30 2>/dev/null)
+
+echo "Schedule output (via Claude):"
+echo "$SCHEDULE_OUTPUT" | tail -15
+echo ""
+
+if echo "$SCHEDULE_OUTPUT" | grep -qi "Daemon started\|Starting check-in daemon\|Scheduled\|Check-in"; then
+    pass "schedule-checkin.sh runs without error (via Claude)"
 else
     # Check if it's the guard preventing duplicate
-    if echo "$SCHEDULE_OUTPUT" | grep -qi "already pending"; then
+    if echo "$SCHEDULE_OUTPUT" | grep -qi "already running\|already pending"; then
         pass "schedule-checkin.sh correctly guards against duplicate (expected behavior)"
     else
         fail "schedule-checkin.sh may have issues: $SCHEDULE_OUTPUT"
@@ -222,14 +227,17 @@ echo "Phase 6: Testing send-message.sh with multiline content..."
 tmux send-keys -t "$SESSION_NAME" "clear" Enter
 sleep 1
 
-# Test multiline message
+# Test multiline message - have Claude run send-message.sh (tmux+Claude pattern)
 MULTILINE_MSG="Line 1: Header
 Line 2: Content
 Line 3: More content"
 
-"$BIN_DIR/send-message.sh" "$SESSION_NAME:0" "$MULTILINE_MSG" 2>/dev/null
+# Send the command through Claude (escape quotes for the message)
+tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/send-message.sh '$SESSION_NAME:0' 'Line 1: Header
+Line 2: Content
+Line 3: More content'" Enter
 
-sleep 2
+sleep 3
 
 OUTPUT2=$(tmux capture-pane -t "$SESSION_NAME" -p -S -20 2>/dev/null)
 

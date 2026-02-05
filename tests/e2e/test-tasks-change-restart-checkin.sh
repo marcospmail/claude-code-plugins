@@ -6,10 +6,10 @@
 # This test verifies:
 # 1. Hook is registered in hooks.json
 # 2. Hook script correctly identifies tasks.json files
-# 3. Hook detects when check-in loop is stopped
+# 3. Hook detects when daemon is not running (via PID check)
 # 4. Hook detects incomplete tasks
-# 5. Hook triggers check-in restart when stopped + incomplete tasks exist
-# 6. Hook does NOT restart when check-in is already running
+# 5. Hook triggers daemon restart when not running + incomplete tasks exist
+# 6. Hook does NOT restart when daemon is already running
 # 7. Hook does NOT restart when all tasks are completed
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -18,6 +18,7 @@ TEST_NAME="tasks-change-restart"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 BIN_DIR="$PROJECT_ROOT/bin"
+LIB_DIR="$PROJECT_ROOT/lib"
 SESSION_NAME="e2e-tasks-chg-$TEST_ID"
 
 echo "======================================================================"
@@ -33,9 +34,25 @@ fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
+    # Kill any daemon processes
+    if [[ -f "$TEST_DIR/.workflow/001-test-workflow/checkins.json" ]]; then
+        PID=$(python3 -c "
+import json
+try:
+    with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
+        data = json.load(f)
+    pid = data.get('daemon_pid')
+    if pid:
+        print(pid)
+except:
+    pass
+" 2>/dev/null)
+        if [[ -n "$PID" ]]; then
+            kill -9 "$PID" 2>/dev/null || true
+        fi
+    fi
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
-    pkill -f "schedule-checkin.*$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -86,6 +103,7 @@ EOF
 # Create tmux session
 tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
 tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+tmux setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
 
 if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     pass "Tmux session created"
@@ -123,63 +141,60 @@ fi
 echo ""
 
 # ============================================================
-# Phase 4: Test check-in stopped detection
+# Phase 4: Test daemon running detection
 # ============================================================
-echo "Phase 4: Testing check-in stopped detection..."
+echo "Phase 4: Testing daemon running detection..."
 
-# Create checkins.json with stopped state
+# Create checkins.json with no daemon (PID null)
 cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
 {
   "checkins": [
-    {"id": "123", "status": "done", "created_at": "2024-01-01T10:00:00"},
     {"id": "stop-456", "status": "stopped", "created_at": "2024-01-01T11:00:00"}
-  ]
+  ],
+  "daemon_pid": null
 }
 EOF
 
-IS_STOPPED=$(python3 -c "
+IS_RUNNING=$(python3 -c "
 import sys
-sys.path.insert(0, '$PROJECT_ROOT')
-exec(open('$HOOK_SCRIPT').read().replace('if __name__', 'if False'))
+sys.path.insert(0, '$PROJECT_ROOT/lib')
+from checkin_scheduler import CheckinScheduler
 
-from pathlib import Path
-workflow_path = Path('$TEST_DIR/.workflow/001-test-workflow')
-result = is_checkin_stopped(workflow_path)
+scheduler = CheckinScheduler('$TEST_DIR/.workflow/001-test-workflow')
+result = scheduler.is_daemon_running()
 print('yes' if result else 'no')
 " 2>/dev/null)
 
-if [[ "$IS_STOPPED" == "yes" ]]; then
-    pass "Detects check-in loop is stopped"
+if [[ "$IS_RUNNING" == "no" ]]; then
+    pass "Detects daemon is not running (null PID)"
 else
-    fail "Should detect stopped check-in, got: $IS_STOPPED"
+    fail "Should detect no daemon running, got: $IS_RUNNING"
 fi
 
-# Test resumed state
+# Test with dead PID
 cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
 {
   "checkins": [
-    {"id": "stop-456", "status": "stopped", "created_at": "2024-01-01T11:00:00"},
-    {"id": "resume-789", "status": "resumed", "created_at": "2024-01-01T12:00:00"},
     {"id": "999", "status": "pending", "created_at": "2024-01-01T12:00:00"}
-  ]
+  ],
+  "daemon_pid": 999999
 }
 EOF
 
-IS_STOPPED=$(python3 -c "
+IS_RUNNING=$(python3 -c "
 import sys
-sys.path.insert(0, '$PROJECT_ROOT')
-exec(open('$HOOK_SCRIPT').read().replace('if __name__', 'if False'))
+sys.path.insert(0, '$PROJECT_ROOT/lib')
+from checkin_scheduler import CheckinScheduler
 
-from pathlib import Path
-workflow_path = Path('$TEST_DIR/.workflow/001-test-workflow')
-result = is_checkin_stopped(workflow_path)
+scheduler = CheckinScheduler('$TEST_DIR/.workflow/001-test-workflow')
+result = scheduler.is_daemon_running()
 print('yes' if result else 'no')
 " 2>/dev/null)
 
-if [[ "$IS_STOPPED" == "no" ]]; then
-    pass "Detects check-in loop is running (has pending)"
+if [[ "$IS_RUNNING" == "no" ]]; then
+    pass "Detects daemon is not running (dead PID)"
 else
-    fail "Should detect running check-in, got: $IS_STOPPED"
+    fail "Should detect dead daemon, got: $IS_RUNNING"
 fi
 
 echo ""
@@ -247,16 +262,17 @@ fi
 echo ""
 
 # ============================================================
-# Phase 6: Integration test - auto-restart when stopped + incomplete
+# Phase 6: Integration test - auto-restart when daemon not running + incomplete
 # ============================================================
 echo "Phase 6: Integration test - auto-restart behavior..."
 
-# Setup: stopped check-in + incomplete tasks
+# Setup: no daemon + incomplete tasks
 cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
 {
   "checkins": [
     {"id": "stop-999", "status": "stopped", "note": "All work complete", "created_at": "2024-01-01T10:00:00"}
-  ]
+  ],
+  "daemon_pid": null
 }
 EOF
 
@@ -273,84 +289,72 @@ HOOK_INPUT="{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workfl
 cd "$TEST_DIR"
 HOOK_OUTPUT=$(echo "$HOOK_INPUT" | YATO_PATH="$PROJECT_ROOT" python3 "$HOOK_SCRIPT" 2>&1)
 
-# Give it a moment to schedule
-sleep 2
+# Give it a moment to start daemon
+sleep 3
 
-# Check if a new check-in was scheduled
-CHECKIN_COUNT=$(python3 -c "
+# Check if a new daemon was started
+DAEMON_PID=$(python3 -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
         data = json.load(f)
-    pending = [c for c in data['checkins'] if c.get('status') == 'pending']
-    print(len(pending))
+    pid = data.get('daemon_pid')
+    if pid:
+        print(pid)
+    else:
+        print('')
 except:
-    print(0)
+    print('')
 " 2>/dev/null)
 
-if [[ "$CHECKIN_COUNT" -ge "1" ]]; then
-    pass "Check-in was restarted (pending check-in found)"
+if [[ -n "$DAEMON_PID" ]]; then
+    pass "Daemon was started (PID: $DAEMON_PID)"
 else
-    # Check if resumed entry was added
-    RESUMED=$(python3 -c "
-import json
-try:
-    with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
-        data = json.load(f)
-    resumed = [c for c in data['checkins'] if c.get('status') == 'resumed']
-    print(len(resumed))
-except:
-    print(0)
-" 2>/dev/null)
-    if [[ "$RESUMED" -ge "1" ]]; then
-        pass "Check-in loop was resumed (resumed entry found)"
-    else
-        fail "Check-in was not restarted (pending: $CHECKIN_COUNT, resumed: $RESUMED)"
-        echo "  Hook output: $HOOK_OUTPUT"
-        echo "  Checkins file:"
-        cat "$TEST_DIR/.workflow/001-test-workflow/checkins.json"
-    fi
+    fail "Daemon was not started"
+    echo "  Hook output: $HOOK_OUTPUT"
 fi
 
 echo ""
 
 # ============================================================
-# Phase 7: No restart when check-in already running
+# Phase 7: No restart when daemon already running
 # ============================================================
-echo "Phase 7: No restart when check-in already running..."
+echo "Phase 7: No restart when daemon already running..."
 
-# Setup: running check-in (has pending)
-cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
-{
-  "checkins": [
-    {"id": "existing-123", "status": "pending", "created_at": "2024-01-01T10:00:00"}
-  ]
-}
-EOF
+# The daemon from phase 6 should still be running
+# Record the current PID
+ORIGINAL_PID=$(python3 -c "
+import json
+try:
+    with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
+        data = json.load(f)
+    print(data.get('daemon_pid', ''))
+except:
+    print('')
+" 2>/dev/null)
 
-# Run the hook
+# Run the hook again
 HOOK_INPUT="{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}"
 cd "$TEST_DIR"
 echo "$HOOK_INPUT" | YATO_PATH="$PROJECT_ROOT" python3 "$HOOK_SCRIPT" 2>&1
 
 sleep 1
 
-# Count pending check-ins (should still be 1, not 2)
-CHECKIN_COUNT=$(python3 -c "
+# Check that PID hasn't changed (no new daemon started)
+NEW_PID=$(python3 -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
         data = json.load(f)
-    pending = [c for c in data['checkins'] if c.get('status') == 'pending']
-    print(len(pending))
+    print(data.get('daemon_pid', ''))
 except:
-    print(0)
+    print('')
 " 2>/dev/null)
 
-if [[ "$CHECKIN_COUNT" == "1" ]]; then
-    pass "No duplicate check-in scheduled (count remains 1)"
+if [[ "$NEW_PID" == "$ORIGINAL_PID" ]]; then
+    pass "No new daemon started (PID unchanged: $NEW_PID)"
 else
-    fail "Expected 1 pending check-in, got: $CHECKIN_COUNT"
+    fail "Expected same daemon PID ($ORIGINAL_PID), got: $NEW_PID"
 fi
 
 echo ""
@@ -360,12 +364,17 @@ echo ""
 # ============================================================
 echo "Phase 8: No restart when all tasks completed..."
 
-# Setup: stopped + all tasks completed
+# Kill the running daemon first
+cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" cancel --workflow "001-test-workflow" > /dev/null 2>&1
+sleep 1
+
+# Setup: no daemon + all tasks completed
 cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
 {
   "checkins": [
     {"id": "stop-999", "status": "stopped", "created_at": "2024-01-01T10:00:00"}
-  ]
+  ],
+  "daemon_pid": null
 }
 EOF
 
@@ -384,22 +393,25 @@ echo "$HOOK_INPUT" | YATO_PATH="$PROJECT_ROOT" python3 "$HOOK_SCRIPT" 2>&1
 
 sleep 1
 
-# Count pending check-ins (should be 0)
-CHECKIN_COUNT=$(python3 -c "
+# Check that no daemon was started
+DAEMON_PID=$(python3 -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
         data = json.load(f)
-    pending = [c for c in data['checkins'] if c.get('status') == 'pending']
-    print(len(pending))
+    pid = data.get('daemon_pid')
+    if pid:
+        print(pid)
+    else:
+        print('')
 except:
-    print(0)
+    print('')
 " 2>/dev/null)
 
-if [[ "$CHECKIN_COUNT" == "0" ]]; then
-    pass "No check-in scheduled when all tasks completed"
+if [[ -z "$DAEMON_PID" ]]; then
+    pass "No daemon started when all tasks completed"
 else
-    fail "Should not restart when all tasks completed, got pending: $CHECKIN_COUNT"
+    fail "Should not start daemon when all tasks completed, got PID: $DAEMON_PID"
 fi
 
 echo ""

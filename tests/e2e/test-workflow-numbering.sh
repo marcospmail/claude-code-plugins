@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="workflow-numbering"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
+SESSION_NAME="e2e-numbering-$$"
 
 echo "======================================================================"
 echo "  E2E Test: Workflow Sequential Numbering"
@@ -21,6 +22,7 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -28,15 +30,15 @@ trap cleanup EXIT
 # Setup phase
 echo "Setting up test environment..."
 mkdir -p "$TEST_DIR"
-cd "$TEST_DIR"
-git init -q
-git config user.name "Test"
-git config user.email "test@test.com"
+tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux send-keys -t "$SESSION_NAME" "git init -q && git config user.name Test && git config user.email test@test.com" Enter
+sleep 2
 
 # Test Phase 1: Create first workflow
 echo ""
 echo "Test 1: Creating first workflow..."
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "First workflow" > /dev/null 2>&1
+tmux send-keys -t "$SESSION_NAME" "'$PROJECT_ROOT/bin/init-workflow.sh' '$TEST_DIR' 'First workflow'" Enter
+sleep 3
 
 # Verify first workflow directory
 WF1=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^001-" | head -1)
@@ -56,7 +58,8 @@ fi
 # Test Phase 2: Create second workflow
 echo ""
 echo "Test 2: Creating second workflow..."
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Second workflow" > /dev/null 2>&1
+tmux send-keys -t "$SESSION_NAME" "'$PROJECT_ROOT/bin/init-workflow.sh' '$TEST_DIR' 'Second workflow'" Enter
+sleep 3
 
 # Verify second workflow directory
 WF2=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^002-" | head -1)
@@ -76,7 +79,8 @@ fi
 # Test Phase 3: Create third workflow
 echo ""
 echo "Test 3: Creating third workflow..."
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Third workflow" > /dev/null 2>&1
+tmux send-keys -t "$SESSION_NAME" "'$PROJECT_ROOT/bin/init-workflow.sh' '$TEST_DIR' 'Third workflow'" Enter
+sleep 3
 
 # Verify third workflow directory
 WF3=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^003-" | head -1)

@@ -34,6 +34,8 @@ trap cleanup EXIT
 mkdir -p "$TEST_DIR"
 echo "test" > "$TEST_DIR/app.js"
 tmux new-session -d -s "$SESSION_NAME" -n "pm-checkins" -c "$TEST_DIR"
+
+# Initialize workflow (direct call - this is test SETUP, not testing a Claude skill)
 "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Identity test" > /dev/null 2>&1
 
 # Get workflow name and set it in the tmux session environment

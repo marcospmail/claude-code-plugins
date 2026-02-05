@@ -12,6 +12,8 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="task-output-path-guidance"
+TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
+SESSION_NAME="e2e-$TEST_NAME-$$"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: Task OUTPUT_PATH Guidance (BUG 2)                 ║"
@@ -31,6 +33,19 @@ fail() {
     echo "  ❌ $1"
     TESTS_FAILED=$((TESTS_FAILED + 1))
 }
+
+# Cleanup function
+cleanup() {
+    echo ""
+    echo "Cleaning up..."
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    rm -rf "$TEST_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# Setup test environment
+mkdir -p "$TEST_DIR"
+tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
 
 SKILL_FILE="$PROJECT_ROOT/skills/parse-prd-to-tasks/SKILL.md"
 

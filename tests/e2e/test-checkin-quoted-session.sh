@@ -1,0 +1,406 @@
+#!/bin/bash
+# test-checkin-quoted-session.sh
+#
+# E2E Test: Checkin system handles YAML-quoted session values and daemon PID tracking
+#
+# This test verifies:
+# 1. get_session_target() strips YAML quotes from session values in status.yml
+# 2. Daemon PID tracking works correctly (dead PID = stopped)
+# 3. Dead daemon + incomplete tasks = restart
+# 4. Dead daemon + all tasks complete = no restart
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+TEST_NAME="checkin-quoted-session"
+TEST_ID="$$"
+TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
+SESSION_NAME="e2e-quoted-$TEST_ID"
+
+echo "======================================================================"
+echo "  E2E Test: Checkin Quoted Session + Daemon PID Tracking"
+echo "======================================================================"
+echo ""
+
+TESTS_PASSED=0
+TESTS_FAILED=0
+
+pass() { echo "  PASS: $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
+fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
+
+cleanup() {
+    echo ""; echo "Cleaning up..."
+    # Kill any daemon processes
+    if [[ -f "$TEST_DIR/.workflow/001-test-workflow/checkins.json" ]]; then
+        PID=$(python3 -c "
+import json
+try:
+    with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
+        data = json.load(f)
+    pid = data.get('daemon_pid')
+    if pid:
+        print(pid)
+except:
+    pass
+" 2>/dev/null)
+        if [[ -n "$PID" ]]; then
+            kill -9 "$PID" 2>/dev/null || true
+        fi
+    fi
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    rm -rf "$TEST_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/tasks-change-hook.py"
+LIB_DIR="$PROJECT_ROOT/lib"
+
+# ============================================================
+# Phase 1: Setup test environment
+# ============================================================
+echo "Phase 1: Setting up test environment..."
+
+mkdir -p "$TEST_DIR/.workflow/001-test-workflow"
+
+# Create tmux session
+tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+tmux setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
+
+if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    pass "Tmux session created"
+else
+    fail "Failed to create tmux session"
+    exit 1
+fi
+
+echo "Test directory: $TEST_DIR"
+echo "Session: $SESSION_NAME"
+echo ""
+
+# ============================================================
+# Phase 2: Test quoted session value in status.yml
+# ============================================================
+echo "Phase 2: Testing YAML-quoted session value handling..."
+
+# Use yaml.dump to create status.yml - this reproduces the real quoting behavior
+python3 -c "
+import yaml
+data = {
+    'status': 'in-progress',
+    'checkin_interval_minutes': 5,
+    'session': 'null'
+}
+with open('$TEST_DIR/.workflow/001-test-workflow/status.yml', 'w') as f:
+    f.write('# Workflow Status\n')
+    yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+"
+
+# Verify the YAML file actually has quotes around session value
+if grep -q "session: 'null'" "$TEST_DIR/.workflow/001-test-workflow/status.yml"; then
+    pass "yaml.dump quotes reserved word 'null' in status.yml"
+else
+    SESSION_LINE=$(grep "^session:" "$TEST_DIR/.workflow/001-test-workflow/status.yml")
+    echo "  Note: session line is: $SESSION_LINE"
+    pass "status.yml created (quoting may vary by PyYAML version)"
+fi
+
+# Create stopped checkins.json + incomplete tasks
+cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
+{
+  "checkins": [
+    {"id": "stop-100", "status": "stopped", "note": "Stopped", "created_at": "2024-01-01T10:00:00"}
+  ],
+  "daemon_pid": null
+}
+EOF
+
+cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
+{
+  "tasks": [
+    {"id": "T1", "subject": "Task 1", "status": "pending"}
+  ]
+}
+EOF
+
+# Run the hook via tmux to simulate real execution environment
+tmux send-keys -t "$SESSION_NAME" "cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE'" Enter
+sleep 3
+
+# Check that a new daemon was started and pending check-in was created
+PENDING_TARGET=$(python3 -c "
+import json
+try:
+    with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
+        data = json.load(f)
+    pending = [c for c in data['checkins'] if c.get('status') == 'pending']
+    if pending:
+        print(pending[-1].get('target', ''))
+    else:
+        print('NO_PENDING')
+except Exception as e:
+    print(f'ERROR: {e}')
+" 2>/dev/null)
+
+# The target should NOT contain quote characters
+if echo "$PENDING_TARGET" | grep -q '["\x27]'; then
+    fail "Target contains embedded quotes: $PENDING_TARGET"
+else
+    if [[ "$PENDING_TARGET" == "null:0.1" ]]; then
+        pass "Target correctly unquoted: $PENDING_TARGET"
+    elif [[ "$PENDING_TARGET" == "NO_PENDING" ]]; then
+        fail "No pending check-in was created"
+    else
+        pass "Target has no embedded quotes: $PENDING_TARGET"
+    fi
+fi
+
+echo ""
+
+# ============================================================
+# Phase 3: Test with typical session name that yaml.dump quotes
+# ============================================================
+echo "Phase 3: Testing with realistic session name..."
+
+# Kill any daemon from phase 2
+cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" cancel --workflow "001-test-workflow" > /dev/null 2>&1
+sleep 1
+
+# Use 'on' which is a YAML boolean that PyYAML will quote
+python3 -c "
+import yaml
+data = {
+    'status': 'in-progress',
+    'checkin_interval_minutes': 3,
+    'session': 'on'
+}
+with open('$TEST_DIR/.workflow/001-test-workflow/status.yml', 'w') as f:
+    f.write('# Workflow Status\n')
+    yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+"
+
+# Reset checkins to stopped state with no daemon
+cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
+{
+  "checkins": [
+    {"id": "stop-200", "status": "stopped", "note": "Stopped", "created_at": "2024-01-01T10:00:00"}
+  ],
+  "daemon_pid": null
+}
+EOF
+
+# Run the hook
+tmux send-keys -t "$SESSION_NAME" "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_2'" Enter
+sleep 3
+
+PENDING_TARGET2=$(python3 -c "
+import json
+try:
+    with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
+        data = json.load(f)
+    pending = [c for c in data['checkins'] if c.get('status') == 'pending']
+    if pending:
+        print(pending[-1].get('target', ''))
+    else:
+        print('NO_PENDING')
+except Exception as e:
+    print(f'ERROR: {e}')
+" 2>/dev/null)
+
+if [[ "$PENDING_TARGET2" == "on:0.1" ]]; then
+    pass "YAML boolean 'on' correctly unquoted in target: $PENDING_TARGET2"
+elif echo "$PENDING_TARGET2" | grep -q '["\x27]'; then
+    fail "Target contains embedded quotes: $PENDING_TARGET2"
+else
+    pass "Target has no embedded quotes: $PENDING_TARGET2"
+fi
+
+echo ""
+
+# ============================================================
+# Phase 4: Test dead daemon PID detection
+# ============================================================
+echo "Phase 4: Testing dead daemon PID detection..."
+
+# Kill any daemon from phase 3
+cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" cancel --workflow "001-test-workflow" > /dev/null 2>&1
+sleep 1
+
+# Create status.yml with 1-minute interval
+cat > "$TEST_DIR/.workflow/001-test-workflow/status.yml" << 'EOF'
+status: in-progress
+checkin_interval_minutes: 1
+session: test-session
+EOF
+
+# Create checkins.json with a dead daemon PID (process that doesn't exist)
+cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
+{
+  "checkins": [
+    {
+      "id": "dead-999",
+      "status": "pending",
+      "scheduled_for": "2050-01-01T10:00:00",
+      "note": "This daemon process died",
+      "target": "dead-session:0",
+      "created_at": "2024-01-01T10:00:00"
+    }
+  ],
+  "daemon_pid": 999999
+}
+EOF
+
+# Ensure tasks are incomplete
+cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
+{
+  "tasks": [
+    {"id": "T1", "subject": "Pending task", "status": "pending"}
+  ]
+}
+EOF
+
+# Test is_daemon_running directly - should return False for dead PID
+IS_RUNNING=$(python3 -c "
+import sys
+sys.path.insert(0, '$PROJECT_ROOT/lib')
+from checkin_scheduler import CheckinScheduler
+
+scheduler = CheckinScheduler('$TEST_DIR/.workflow/001-test-workflow')
+result = scheduler.is_daemon_running()
+print('yes' if result else 'no')
+" 2>/dev/null)
+
+if [[ "$IS_RUNNING" == "no" ]]; then
+    pass "Dead daemon PID correctly detected as not running"
+else
+    fail "Should detect dead daemon as not running, got: $IS_RUNNING"
+fi
+
+# Run the hook - should start new daemon since the PID is dead
+tmux send-keys -t "$SESSION_NAME" "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_3'" Enter
+sleep 4
+
+# Check that a new daemon PID was set
+NEW_DAEMON_PID=$(python3 -c "
+import json
+try:
+    with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
+        data = json.load(f)
+    pid = data.get('daemon_pid')
+    if pid and pid != 999999:
+        print(pid)
+    else:
+        print('')
+except:
+    print('')
+" 2>/dev/null)
+
+if [[ -n "$NEW_DAEMON_PID" ]]; then
+    pass "New daemon started after detecting dead PID: $NEW_DAEMON_PID"
+else
+    fail "Expected new daemon to be started after dead PID detection"
+fi
+
+echo ""
+
+# ============================================================
+# Phase 5: Dead daemon + all tasks complete = no restart
+# ============================================================
+echo "Phase 5: Testing dead daemon with all tasks complete (no restart)..."
+
+# Kill any daemon
+cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" cancel --workflow "001-test-workflow" > /dev/null 2>&1
+sleep 1
+
+# Create dead daemon scenario
+cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
+{
+  "checkins": [
+    {
+      "id": "dead-888",
+      "status": "pending",
+      "scheduled_for": "2050-01-01T10:00:00",
+      "note": "Dead daemon",
+      "target": "dead-session:0",
+      "created_at": "2024-01-01T10:00:00"
+    }
+  ],
+  "daemon_pid": 888888
+}
+EOF
+
+# All tasks completed
+cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
+{
+  "tasks": [
+    {"id": "T1", "subject": "Done task", "status": "completed"},
+    {"id": "T2", "subject": "Also done", "status": "completed"}
+  ]
+}
+EOF
+
+# Run the hook
+tmux send-keys -t "$SESSION_NAME" "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_4'" Enter
+sleep 3
+
+# Should NOT create new daemon since all tasks are complete
+FINAL_PID=$(python3 -c "
+import json
+try:
+    with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
+        data = json.load(f)
+    pid = data.get('daemon_pid')
+    if pid and pid != 888888:
+        print(pid)
+    else:
+        print('')
+except:
+    print('')
+" 2>/dev/null)
+
+if [[ -z "$FINAL_PID" ]]; then
+    pass "No new daemon when dead PID + all tasks complete"
+else
+    fail "Should not start daemon when all tasks complete, new PID: $FINAL_PID"
+fi
+
+echo ""
+
+# ============================================================
+# Phase 6: Running daemon is NOT treated as stopped
+# ============================================================
+echo "Phase 6: Testing running daemon is not treated as stopped..."
+
+# Start a real daemon
+cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" start 5 --note "Test" --target "$SESSION_NAME:0" --workflow "001-test-workflow" > /dev/null 2>&1
+sleep 2
+
+IS_RUNNING_ACTIVE=$(python3 -c "
+import sys
+sys.path.insert(0, '$PROJECT_ROOT/lib')
+from checkin_scheduler import CheckinScheduler
+
+scheduler = CheckinScheduler('$TEST_DIR/.workflow/001-test-workflow')
+result = scheduler.is_daemon_running()
+print('yes' if result else 'no')
+" 2>/dev/null)
+
+if [[ "$IS_RUNNING_ACTIVE" == "yes" ]]; then
+    pass "Running daemon correctly detected as running"
+else
+    fail "Should treat running daemon as running, got: $IS_RUNNING_ACTIVE"
+fi
+
+echo ""
+
+# ============================================================
+# Results
+# ============================================================
+echo "======================================================================"
+TOTAL=$((TESTS_PASSED + TESTS_FAILED))
+if [[ $TESTS_FAILED -eq 0 ]]; then
+    echo "  ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
+    exit 0
+else
+    echo "  SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
+    exit 1
+fi

@@ -57,7 +57,7 @@ git init -q
 git config user.name "Test"
 git config user.email "test@test.com"
 
-# Initialize workflow with hooks
+# Initialize workflow with hooks (direct call - this is test SETUP)
 "$BIN_DIR/init-workflow.sh" "$TEST_DIR" "test-blocking" > /dev/null
 
 # Find the created workflow

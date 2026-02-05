@@ -13,6 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="$SCRIPT_DIR/../../bin"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-folder-path-$TEST_ID"
+SESSION_NAME="e2e-folder-path-$$"
 
 # Test counters
 TESTS_PASSED=0
@@ -29,6 +30,7 @@ fail() {
 }
 
 cleanup() {
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR"
 }
 
@@ -46,10 +48,11 @@ echo "Test directory: $TEST_DIR"
 echo ""
 
 mkdir -p "$TEST_DIR"
-cd "$TEST_DIR"
-git init -q
-git config user.name "Test"
-git config user.email "test@test.com"
+
+# Create tmux session and initialize git
+tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux send-keys -t "$SESSION_NAME" "git init -q && git config user.name 'Test' && git config user.email 'test@test.com'" Enter
+sleep 2
 
 # ============================================================
 # Test 1: Create workflow and check folder path
@@ -57,7 +60,8 @@ git config user.email "test@test.com"
 
 echo "Test 1: Creating workflow and checking folder path..."
 
-$BIN_DIR/init-workflow.sh "$TEST_DIR" "test-folder-path" > /dev/null
+tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/init-workflow.sh '$TEST_DIR' 'test-folder-path'" Enter
+sleep 3
 
 # Find the workflow directory
 WORKFLOW_DIR=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1)

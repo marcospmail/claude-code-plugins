@@ -13,6 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="workflow-init"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
+SESSION_NAME="e2e-wf-init-$$"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: Workflow Initialization                           ║"
@@ -35,6 +36,7 @@ fail() {
 cleanup() {
     echo ""
     echo "Cleaning up..."
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -47,6 +49,9 @@ echo "Phase 1: Creating test project..."
 mkdir -p "$TEST_DIR"
 echo "function test() { return true; }" > "$TEST_DIR/app.js"
 echo "  - Project: $TEST_DIR"
+
+# Create tmux session
+tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
 echo ""
 
 # ============================================================
@@ -54,7 +59,8 @@ echo ""
 # ============================================================
 echo "Phase 2: Running init-workflow.sh..."
 
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Add user authentication feature" > /dev/null 2>&1
+tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Add user authentication feature'" Enter
+sleep 3
 
 echo "  - Workflow initialized"
 echo ""

@@ -31,6 +31,7 @@ cleanup() {
     echo ""; echo "Cleaning up..."
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
+    rm -f /tmp/e2e-table-output-$$.txt /tmp/e2e-table-script-$$.py /tmp/e2e-tasktable-$$.txt 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -58,17 +59,22 @@ echo ""
 
 generate_table() {
     local tasks_file="$1"
-    python3 << PYEOF
-import json
+    local output_file="/tmp/e2e-table-output-$$.txt"
+    local script_file="/tmp/e2e-table-script-$$.py"
 
+    cat > "$script_file" << 'PYEOF'
+import json
+import sys
+
+tasks_file = sys.argv[1]
 try:
-    with open('$tasks_file', 'r') as f:
+    with open(tasks_file, 'r') as f:
         data = json.load(f)
 
     tasks = data.get('tasks', [])
     if not tasks:
         print("(no tasks)")
-        exit(0)
+        sys.exit(0)
 
     # Print table header
     print("| ID | Task | Agent | Status |")
@@ -95,6 +101,10 @@ try:
 except Exception as e:
     print(f"Error: {e}")
 PYEOF
+
+    tmux send-keys -t "$SESSION_NAME" "python3 '$script_file' '$tasks_file' > '$output_file' 2>&1" Enter
+    sleep 2
+    cat "$output_file" 2>/dev/null
 }
 
 # ============================================================
@@ -607,8 +617,10 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-# Run the actual tasks-table.sh script
-SCRIPT_OUTPUT=$("$BIN_DIR/tasks-table.sh" "$TEST_DIR" 2>/dev/null)
+# Run the actual tasks-table.sh script via tmux
+tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1" Enter
+sleep 2
+SCRIPT_OUTPUT=$(cat /tmp/e2e-tasktable-$$.txt 2>/dev/null)
 
 # Verify header
 if echo "$SCRIPT_OUTPUT" | grep -q "| ID | Task | Agent | Status |"; then
@@ -639,7 +651,9 @@ echo "Testing tasks-table.sh with missing tasks file..."
 
 rm -f "$TEST_DIR/.workflow/001-test-workflow/tasks.json"
 
-SCRIPT_OUTPUT=$("$BIN_DIR/tasks-table.sh" "$TEST_DIR" 2>/dev/null)
+tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1" Enter
+sleep 2
+SCRIPT_OUTPUT=$(cat /tmp/e2e-tasktable-$$.txt 2>/dev/null)
 
 if echo "$SCRIPT_OUTPUT" | grep -q "no tasks file found"; then
     pass "tasks-table.sh handles missing file gracefully"
@@ -660,7 +674,9 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-SCRIPT_OUTPUT=$("$BIN_DIR/tasks-table.sh" "$TEST_DIR" 2>/dev/null)
+tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1" Enter
+sleep 2
+SCRIPT_OUTPUT=$(cat /tmp/e2e-tasktable-$$.txt 2>/dev/null)
 
 if echo "$SCRIPT_OUTPUT" | grep -q "(no tasks)"; then
     pass "tasks-table.sh shows '(no tasks)' for empty array"
@@ -685,18 +701,14 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 EOF
 
 # Run inside the tmux session with WORKFLOW_NAME set
-SCRIPT_OUTPUT=$(tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/tasks-table.sh $TEST_DIR" Enter 2>/dev/null && sleep 1 && tmux capture-pane -t "$SESSION_NAME" -p 2>/dev/null | grep -A5 "ID.*Task.*Agent.*Status")
+tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1" Enter
+sleep 2
+SCRIPT_OUTPUT=$(cat /tmp/e2e-tasktable-$$.txt 2>/dev/null)
 
 if echo "$SCRIPT_OUTPUT" | grep -q "Env var test task"; then
     pass "tasks-table.sh reads workflow from tmux env"
 else
-    # Fallback: run directly (env var may not propagate in test)
-    SCRIPT_OUTPUT=$("$BIN_DIR/tasks-table.sh" "$TEST_DIR" 2>/dev/null)
-    if echo "$SCRIPT_OUTPUT" | grep -q "Env var test task"; then
-        pass "tasks-table.sh finds workflow via fallback"
-    else
-        fail "tasks-table.sh couldn't find workflow: $SCRIPT_OUTPUT"
-    fi
+    fail "tasks-table.sh couldn't find workflow: $SCRIPT_OUTPUT"
 fi
 
 # ============================================================

@@ -9,12 +9,11 @@
 # 3. The skill instructs using Task tool with Explore agent for codebase analysis
 # 4. The workflow creates proper context files
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="project-discovery"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
+SESSION_NAME="e2e-$TEST_NAME-$$"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: Project Discovery in yato-existing-project        ║"
@@ -34,12 +33,14 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 cleanup() {
     echo ""
     echo "Cleaning up..."
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # Setup test environment
 mkdir -p "$TEST_DIR"
+tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
 
 SKILL_FILE="$PROJECT_ROOT/skills/yato-existing-project/SKILL.md"
 
@@ -151,8 +152,9 @@ echo ""
 # Create a test project
 echo "function test() { return true; }" > "$TEST_DIR/app.js"
 
-# Run init-workflow.sh
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test project discovery" > /dev/null 2>&1
+# Run init-workflow.sh via tmux
+tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test project discovery'" Enter
+sleep 3
 
 # Get workflow name
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)

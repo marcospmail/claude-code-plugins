@@ -36,7 +36,8 @@ trap cleanup EXIT
 mkdir -p "$TEST_DIR"
 echo "test" > "$TEST_DIR/app.js"
 tmux new-session -d -s "$SESSION_NAME" -n "pm-checkins" -c "$TEST_DIR"
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Model test" > /dev/null 2>&1
+tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh $TEST_DIR 'Model test'" Enter
+sleep 3
 
 # Get workflow name and set it in the tmux session environment
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)

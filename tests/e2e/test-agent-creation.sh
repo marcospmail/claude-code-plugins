@@ -63,7 +63,7 @@ echo "function test() { return true; }" > "$TEST_DIR/app.js"
 # Create tmux session
 tmux new-session -d -s "$SESSION_NAME" -n "pm-checkins" -c "$TEST_DIR"
 
-# Initialize workflow
+# Initialize workflow (direct call - this is test SETUP, not testing a Claude skill)
 "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test agent creation feature" > /dev/null 2>&1
 
 # Get workflow name and set it in the tmux session environment

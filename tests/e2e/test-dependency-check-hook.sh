@@ -16,6 +16,8 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="dependency-check-hook"
+SESSION_NAME="e2e-deps-$$"
+TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: Dependency Check Hook                             ║"
@@ -36,8 +38,19 @@ fail() {
     TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
+cleanup() {
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    rm -rf "$TEST_DIR" 2>/dev/null || true
+    rm -f /tmp/e2e-deps-$$.txt /tmp/e2e-deps-missing-$$.txt 2>/dev/null || true
+}
+trap cleanup EXIT
+
 CHECK_DEPS_SCRIPT="$PROJECT_ROOT/hooks/scripts/check-deps.sh"
 HOOKS_JSON="$PROJECT_ROOT/hooks/hooks.json"
+
+# Setup tmux session
+mkdir -p "$TEST_DIR"
+tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
 
 # ============================================================
 # PHASE 1: File existence and permissions
@@ -124,7 +137,11 @@ echo ""
 echo "Phase 3: Testing script when tmux is installed..."
 
 # Test 10: Script outputs nothing when tmux is installed
-OUTPUT=$(bash "$CHECK_DEPS_SCRIPT" 2>&1)
+tmux send-keys -t "$SESSION_NAME" "bash '$CHECK_DEPS_SCRIPT' > /tmp/e2e-deps-$$.txt 2>&1; echo EXITCODE:\$? >> /tmp/e2e-deps-$$.txt" Enter
+sleep 2
+OUTPUT=$(grep -v "EXITCODE:" /tmp/e2e-deps-$$.txt 2>/dev/null)
+EXIT_CODE=$(grep "EXITCODE:" /tmp/e2e-deps-$$.txt 2>/dev/null | cut -d: -f2)
+
 if [[ -z "$OUTPUT" ]]; then
     pass "Script outputs nothing when tmux is installed"
 else
@@ -132,9 +149,7 @@ else
 fi
 
 # Test 11: Script exits 0 when tmux is installed
-bash "$CHECK_DEPS_SCRIPT" >/dev/null 2>&1
-EXIT_CODE=$?
-if [[ $EXIT_CODE -eq 0 ]]; then
+if [[ "$EXIT_CODE" == "0" ]]; then
     pass "Script exits 0 when tmux is installed"
 else
     fail "Script should exit 0 when tmux is installed, got exit code: $EXIT_CODE"
@@ -148,7 +163,9 @@ echo ""
 echo "Phase 4: Testing script when tmux is missing..."
 
 # Simulate tmux not being installed by modifying PATH
-MISSING_OUTPUT=$(PATH=/usr/bin:/bin bash "$CHECK_DEPS_SCRIPT" 2>&1)
+tmux send-keys -t "$SESSION_NAME" "PATH=/usr/bin:/bin bash '$CHECK_DEPS_SCRIPT' > /tmp/e2e-deps-missing-$$.txt 2>&1" Enter
+sleep 2
+MISSING_OUTPUT=$(cat /tmp/e2e-deps-missing-$$.txt 2>/dev/null)
 
 # Test 12: Script outputs JSON when tmux is missing
 if echo "$MISSING_OUTPUT" | jq empty 2>/dev/null; then

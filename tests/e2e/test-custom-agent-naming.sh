@@ -47,6 +47,9 @@ cleanup() {
     echo "Cleaning up..."
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
+    rm -f /tmp/e2e-init-$$.txt 2>/dev/null || true
+    rm -f /tmp/e2e-save-$$.txt 2>/dev/null || true
+    rm -f /tmp/e2e-create-$$.txt 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -61,8 +64,9 @@ echo "function test() { return true; }" > "$TEST_DIR/app.js"
 # Create tmux session
 tmux new-session -d -s "$SESSION_NAME" -n "orchestrator" -c "$TEST_DIR"
 
-# Initialize workflow
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test custom naming" > /dev/null 2>&1
+# Initialize workflow via tmux send-keys
+tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test custom naming' > /tmp/e2e-init-$$.txt 2>&1" Enter
+sleep 3
 
 # Get workflow name and set it in the tmux session environment
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
@@ -79,12 +83,13 @@ echo ""
 # ============================================================
 echo "Phase 2: Saving team structure (simulating PM workflow)..."
 
-# Source workflow utilities to use save_team_structure
-source "$PROJECT_ROOT/bin/workflow-utils.sh"
+# Run save_team_structure via tmux send-keys
+tmux send-keys -t "$SESSION_NAME" "source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' discoverer:qa:opus impl:developer:opus > /tmp/e2e-save-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-save-$$.txt" Enter
+sleep 3
 
-# PM calls save_team_structure first - this creates team.yml and agent folders
-SAVE_OUTPUT=$(save_team_structure "$TEST_DIR" discoverer:qa:opus impl:developer:opus 2>&1)
-SAVE_EXIT=$?
+# Read the output and exit code
+SAVE_OUTPUT=$(cat /tmp/e2e-save-$$.txt 2>/dev/null | grep -v "^EXIT:" || true)
+SAVE_EXIT=$(grep "^EXIT:" /tmp/e2e-save-$$.txt 2>/dev/null | cut -d: -f2 || echo "1")
 
 if [[ $SAVE_EXIT -eq 0 ]]; then
     pass "save_team_structure executed successfully"
@@ -101,9 +106,13 @@ echo ""
 echo "Phase 3: Creating team tmux windows..."
 echo "  Command: create-team.sh $TEST_DIR discoverer:qa:opus impl:developer:opus"
 
-# Create team with custom names - discoverer has role "qa" but custom name "discoverer"
-OUTPUT=$("$PROJECT_ROOT/bin/create-team.sh" "$TEST_DIR" discoverer:qa:opus impl:developer:opus 2>&1)
-CREATE_EXIT=$?
+# Create team with custom names via tmux send-keys
+tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/create-team.sh '$TEST_DIR' discoverer:qa:opus impl:developer:opus > /tmp/e2e-create-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-create-$$.txt" Enter
+sleep 10
+
+# Read the output and exit code
+OUTPUT=$(cat /tmp/e2e-create-$$.txt 2>/dev/null | grep -v "^EXIT:" || true)
+CREATE_EXIT=$(grep "^EXIT:" /tmp/e2e-create-$$.txt 2>/dev/null | cut -d: -f2 || echo "1")
 
 if [[ $CREATE_EXIT -eq 0 ]]; then
     pass "create-team.sh executed successfully"
@@ -112,8 +121,6 @@ else
     echo "$OUTPUT"
 fi
 
-# Wait for agents to initialize
-sleep 5
 echo ""
 
 # ============================================================

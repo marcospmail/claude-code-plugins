@@ -56,7 +56,8 @@ echo "test" > "$TEST_DIR/app.js"
 
 tmux new-session -d -s "$SESSION_NAME" -n "pm" -c "$TEST_DIR"
 
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test PM lookup" > /dev/null 2>&1
+tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test PM lookup'" Enter
+sleep 3
 
 WORKFLOW_NAME=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1 | xargs basename)
 WORKFLOW_PATH="$TEST_DIR/.workflow/$WORKFLOW_NAME"

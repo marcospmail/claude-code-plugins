@@ -56,13 +56,14 @@ echo "test" > "$TEST_DIR/app.js"
 
 tmux new-session -d -s "$SESSION_NAME" -n "pm" -c "$TEST_DIR"
 
-"$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test QA permissions" > /dev/null 2>&1
+tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test QA permissions'" Enter
+sleep 3
 
 WORKFLOW_NAME=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1 | xargs basename)
 WORKFLOW_PATH="$TEST_DIR/.workflow/$WORKFLOW_NAME"
 
-source "$PROJECT_ROOT/bin/workflow-utils.sh"
-save_team_structure "$TEST_DIR" qa:qa:sonnet > /dev/null 2>&1
+tmux send-keys -t "$SESSION_NAME" "source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' qa:qa:sonnet" Enter
+sleep 3
 
 echo "  - Workflow: $WORKFLOW_NAME"
 echo ""
