@@ -40,7 +40,7 @@ E2E tests must simulate the actual end-user experience. End users interact with 
 - Example: `tmux send-keys -t "$SESSION" "/yato-new-project" Enter`
 
 **DO NOT:**
-- Call scripts directly: ~~`uv run yato loop start ...`~~
+- Call scripts directly: ~~`uv run python lib/loop_manager.py start ...`~~
 - Call Python modules: ~~`python lib/loop_manager.py ...`~~
 - Call bash scripts: ~~`bash skills/loop/loop.sh ...`~~
 
@@ -60,7 +60,7 @@ sleep 15  # Wait for Claude to process and execute
 **Example - INCORRECT:**
 ```bash
 # This tests the script, NOT the user experience - NEVER DO THIS
-uv run yato loop start "check logs" --times 3
+uv run python lib/loop_manager.py start "check logs" --times 3
 ```
 
 ### Timing and Determinism

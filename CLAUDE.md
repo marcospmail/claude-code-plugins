@@ -82,35 +82,35 @@ All commands run via `uv` from the yato directory:
 cd ~/dev/tools/yato
 
 # Send message to agent
-uv run yato send <session:window> "message"
+uv run python lib/tmux_utils.py send <session:window> "message"
 
 # Notify PM
-uv run yato notify "[DONE] Task completed"
+uv run python lib/tmux_utils.py notify "[DONE] Task completed"
 
-# Check-in management
-uv run yato checkin schedule 15 --note "Progress check"
-uv run yato checkin cancel
-uv run yato checkin list
+# Check-in management (daemon-based)
+uv run python lib/checkin_scheduler.py start 15 --note "Progress check" --target "session:0" --workflow "001-name"
+uv run python lib/checkin_scheduler.py cancel --workflow "001-name"
+uv run python lib/checkin_scheduler.py status --workflow "001-name"
 
 # Task management
-uv run yato tasks assign developer "Implement feature X"
-uv run yato tasks table
-uv run yato tasks list
+uv run python lib/task_manager.py assign developer "Implement feature X"
+uv run python lib/task_manager.py table
+uv run python lib/task_manager.py list
 
 # Workflow operations
-uv run yato workflow list
-uv run yato workflow current
-uv run yato workflow create "Add feature Y"
+uv run python lib/workflow_ops.py list
+uv run python lib/workflow_ops.py current
+uv run python lib/workflow_ops.py create "Add feature Y"
 
 # Agent management
-uv run yato agent create myproject developer -p ~/myproject
-uv run yato agent init-files dev developer
+uv run python lib/agent_manager.py create myproject developer -p ~/myproject
+uv run python lib/agent_manager.py init-files dev developer
 
 # System status
-uv run yato status
-uv run yato status --json
+uv run python lib/claude_control.py status
+uv run python lib/claude_control.py status --json
 
-# Using orchestrator directly
+# Orchestrator
 uv run python lib/orchestrator.py init <session> -p <path>
 uv run python lib/orchestrator.py deploy <session> -p <path>
 uv run python lib/orchestrator.py status
@@ -181,7 +181,20 @@ agents:
 ```
 
 ### Check-in System
-Scheduled check-ins in `.workflow/<name>/checkins.json`:
+
+The check-in system uses a **single long-running daemon process** that:
+1. Runs in background, polling every 10 seconds
+2. Sends check-in messages to the PM at configured intervals
+3. Auto-stops when all tasks are completed
+4. Stores its PID in `checkins.json` for reliable control
+
+**Check-in lifecycle:**
+- Started by PM via `/schedule-checkin` or auto-started by `tasks-change-hook.py`
+- Daemon sends check-ins at the interval specified in `status.yml`
+- Cancelled via `/cancel-checkin` (kills the daemon process)
+- Auto-restarts via hook when tasks.json is edited and daemon is dead
+
+**checkins.json structure:**
 ```json
 {
   "checkins": [
@@ -191,9 +204,32 @@ Scheduled check-ins in `.workflow/<name>/checkins.json`:
       "scheduled_for": "2026-01-23T15:30:00",
       "note": "Check developer progress",
       "target": "myproject:0"
+    },
+    {
+      "id": "123457",
+      "status": "done",
+      "scheduled_for": "2026-01-23T15:45:00",
+      "completed_at": "2026-01-23T15:45:02",
+      "note": "Auto check-in",
+      "target": "myproject:0"
     }
-  ]
+  ],
+  "daemon_pid": 12345
 }
+```
+
+**Check-in statuses:** `pending`, `done`, `cancelled`, `stopped`, `resumed`
+
+**CLI Commands:**
+```bash
+# Start check-in daemon
+uv run python lib/checkin_scheduler.py start 5 --note "Progress check" --target "session:0" --workflow "001-name"
+
+# Cancel check-in daemon
+uv run python lib/checkin_scheduler.py cancel --workflow "001-name"
+
+# Check status
+uv run python lib/checkin_scheduler.py status --workflow "001-name"
 ```
 
 ### Loop System (Generic Repeating Prompts)
@@ -218,23 +254,25 @@ Stored in `.workflow/loops/<NNN-name>/meta.json`:
 
 **CLI Commands:**
 ```bash
-# Start a loop (must specify --times OR --for)
-uv run yato loop start "check logs" --session $SESSION --times 3
-uv run yato loop start "run tests" --session $SESSION --for 30m --every 5m
+# Start a loop (--times, --for, or neither for forever mode)
+uv run python lib/loop_manager.py start "check logs" --session $SESSION --times 3
+uv run python lib/loop_manager.py start "run tests" --session $SESSION --for 30m --every 5m
+uv run python lib/loop_manager.py start "monitor" --session $SESSION --every 10m  # forever
 
 # Cancel loops
-uv run yato loop cancel --all
-uv run yato loop cancel --session $SESSION
+uv run python lib/loop_manager.py cancel --all
+uv run python lib/loop_manager.py cancel --session $SESSION
 
 # List loops
-uv run yato loop list
-uv run yato loop list --status running
+uv run python lib/loop_manager.py list
+uv run python lib/loop_manager.py list --status running
 ```
 
 **Skill Usage:**
 ```
 /loop check the logs --times 3
 /loop run tests --every 5m --for 1h
+/loop monitor builds --forever --every 10m
 /loop --cancel
 ```
 
@@ -257,7 +295,7 @@ send_message("session:window", "Your message")
 
 Or via CLI:
 ```bash
-uv run yato send session:window "Your message"
+uv run python lib/tmux_utils.py send session:window "Your message"
 ```
 
 ### Agent → PM
