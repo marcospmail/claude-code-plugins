@@ -14,6 +14,7 @@ BIN_DIR="$SCRIPT_DIR/../../bin"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-folder-path-$TEST_ID"
 SESSION_NAME="e2e-folder-path-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 # Test counters
 TESTS_PASSED=0
@@ -30,7 +31,7 @@ fail() {
 }
 
 cleanup() {
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR"
 }
 
@@ -50,8 +51,8 @@ echo ""
 mkdir -p "$TEST_DIR"
 
 # Create tmux session and initialize git
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux send-keys -t "$SESSION_NAME" "git init -q && git config user.name 'Test' && git config user.email 'test@test.com'" Enter
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "git init -q && git config user.name 'Test' && git config user.email 'test@test.com'" Enter
 sleep 2
 
 # ============================================================
@@ -60,7 +61,7 @@ sleep 2
 
 echo "Test 1: Creating workflow and checking folder path..."
 
-tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/init-workflow.sh '$TEST_DIR' 'test-folder-path'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/init-workflow.sh '$TEST_DIR' 'test-folder-path'" Enter
 sleep 3
 
 # Find the workflow directory

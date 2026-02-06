@@ -14,6 +14,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="smart-naming-duplicates"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-test-dup-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: Smart Naming with Duplicate Roles                 ║"
@@ -39,7 +40,7 @@ fail() {
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -52,13 +53,13 @@ echo "Phase 1: Setting up test environment..."
 mkdir -p "$TEST_DIR"
 echo "function test() { return true; }" > "$TEST_DIR/app.js"
 
-tmux new-session -d -s "$SESSION_NAME" -n "pm-checkins" -c "$TEST_DIR"
-tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh $TEST_DIR 'Test smart naming duplicates'" Enter
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -n "pm-checkins" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh $TEST_DIR 'Test smart naming duplicates'" Enter
 sleep 3
 
 # Get workflow name and set it in the tmux session environment
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "$WORKFLOW_NAME"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "$WORKFLOW_NAME"
 AGENTS_YML="$TEST_DIR/.workflow/$WORKFLOW_NAME/agents.yml"
 
 echo "  - Session: $SESSION_NAME"
@@ -70,7 +71,7 @@ echo ""
 # ============================================================
 echo "Phase 2: Creating team with duplicate QA roles..."
 
-tmux send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $PROJECT_ROOT/bin/create-team.sh $TEST_DIR developer qa qa code-reviewer" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $PROJECT_ROOT/bin/create-team.sh $TEST_DIR developer qa qa code-reviewer" Enter
 
 # Wait for all 4 agents to be created
 sleep 35
@@ -85,7 +86,7 @@ echo "Phase 3: Verifying smart naming..."
 echo ""
 
 # Test window count
-WINDOWS=$(tmux list-windows -t "$SESSION_NAME" 2>/dev/null | wc -l | tr -d ' ')
+WINDOWS=$(tmux -L "$TMUX_SOCKET" list-windows -t "$SESSION_NAME" 2>/dev/null | wc -l | tr -d ' ')
 if [[ "$WINDOWS" -ge 5 ]]; then
     pass "Created 5 windows (PM + 4 agents)"
 else
@@ -95,7 +96,7 @@ fi
 # Test window names
 echo ""
 echo "Testing window names..."
-WINDOW_LIST=$(tmux list-windows -t "$SESSION_NAME" -F "#{window_index}:#{window_name}" 2>/dev/null)
+WINDOW_LIST=$(tmux -L "$TMUX_SOCKET" list-windows -t "$SESSION_NAME" -F "#{window_index}:#{window_name}" 2>/dev/null)
 
 if echo "$WINDOW_LIST" | grep -q "1:developer"; then
     pass "Window 1: 'developer' (single role, no number)"

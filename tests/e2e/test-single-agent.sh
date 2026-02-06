@@ -10,6 +10,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="single-agent"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-test-single-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: Single Agent Creation                             ║"
@@ -24,7 +25,7 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -32,21 +33,21 @@ trap cleanup EXIT
 # Setup
 mkdir -p "$TEST_DIR"
 echo "test" > "$TEST_DIR/app.js"
-tmux new-session -d -s "$SESSION_NAME" -n "pm-checkins" -c "$TEST_DIR"
-tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh $TEST_DIR 'Single agent test'" Enter
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -n "pm-checkins" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh $TEST_DIR 'Single agent test'" Enter
 sleep 3
 
 # Get workflow name and set it in the tmux session environment
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "$WORKFLOW_NAME"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "$WORKFLOW_NAME"
 AGENTS_YML="$TEST_DIR/.workflow/$WORKFLOW_NAME/agents.yml"
 
 # Create single qa agent
-tmux send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $PROJECT_ROOT/bin/create-team.sh $TEST_DIR qa" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $PROJECT_ROOT/bin/create-team.sh $TEST_DIR qa" Enter
 sleep 15
 
 # Should have 2 windows (PM + 1 agent)
-WINDOWS=$(tmux list-windows -t "$SESSION_NAME" 2>/dev/null | wc -l | tr -d ' ')
+WINDOWS=$(tmux -L "$TMUX_SOCKET" list-windows -t "$SESSION_NAME" 2>/dev/null | wc -l | tr -d ' ')
 if [[ "$WINDOWS" -eq 2 ]]; then
     pass "Created 2 windows (PM + 1 agent)"
 else
@@ -61,7 +62,7 @@ else
 fi
 
 # QA window should be window 1
-if tmux list-windows -t "$SESSION_NAME" -F "#{window_index}:#{window_name}" | grep -q "1:qa"; then
+if tmux -L "$TMUX_SOCKET" list-windows -t "$SESSION_NAME" -F "#{window_index}:#{window_name}" | grep -q "1:qa"; then
     pass "QA agent in window 1"
 else
     fail "QA should be in window 1"
