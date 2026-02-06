@@ -27,12 +27,13 @@ TEST_DIR_A="/tmp/e2e-wf-isolation-A-$TEST_ID"
 TEST_DIR_B="/tmp/e2e-wf-isolation-B-$TEST_ID"
 SESSION_A=""
 SESSION_B=""
+export TMUX_SOCKET="yato-e2e-test"
 
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    [[ -n "$SESSION_A" ]] && tmux kill-session -t "$SESSION_A" 2>/dev/null || true
-    [[ -n "$SESSION_B" ]] && tmux kill-session -t "$SESSION_B" 2>/dev/null || true
+    [[ -n "$SESSION_A" ]] && tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_A" 2>/dev/null || true
+    [[ -n "$SESSION_B" ]] && tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_B" 2>/dev/null || true
     rm -rf "$TEST_DIR_A" "$TEST_DIR_B" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -53,7 +54,7 @@ echo "Testing session naming format..."
 
 # Create workflow in project A
 cd "$TEST_DIR_A"
-WORKFLOW_A=$("$ORCHESTRATOR_ROOT/bin/init-workflow.sh" "$TEST_DIR_A" "Add feature X" 2>/dev/null | grep "^Workflow:" | awk '{print $2}')
+WORKFLOW_A=$(TMUX="" "$ORCHESTRATOR_ROOT/bin/init-workflow.sh" "$TEST_DIR_A" "Add feature X" 2>/dev/null | grep "^Workflow:" | awk '{print $2}')
 if [[ -z "$WORKFLOW_A" ]]; then
     WORKFLOW_A=$(ls -td "$TEST_DIR_A/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1 | xargs basename)
 fi
@@ -67,11 +68,11 @@ PROJECT_SLUG_A="e2e-wf-isolation-a-$TEST_ID"
 SESSION_A="${PROJECT_SLUG_A}_${WORKFLOW_A}"
 
 # Create tmux session with correct name and set WORKFLOW_NAME env var
-tmux new-session -d -s "$SESSION_A" -c "$TEST_DIR_A"
-tmux setenv -t "$SESSION_A" WORKFLOW_NAME "$WORKFLOW_A"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_A" -c "$TEST_DIR_A"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_A" WORKFLOW_NAME "$WORKFLOW_A"
 
 # Verify session was created
-if tmux has-session -t "$SESSION_A" 2>/dev/null; then
+if tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_A" 2>/dev/null; then
     pass "Session created with format {project}_{workflow}: $SESSION_A"
 else
     fail "Session was not created: $SESSION_A"
@@ -84,7 +85,7 @@ echo ""
 echo "Testing WORKFLOW_NAME env var..."
 
 # Read WORKFLOW_NAME from session environment
-WORKFLOW_NAME_READ=$(tmux showenv -t "$SESSION_A" WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
+WORKFLOW_NAME_READ=$(tmux -L "$TMUX_SOCKET" showenv -t "$SESSION_A" WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
 
 if [[ "$WORKFLOW_NAME_READ" == "$WORKFLOW_A" ]]; then
     pass "WORKFLOW_NAME env var is set correctly: $WORKFLOW_NAME_READ"
@@ -100,7 +101,7 @@ echo "Testing check-in scripts read from tmux env..."
 
 # Run schedule-checkin.sh inside the tmux session
 # First, cd to the project directory, then run the script
-tmux send-keys -t "$SESSION_A" "cd $TEST_DIR_A && $ORCHESTRATOR_ROOT/bin/schedule-checkin.sh 1 'Test checkin' $SESSION_A:0" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" "cd $TEST_DIR_A && $ORCHESTRATOR_ROOT/bin/schedule-checkin.sh 1 'Test checkin' $SESSION_A:0" Enter
 sleep 3
 
 # Verify checkins.json was created in the correct workflow folder
@@ -125,7 +126,7 @@ else
 fi
 
 # Test cancel-checkin.sh
-tmux send-keys -t "$SESSION_A" "$ORCHESTRATOR_ROOT/bin/cancel-checkin.sh" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" "$ORCHESTRATOR_ROOT/bin/cancel-checkin.sh" Enter
 sleep 1
 
 # Verify cancelled
@@ -149,26 +150,26 @@ echo ""
 echo "Testing concurrent workflow isolation..."
 
 # Create second workflow in same project
-WORKFLOW_A2=$("$ORCHESTRATOR_ROOT/bin/init-workflow.sh" "$TEST_DIR_A" "Second feature" 2>/dev/null | grep "^Workflow:" | awk '{print $2}')
+WORKFLOW_A2=$(TMUX="" "$ORCHESTRATOR_ROOT/bin/init-workflow.sh" "$TEST_DIR_A" "Second feature" 2>/dev/null | grep "^Workflow:" | awk '{print $2}')
 if [[ -z "$WORKFLOW_A2" ]]; then
     WORKFLOW_A2=$(ls -td "$TEST_DIR_A/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1 | xargs basename)
 fi
 
 # Create second session for same project but different workflow
 SESSION_A2="${PROJECT_SLUG_A}_${WORKFLOW_A2}"
-tmux new-session -d -s "$SESSION_A2" -c "$TEST_DIR_A"
-tmux setenv -t "$SESSION_A2" WORKFLOW_NAME "$WORKFLOW_A2"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_A2" -c "$TEST_DIR_A"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_A2" WORKFLOW_NAME "$WORKFLOW_A2"
 
 # Verify both sessions exist
-if tmux has-session -t "$SESSION_A" 2>/dev/null && tmux has-session -t "$SESSION_A2" 2>/dev/null; then
+if tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_A" 2>/dev/null && tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_A2" 2>/dev/null; then
     pass "Two sessions exist for same project with different workflows"
 else
     fail "Could not create both sessions"
 fi
 
 # Verify they have different WORKFLOW_NAME values
-WORKFLOW_1=$(tmux showenv -t "$SESSION_A" WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
-WORKFLOW_2=$(tmux showenv -t "$SESSION_A2" WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
+WORKFLOW_1=$(tmux -L "$TMUX_SOCKET" showenv -t "$SESSION_A" WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
+WORKFLOW_2=$(tmux -L "$TMUX_SOCKET" showenv -t "$SESSION_A2" WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
 
 if [[ "$WORKFLOW_1" != "$WORKFLOW_2" ]]; then
     pass "Sessions have different WORKFLOW_NAME values: $WORKFLOW_1 vs $WORKFLOW_2"
@@ -177,7 +178,7 @@ else
 fi
 
 # Schedule check-in in second session
-tmux send-keys -t "$SESSION_A2" "cd $TEST_DIR_A && $ORCHESTRATOR_ROOT/bin/schedule-checkin.sh 1 'Second workflow checkin' $SESSION_A2:0" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A2" "cd $TEST_DIR_A && $ORCHESTRATOR_ROOT/bin/schedule-checkin.sh 1 'Second workflow checkin' $SESSION_A2:0" Enter
 sleep 2
 
 # Verify checkins.json was created in SECOND workflow folder
@@ -202,7 +203,7 @@ else
 fi
 
 # Clean up second session
-tmux kill-session -t "$SESSION_A2" 2>/dev/null || true
+tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_A2" 2>/dev/null || true
 
 # ===========================================
 # Test 5: Error when no WORKFLOW_NAME set
@@ -212,12 +213,12 @@ echo "Testing error handling when no WORKFLOW_NAME..."
 
 # Create a session without WORKFLOW_NAME
 TEST_SESSION="e2e-no-workflow-$TEST_ID"
-tmux new-session -d -s "$TEST_SESSION" -c "$TEST_DIR_B"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$TEST_SESSION" -c "$TEST_DIR_B"
 
 # Run schedule-checkin.sh (should fail)
-ERROR_OUTPUT=$(tmux send-keys -t "$TEST_SESSION" "$ORCHESTRATOR_ROOT/bin/schedule-checkin.sh 1 'Should fail' $TEST_SESSION:0 2>&1; echo 'DONE'" Enter && sleep 2 && tmux capture-pane -t "$TEST_SESSION" -p)
+ERROR_OUTPUT=$(tmux -L "$TMUX_SOCKET" send-keys -t "$TEST_SESSION" "$ORCHESTRATOR_ROOT/bin/schedule-checkin.sh 1 'Should fail' $TEST_SESSION:0 2>&1; echo 'DONE'" Enter && sleep 2 && tmux -L "$TMUX_SOCKET" capture-pane -t "$TEST_SESSION" -p)
 
-tmux kill-session -t "$TEST_SESSION" 2>/dev/null || true
+tmux -L "$TMUX_SOCKET" kill-session -t "$TEST_SESSION" 2>/dev/null || true
 
 # Check if error message was shown
 if echo "$ERROR_OUTPUT" | grep -q "No WORKFLOW_NAME set"; then

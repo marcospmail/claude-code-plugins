@@ -20,6 +20,7 @@ TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 BIN_DIR="$PROJECT_ROOT/bin"
 LIB_DIR="$PROJECT_ROOT/lib"
 SESSION_NAME="e2e-tasks-chg-$TEST_ID"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: Tasks Change Hook - Auto-restart Check-ins"
@@ -51,7 +52,7 @@ except:
             kill -9 "$PID" 2>/dev/null || true
         fi
     fi
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -101,11 +102,11 @@ session: $SESSION_NAME
 EOF
 
 # Create tmux session
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
-tmux setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
 
-if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+if tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
     pass "Tmux session created"
 else
     fail "Failed to create tmux session"

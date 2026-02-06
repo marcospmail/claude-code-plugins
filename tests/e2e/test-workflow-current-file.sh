@@ -13,6 +13,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="workflow-current-file"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-current-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: .workflow/current File NOT Created                ║"
@@ -39,7 +40,7 @@ fail() {
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
     rm -f /tmp/e2e-wfcurrent-$$.txt 2>/dev/null || true
 }
@@ -53,12 +54,12 @@ echo "Phase 1: Setting up test environment..."
 mkdir -p "$TEST_DIR"
 
 # Create session and initialize git
-tmux new-session -d -s "$SESSION_NAME" -n "pm" -c "$TEST_DIR"
-tmux send-keys -t "$SESSION_NAME" "git init -q && git config user.name 'Test' && git config user.email 'test@test.com'" Enter
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -n "pm" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "git init -q && git config user.name 'Test' && git config user.email 'test@test.com'" Enter
 sleep 2
 
 # Initialize first workflow
-tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'First workflow'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'First workflow'" Enter
 sleep 3
 
 echo "  - First workflow initialized"
@@ -83,7 +84,7 @@ fi
 echo ""
 echo "Test 2: Creating second workflow (no conflict expected)..."
 
-tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Second workflow'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Second workflow'" Enter
 sleep 3
 
 # Count workflow folders
@@ -114,10 +115,10 @@ echo ""
 echo "Test 4: Testing tmux environment per-session isolation..."
 
 # Set workflow name in session
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-firstworkflow"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-firstworkflow"
 
 # Get it back
-RESULT=$(tmux showenv -t "$SESSION_NAME" WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
+RESULT=$(tmux -L "$TMUX_SOCKET" showenv -t "$SESSION_NAME" WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
 
 if [[ "$RESULT" == "001-firstworkflow" ]]; then
     pass "Tmux session has its own WORKFLOW_NAME env"
@@ -132,7 +133,7 @@ echo ""
 echo "Test 5: get_current_workflow discovers workflow folder outside tmux..."
 
 # Run get_current_workflow without TMUX context via send-keys
-tmux send-keys -t "$SESSION_NAME" "unset TMUX && source $PROJECT_ROOT/bin/workflow-utils.sh && get_current_workflow '$TEST_DIR' > /tmp/e2e-wfcurrent-$$.txt 2>&1; echo DONE" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "unset TMUX && source $PROJECT_ROOT/bin/workflow-utils.sh && get_current_workflow '$TEST_DIR' > /tmp/e2e-wfcurrent-$$.txt 2>&1; echo DONE" Enter
 sleep 3
 RESULT=$(cat /tmp/e2e-wfcurrent-$$.txt 2>/dev/null | grep -v "DONE" | head -1)
 
