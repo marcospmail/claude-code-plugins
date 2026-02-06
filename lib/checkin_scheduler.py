@@ -580,11 +580,19 @@ def run_daemon(
 
 # ==================== Module-level functions ====================
 
+def _tmux_cmd() -> list:
+    """Return tmux command with optional -L socket flag from TMUX_SOCKET env var."""
+    socket = os.environ.get("TMUX_SOCKET")
+    if socket:
+        return ["tmux", "-L", socket]
+    return ["tmux"]
+
+
 def get_workflow_from_tmux() -> Optional[str]:
     """Get the workflow name from tmux environment variable."""
     try:
         result = subprocess.run(
-            ["tmux", "showenv", "WORKFLOW_NAME"],
+            [*_tmux_cmd(), "showenv", "WORKFLOW_NAME"],
             capture_output=True,
             text=True,
             check=True,
