@@ -18,6 +18,7 @@ TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 BIN_DIR="$PROJECT_ROOT/bin"
 LIB_DIR="$PROJECT_ROOT/lib"
 SESSION_NAME="e2e-checkin-sched-$TEST_ID"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: Check-in Daemon Scheduling"
@@ -49,7 +50,7 @@ except:
             kill -9 "$PID" 2>/dev/null || true
         fi
     fi
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -79,8 +80,8 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 EOF
 
 # Create tmux session with WORKFLOW_NAME
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
 
 echo "Test directory: $TEST_DIR"
 echo "Session: $SESSION_NAME"
@@ -93,7 +94,7 @@ echo ""
 echo "Testing first daemon starts successfully..."
 
 # Run schedule-checkin from inside the session
-tmux send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 'First check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-1.txt" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 'First check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-1.txt" Enter
 sleep 3
 
 OUTPUT1=$(cat /tmp/checkin-test-1.txt 2>/dev/null)
@@ -155,7 +156,7 @@ echo ""
 echo "Testing duplicate daemon start is prevented..."
 
 # Try to start another daemon while one is running
-tmux send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 'Duplicate check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-2.txt" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 'Duplicate check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-2.txt" Enter
 sleep 3
 
 OUTPUT2=$(cat /tmp/checkin-test-2.txt 2>/dev/null)
@@ -191,7 +192,7 @@ echo ""
 echo "Testing daemon cancellation..."
 
 # Cancel the daemon
-tmux send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/cancel-checkin.sh 2>&1 | tee /tmp/checkin-test-3.txt" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/cancel-checkin.sh 2>&1 | tee /tmp/checkin-test-3.txt" Enter
 sleep 3
 
 OUTPUT3=$(cat /tmp/checkin-test-3.txt 2>/dev/null)
@@ -251,7 +252,7 @@ fi
 echo ""
 echo "Testing daemon start after cancel..."
 
-tmux send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 'After cancel check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-4.txt" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 'After cancel check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-4.txt" Enter
 sleep 3
 
 OUTPUT4=$(cat /tmp/checkin-test-4.txt 2>/dev/null)
@@ -304,11 +305,11 @@ echo ""
 echo "Testing long notes are stored completely..."
 
 # Cancel existing and start with a long note
-tmux send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/cancel-checkin.sh 2>&1" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/cancel-checkin.sh 2>&1" Enter
 sleep 2
 
 LONG_NOTE="Auto check-in (15 tasks remaining) - this is a longer note for testing"
-tmux send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 '$LONG_NOTE' $SESSION_NAME:0 2>&1" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 '$LONG_NOTE' $SESSION_NAME:0 2>&1" Enter
 sleep 3
 
 # Check that full note is in JSON

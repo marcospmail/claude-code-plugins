@@ -17,6 +17,7 @@ TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 BIN_DIR="$PROJECT_ROOT/bin"
 LIB_DIR="$PROJECT_ROOT/lib"
 SESSION_NAME="e2e-display-$TEST_ID"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: checkin-display.sh Output Formatting"
@@ -48,7 +49,7 @@ except:
             kill -9 "$PID" 2>/dev/null || true
         fi
     fi
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -60,7 +61,7 @@ trap cleanup EXIT
 mkdir -p "$TEST_DIR"
 
 # Create tmux session WITHOUT workflow first
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
 
 echo "Test directory: $TEST_DIR"
 echo "Session: $SESSION_NAME"
@@ -73,13 +74,18 @@ echo ""
 echo "Testing display without workflow..."
 
 # Start checkin-display.sh in the session
-tmux send-keys -t "$SESSION_NAME:0" "$BIN_DIR/checkin-display.sh" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "$BIN_DIR/checkin-display.sh" Enter
 
-# Wait for display to render
-sleep 5
-
-# Capture pane content
-PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+# Wait for display to render with retry loop (robust under load)
+WAITING_FOUND=false
+for i in {1..5}; do
+    sleep 3
+    PANE_CONTENT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+    if echo "$PANE_CONTENT" | grep -q "(waiting for workflow...)"; then
+        WAITING_FOUND=true
+        break
+    fi
+done
 
 # Check that script path is NOT in output (after initial display)
 if echo "$PANE_CONTENT" | grep -q "checkin-display.sh"; then
@@ -96,7 +102,7 @@ else
 fi
 
 # Check for "waiting for workflow" message
-if echo "$PANE_CONTENT" | grep -q "(waiting for workflow...)"; then
+if [[ "$WAITING_FOUND" == "true" ]]; then
     pass "Shows 'waiting for workflow' message"
 else
     fail "Missing 'waiting for workflow' message"
@@ -117,13 +123,13 @@ checkin_interval_minutes: 5
 EOF
 
 # Set WORKFLOW_NAME in tmux env
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test"
 
 # Wait for display to refresh with retry loop (more robust under load)
 NO_CHECKINS_FOUND=false
 for i in {1..5}; do
     sleep 3
-    PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+    PANE_CONTENT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
     if echo "$PANE_CONTENT" | grep -q "(no check-ins scheduled)"; then
         NO_CHECKINS_FOUND=true
         break
@@ -165,7 +171,7 @@ NOTE_FOUND=false
 DAEMON_FOUND=false
 for i in {1..8}; do
     sleep 2
-    PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+    PANE_CONTENT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
     if echo "$PANE_CONTENT" | grep -q "\[pending\]"; then
         PENDING_FOUND=true
     fi
@@ -229,21 +235,32 @@ cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
 }
 EOF
 
-# Wait for display to refresh
-sleep 6
-
-# Capture pane content
-PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+# Wait for display to refresh with retry loop (robust under load)
+OLD_CLEARED=false
+DONE_FOUND=false
+for i in {1..5}; do
+    sleep 3
+    PANE_CONTENT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+    if ! echo "$PANE_CONTENT" | grep -q "Test check-in note"; then
+        OLD_CLEARED=true
+    fi
+    if echo "$PANE_CONTENT" | grep -q "\[done\]"; then
+        DONE_FOUND=true
+    fi
+    if [[ "$OLD_CLEARED" == "true" && "$DONE_FOUND" == "true" ]]; then
+        break
+    fi
+done
 
 # Old content should be gone
-if echo "$PANE_CONTENT" | grep -q "Test check-in note"; then
-    fail "Old content still visible (display not clearing)"
-else
+if [[ "$OLD_CLEARED" == "true" ]]; then
     pass "Old content cleared properly"
+else
+    fail "Old content still visible (display not clearing)"
 fi
 
 # New content should be visible
-if echo "$PANE_CONTENT" | grep -q "\[done\]"; then
+if [[ "$DONE_FOUND" == "true" ]]; then
     pass "New [done] status visible"
 else
     fail "New [done] status not visible"
@@ -259,13 +276,18 @@ echo "Testing pane title updates..."
 # Set interval in status.yml (the single source of truth)
 sed -i '' 's/checkin_interval_minutes:.*/checkin_interval_minutes: 5/' "$TEST_DIR/.workflow/001-test/status.yml"
 
-# Wait for title update
-sleep 4
+# Wait for title update with retry loop (robust under load)
+TITLE_FOUND=false
+for i in {1..5}; do
+    sleep 3
+    PANE_TITLE=$(tmux -L "$TMUX_SOCKET" display-message -t "$SESSION_NAME:0" -p '#{pane_title}' 2>/dev/null)
+    if echo "$PANE_TITLE" | grep -q "every 5m"; then
+        TITLE_FOUND=true
+        break
+    fi
+done
 
-# Get pane title
-PANE_TITLE=$(tmux display-message -t "$SESSION_NAME:0" -p '#{pane_title}' 2>/dev/null)
-
-if echo "$PANE_TITLE" | grep -q "every 5m"; then
+if [[ "$TITLE_FOUND" == "true" ]]; then
     pass "Pane title shows interval from status.yml"
 else
     fail "Pane title missing interval: $PANE_TITLE"
@@ -294,19 +316,21 @@ cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
 }
 EOF
 
-sleep 4
+# Wait for display to show dead daemon with retry loop (robust under load)
+DEAD_FOUND=false
+for i in {1..5}; do
+    sleep 3
+    PANE_CONTENT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+    if echo "$PANE_CONTENT" | grep -q "DEAD\|NO DAEMON"; then
+        DEAD_FOUND=true
+        break
+    fi
+done
 
-PANE_CONTENT=$(tmux capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
-
-if echo "$PANE_CONTENT" | grep -q "(DEAD)\|(NO DAEMON)"; then
+if [[ "$DEAD_FOUND" == "true" ]]; then
     pass "Shows dead daemon indicator"
 else
-    # Check for NO DAEMON warning on pending
-    if echo "$PANE_CONTENT" | grep -q "NO DAEMON"; then
-        pass "Shows NO DAEMON warning"
-    else
-        fail "Should show dead daemon or NO DAEMON warning"
-    fi
+    fail "Should show dead daemon or NO DAEMON warning"
 fi
 
 # ============================================================

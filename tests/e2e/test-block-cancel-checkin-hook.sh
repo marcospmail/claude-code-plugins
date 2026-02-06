@@ -18,6 +18,7 @@ BIN_DIR="$PROJECT_ROOT/bin"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-cancel-hook-$TEST_ID"
 
+export TMUX_SOCKET="yato-e2e-test"
 # Session names
 SESSION_PM="e2e-cancel-pm-$TEST_ID"
 SESSION_DEV="e2e-cancel-dev-$TEST_ID"
@@ -39,9 +40,9 @@ fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_PM" 2>/dev/null || true
-    tmux kill-session -t "$SESSION_DEV" 2>/dev/null || true
-    tmux kill-session -t "$SESSION_QA" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_PM" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_DEV" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_QA" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -58,7 +59,7 @@ git config user.name "Test"
 git config user.email "test@test.com"
 
 # Initialize workflow with hooks (direct call - this is test SETUP)
-"$BIN_DIR/init-workflow.sh" "$TEST_DIR" "test-blocking" > /dev/null
+TMUX="" "$BIN_DIR/init-workflow.sh" "$TEST_DIR" "test-blocking" > /dev/null
 
 # Find the created workflow
 WORKFLOW_DIR=$(ls -td "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1)
@@ -79,14 +80,14 @@ echo ""
 echo "Creating tmux sessions for agents..."
 
 # Create tmux sessions
-tmux new-session -d -s "$SESSION_PM" -c "$TEST_DIR"
-tmux new-session -d -s "$SESSION_DEV" -c "$TEST_DIR"
-tmux new-session -d -s "$SESSION_QA" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_PM" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_DEV" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_QA" -c "$TEST_DIR"
 
 # Get the actual session IDs that tmux uses
-PM_SESSION_ID=$(tmux display-message -t "$SESSION_PM" -p '#{session_id}')
-DEV_SESSION_ID=$(tmux display-message -t "$SESSION_DEV" -p '#{session_id}')
-QA_SESSION_ID=$(tmux display-message -t "$SESSION_QA" -p '#{session_id}')
+PM_SESSION_ID=$(tmux -L "$TMUX_SOCKET" display-message -t "$SESSION_PM" -p '#{session_id}')
+DEV_SESSION_ID=$(tmux -L "$TMUX_SOCKET" display-message -t "$SESSION_DEV" -p '#{session_id}')
+QA_SESSION_ID=$(tmux -L "$TMUX_SOCKET" display-message -t "$SESSION_QA" -p '#{session_id}')
 
 echo "  PM session: $SESSION_PM (id: $PM_SESSION_ID)"
 echo "  Dev session: $SESSION_DEV (id: $DEV_SESSION_ID)"

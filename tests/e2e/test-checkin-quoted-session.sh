@@ -15,6 +15,7 @@ TEST_NAME="checkin-quoted-session"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 SESSION_NAME="e2e-quoted-$TEST_ID"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: Checkin Quoted Session + Daemon PID Tracking"
@@ -46,7 +47,7 @@ except:
             kill -9 "$PID" 2>/dev/null || true
         fi
     fi
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -62,11 +63,11 @@ echo "Phase 1: Setting up test environment..."
 mkdir -p "$TEST_DIR/.workflow/001-test-workflow"
 
 # Create tmux session
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
-tmux setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
 
-if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+if tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
     pass "Tmux session created"
 else
     fail "Failed to create tmux session"
@@ -123,7 +124,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 EOF
 
 # Run the hook via tmux to simulate real execution environment
-tmux send-keys -t "$SESSION_NAME" "cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE'" Enter
 sleep 3
 
 # Check that a new daemon was started and pending check-in was created
@@ -189,7 +190,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
 EOF
 
 # Run the hook
-tmux send-keys -t "$SESSION_NAME" "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_2'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_2'" Enter
 sleep 3
 
 PENDING_TARGET2=$(python3 -c "
@@ -276,7 +277,7 @@ else
 fi
 
 # Run the hook - should start new daemon since the PID is dead
-tmux send-keys -t "$SESSION_NAME" "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_3'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_3'" Enter
 sleep 4
 
 # Check that a new daemon PID was set
@@ -339,7 +340,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 EOF
 
 # Run the hook
-tmux send-keys -t "$SESSION_NAME" "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_4'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_4'" Enter
 sleep 3
 
 # Should NOT create new daemon since all tasks are complete

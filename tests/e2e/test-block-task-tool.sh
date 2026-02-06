@@ -31,6 +31,7 @@ TEST_NAME="block-task-tool"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 SESSION_NAME="e2e-task-block-$TEST_ID"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: Block Task Tool Hook"
@@ -45,7 +46,7 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -490,9 +491,9 @@ echo ""
 echo "E2E Test Phase 1: Testing PM blocked via real Claude session..."
 
 # Create tmux session
-tmux new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
 
-if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+if ! tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
     fail "Failed to create tmux session"
     exit 1
 fi
@@ -500,10 +501,10 @@ fi
 pass "Tmux session created"
 
 # Set WORKFLOW_NAME at session level (needed for workflow path discovery)
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
 
 # Export env vars directly in shell and start Claude (most reliable approach)
-tmux send-keys -t "$SESSION_NAME" "export AGENT_ROLE=pm AGENT_NAME=pm WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "export AGENT_ROLE=pm AGENT_NAME=pm WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter
 
 pass "Started Claude with AGENT_ROLE=pm"
 
@@ -511,7 +512,7 @@ echo "Waiting for Claude to initialize..."
 sleep 12
 
 # Verify Claude started
-OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
 if echo "$OUTPUT" | grep -q "❯\|›\|>"; then
     pass "Claude CLI started (prompt visible)"
 else
@@ -522,15 +523,15 @@ fi
 
 # Send prompt that would trigger Task tool usage
 echo "Sending request to use Task tool..."
-tmux send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
 sleep 1
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 
 echo "Waiting for Claude to process (60 seconds)..."
 sleep 60
 
 # Capture output
-PM_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
+PM_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
 
 echo ""
 echo "Debug - Claude response (last 30 lines):"
@@ -546,7 +547,7 @@ fi
 
 # Kill session and create new one for next test (cleanest approach)
 echo "Stopping session for next test..."
-tmux kill-session -t "$SESSION_NAME" 2>/dev/null
+tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null
 
 echo ""
 
@@ -556,18 +557,18 @@ echo ""
 echo "E2E Test Phase 2: Testing developer blocked via real Claude session..."
 
 # Create fresh tmux session for developer test
-tmux new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
 
-if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+if ! tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
     fail "Failed to create tmux session for developer test"
     exit 1
 fi
 
 # Set WORKFLOW_NAME at session level (needed for workflow path discovery)
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
 
 # Export env vars and start Claude
-tmux send-keys -t "$SESSION_NAME" "export AGENT_ROLE=developer AGENT_NAME=developer WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "export AGENT_ROLE=developer AGENT_NAME=developer WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter
 
 pass "Started Claude with AGENT_ROLE=developer"
 
@@ -575,7 +576,7 @@ echo "Waiting for Claude to initialize..."
 sleep 12
 
 # Verify Claude started
-OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
 if echo "$OUTPUT" | grep -q "❯\|›\|>"; then
     pass "Claude CLI started (prompt visible)"
 else
@@ -584,15 +585,15 @@ fi
 
 # Send same Task tool request
 echo "Sending request to use Task tool..."
-tmux send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
 sleep 1
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 
 echo "Waiting for Claude to process (60 seconds)..."
 sleep 60
 
 # Capture output
-DEV_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
+DEV_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
 
 echo ""
 echo "Debug - Claude response (last 30 lines):"
@@ -608,7 +609,7 @@ fi
 
 # Kill session and create new one for next test
 echo "Stopping session for next test..."
-tmux kill-session -t "$SESSION_NAME" 2>/dev/null
+tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null
 
 echo ""
 
@@ -618,15 +619,15 @@ echo ""
 echo "E2E Test Phase 3: Testing orchestrator allowed via real Claude session..."
 
 # Create fresh tmux session for orchestrator test (no AGENT_ROLE = orchestrator)
-tmux new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
 
-if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+if ! tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
     fail "Failed to create tmux session for orchestrator test"
     exit 1
 fi
 
 # Start Claude WITHOUT any AGENT_ROLE (simulates orchestrator)
-tmux send-keys -t "$SESSION_NAME" "export WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "export WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter
 
 pass "Started Claude with no AGENT_ROLE (orchestrator)"
 
@@ -634,7 +635,7 @@ echo "Waiting for Claude to initialize..."
 sleep 12
 
 # Verify Claude started
-OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
 if echo "$OUTPUT" | grep -q "❯\|›\|>"; then
     pass "Claude CLI started (prompt visible)"
 else
@@ -643,15 +644,15 @@ fi
 
 # Send Task tool request
 echo "Sending request to use Task tool..."
-tmux send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
 sleep 1
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 
 echo "Waiting for Claude to process (60 seconds)..."
 sleep 60
 
 # Capture output
-ORCH_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
+ORCH_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
 
 echo ""
 echo "Debug - Claude response (last 30 lines):"

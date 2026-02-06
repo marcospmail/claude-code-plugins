@@ -15,6 +15,7 @@ TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 BIN_DIR="$PROJECT_ROOT/bin"
 SESSION_NAME="e2e-checkin-msg-$TEST_ID"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: Check-in Message PM Reminders"
@@ -29,7 +30,7 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
     # Kill any pending check-in background processes
     pkill -f "schedule-checkin.*$TEST_DIR" 2>/dev/null || true
@@ -64,11 +65,11 @@ echo '{"checkins": []}' > "$TEST_DIR/.workflow/001-test-workflow/checkins.json"
 
 # Create tmux session with WORKFLOW_NAME env var
 # Use larger window size to capture full messages
-tmux new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
 
 # Verify session created
-if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+if ! tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
     fail "Failed to create tmux session"
     exit 1
 fi
@@ -76,7 +77,7 @@ fi
 pass "Tmux session created: $SESSION_NAME"
 
 # Start Claude in the session (tmux+Claude pattern)
-tmux send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
 
 # Wait for Claude to initialize
 echo "  - Waiting for Claude to initialize..."
@@ -91,12 +92,12 @@ echo ""
 echo "Phase 1: Triggering check-in..."
 
 # Clear the pane first
-tmux send-keys -t "$SESSION_NAME" "clear" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "clear" Enter
 sleep 1
 
 # Run schedule-checkin with a very short interval (will execute after 1 second for testing)
 # We use a custom script to send message immediately for testing
-tmux send-keys -t "$SESSION_NAME" "cd $TEST_DIR" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "cd $TEST_DIR" Enter
 sleep 1
 
 # Directly call send-message.sh with the check-in message format to test immediately
@@ -111,7 +112,7 @@ CHECKIN_MSG="Time for check-in! (\$NOTE)
 • If user says 'skip it', task stays BLOCKED (not completed)"
 
 # Send the message directly using send-message.sh
-tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/send-message.sh '$SESSION_NAME:0' 'Time for check-in! ($NOTE)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/send-message.sh '$SESSION_NAME:0' 'Time for check-in! ($NOTE)
 
 ⚠️ PM REMINDERS:
 • DELEGATE work to agents - do NOT implement/code yourself
@@ -122,7 +123,7 @@ tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/send-message.sh '$SESSION_NAME:0' 'T
 sleep 3
 
 # Capture pane output
-OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
 
 echo "Debug - Captured output:"
 echo "$OUTPUT"
@@ -194,13 +195,13 @@ echo ""
 echo "Phase 5: Testing schedule-checkin.sh directly..."
 
 # Have Claude run schedule-checkin.sh (tmux+Claude pattern)
-tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/schedule-checkin.sh 1 'Test note' '$SESSION_NAME:0'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/schedule-checkin.sh 1 'Test note' '$SESSION_NAME:0'" Enter
 
 # Wait for execution
 sleep 5
 
 # Capture output from Claude's pane
-SCHEDULE_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -30 2>/dev/null)
+SCHEDULE_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -30 2>/dev/null)
 
 echo "Schedule output (via Claude):"
 echo "$SCHEDULE_OUTPUT" | tail -15
@@ -224,7 +225,7 @@ echo ""
 echo "Phase 6: Testing send-message.sh with multiline content..."
 
 # Clear pane
-tmux send-keys -t "$SESSION_NAME" "clear" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "clear" Enter
 sleep 1
 
 # Test multiline message - have Claude run send-message.sh (tmux+Claude pattern)
@@ -233,13 +234,13 @@ Line 2: Content
 Line 3: More content"
 
 # Send the command through Claude (escape quotes for the message)
-tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/send-message.sh '$SESSION_NAME:0' 'Line 1: Header
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/send-message.sh '$SESSION_NAME:0' 'Line 1: Header
 Line 2: Content
 Line 3: More content'" Enter
 
 sleep 3
 
-OUTPUT2=$(tmux capture-pane -t "$SESSION_NAME" -p -S -20 2>/dev/null)
+OUTPUT2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -20 2>/dev/null)
 
 if echo "$OUTPUT2" | grep -q "Line 1\|Line 2\|Line 3"; then
     pass "send-message.sh handles multiline messages"

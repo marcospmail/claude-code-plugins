@@ -15,6 +15,7 @@ TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 BIN_DIR="$PROJECT_ROOT/bin"
 SESSION_NAME="e2e-checkin-int-$TEST_ID"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: Check-in and tasks.json Integration"
@@ -29,7 +30,7 @@ fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
     # Kill any pending check-in background processes
     pkill -f "schedule-checkin.*$TEST_DIR" 2>/dev/null || true
@@ -49,8 +50,8 @@ checkin_interval_minutes: 1
 EOF
 
 # Create tmux session with WORKFLOW_NAME env var
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
 
 echo "Test directory: $TEST_DIR"
 echo "Session: $SESSION_NAME"
@@ -103,7 +104,7 @@ echo "Testing check-in scheduling with incomplete tasks..."
 echo '{"checkins": []}' > "$TEST_DIR/.workflow/001-test-workflow/checkins.json"
 
 # Run schedule-checkin from within tmux session
-tmux send-keys -t "$SESSION_NAME" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 'Test checkin' '$SESSION_NAME:0'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 'Test checkin' '$SESSION_NAME:0'" Enter
 sleep 2
 
 # Check that checkin was scheduled

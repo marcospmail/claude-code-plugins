@@ -18,6 +18,7 @@ TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 BIN_DIR="$PROJECT_ROOT/bin"
 LIB_DIR="$PROJECT_ROOT/lib"
 SESSION_NAME="e2e-daemon-life-$TEST_ID"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: Check-in Daemon Lifecycle"
@@ -56,7 +57,7 @@ cleanup() {
     if [[ -n "$PID" ]]; then
         kill -9 "$PID" 2>/dev/null || true
     fi
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -77,11 +78,11 @@ EOF
 echo '{"checkins": [], "daemon_pid": null}' > "$TEST_DIR/.workflow/001-test/checkins.json"
 
 # Create tmux session with WORKFLOW_NAME
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test"
 
 # Set YATO_PATH for the hook
-tmux setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
 
 echo "Test directory: $TEST_DIR"
 echo "Session: $SESSION_NAME"
