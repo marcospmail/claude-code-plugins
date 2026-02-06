@@ -10,6 +10,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="send-message"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-test-msg-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: send-message.sh Functionality                     ║"
@@ -24,22 +25,22 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # Setup
 mkdir -p "$TEST_DIR"
-tmux new-session -d -s "$SESSION_NAME" -n "window0" -c "$TEST_DIR"
-tmux new-window -t "$SESSION_NAME" -n "window1" -c "$TEST_DIR"
-tmux new-window -t "$SESSION_NAME" -n "window2" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -n "window0" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "window1" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "window2" -c "$TEST_DIR"
 
 # Disable flow control in all windows so Ctrl+S (stash) doesn't freeze shells
 # Note: In bash, Ctrl+S triggers forward-search-history, not Claude's stash
-tmux send-keys -t "$SESSION_NAME:0" "stty -ixon" Enter
-tmux send-keys -t "$SESSION_NAME:1" "stty -ixon" Enter
-tmux send-keys -t "$SESSION_NAME:2" "stty -ixon" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "stty -ixon" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "stty -ixon" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:2" "stty -ixon" Enter
 sleep 2
 
 echo "Testing send-message to different windows..."
@@ -49,7 +50,7 @@ echo ""
 MSG1="TEST_MSG_WIN0_$(date +%s)"
 "$PROJECT_ROOT/bin/send-message.sh" "$SESSION_NAME:0" "$MSG1"
 sleep 2
-OUTPUT0=$(tmux capture-pane -t "$SESSION_NAME:0" -p)
+OUTPUT0=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p)
 if echo "$OUTPUT0" | grep -q "$MSG1"; then
     pass "Message delivered to window 0"
 else
@@ -60,7 +61,7 @@ fi
 MSG2="TEST_MSG_WIN1_$(date +%s)"
 "$PROJECT_ROOT/bin/send-message.sh" "$SESSION_NAME:1" "$MSG2"
 sleep 2
-OUTPUT1=$(tmux capture-pane -t "$SESSION_NAME:1" -p)
+OUTPUT1=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
 if echo "$OUTPUT1" | grep -q "$MSG2"; then
     pass "Message delivered to window 1"
 else
@@ -71,7 +72,7 @@ fi
 MSG3="TEST_MSG_WIN2_$(date +%s)"
 "$PROJECT_ROOT/bin/send-message.sh" "$SESSION_NAME:2" "$MSG3"
 sleep 2
-OUTPUT2=$(tmux capture-pane -t "$SESSION_NAME:2" -p)
+OUTPUT2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:2" -p)
 if echo "$OUTPUT2" | grep -q "$MSG3"; then
     pass "Message delivered to window 2"
 else
@@ -89,7 +90,7 @@ fi
 SPECIAL_MSG="Test with 'quotes' and \"double quotes\""
 "$PROJECT_ROOT/bin/send-message.sh" "$SESSION_NAME:0" "$SPECIAL_MSG"
 sleep 2
-OUTPUT_SPECIAL=$(tmux capture-pane -t "$SESSION_NAME:0" -p)
+OUTPUT_SPECIAL=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p)
 if echo "$OUTPUT_SPECIAL" | grep -q "quotes"; then
     pass "Special characters handled correctly"
 else

@@ -13,6 +13,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="notify-pm"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-test-notify-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: notify-pm.sh Communication                        ║"
@@ -35,7 +36,7 @@ fail() {
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -48,8 +49,8 @@ echo "Phase 1: Setting up test environment..."
 mkdir -p "$TEST_DIR"
 
 # Create tmux session with 2 panes in window 0
-tmux new-session -d -s "$SESSION_NAME" -n "pm-checkins" -c "$TEST_DIR"
-tmux split-window -t "$SESSION_NAME:0" -v -p 50 -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -n "pm-checkins" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -v -p 50 -c "$TEST_DIR"
 
 # Pane 0 = check-ins display, Pane 1 = PM
 echo "  - Session: $SESSION_NAME"
@@ -67,12 +68,12 @@ TEST_MSG="TEST_MESSAGE_$(date +%s)"
 
 # Run notify-pm.sh from within the tmux session (pane 1)
 # It should detect session and send to session:0.1
-tmux send-keys -t "$SESSION_NAME:0.1" "$PROJECT_ROOT/bin/notify-pm.sh '[DONE] $TEST_MSG'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.1" "$PROJECT_ROOT/bin/notify-pm.sh '[DONE] $TEST_MSG'" Enter
 
 sleep 2
 
 # Capture pane 1 output to see if message was echoed
-PANE1_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME:0.1" -p)
+PANE1_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0.1" -p)
 
 # Check if notify-pm.sh ran without error (no "Error:" in output)
 if echo "$PANE1_OUTPUT" | grep -q "Error:"; then
@@ -95,9 +96,9 @@ echo ""
 echo "Phase 3: Testing message types..."
 
 # Test BLOCKED message
-tmux send-keys -t "$SESSION_NAME:0.1" "$PROJECT_ROOT/bin/notify-pm.sh '[BLOCKED] Need database access'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.1" "$PROJECT_ROOT/bin/notify-pm.sh '[BLOCKED] Need database access'" Enter
 sleep 1
-BLOCKED_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME:0.1" -p)
+BLOCKED_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0.1" -p)
 if echo "$BLOCKED_OUTPUT" | grep -q "BLOCKED"; then
     pass "BLOCKED message type works"
 else
@@ -105,9 +106,9 @@ else
 fi
 
 # Test HELP message
-tmux send-keys -t "$SESSION_NAME:0.1" "$PROJECT_ROOT/bin/notify-pm.sh '[HELP] How do I configure X?'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.1" "$PROJECT_ROOT/bin/notify-pm.sh '[HELP] How do I configure X?'" Enter
 sleep 1
-HELP_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME:0.1" -p)
+HELP_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0.1" -p)
 if echo "$HELP_OUTPUT" | grep -q "HELP"; then
     pass "HELP message type works"
 else
@@ -115,9 +116,9 @@ else
 fi
 
 # Test STATUS message
-tmux send-keys -t "$SESSION_NAME:0.1" "$PROJECT_ROOT/bin/notify-pm.sh '[STATUS] 50% complete'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.1" "$PROJECT_ROOT/bin/notify-pm.sh '[STATUS] 50% complete'" Enter
 sleep 1
-STATUS_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME:0.1" -p)
+STATUS_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0.1" -p)
 if echo "$STATUS_OUTPUT" | grep -q "STATUS"; then
     pass "STATUS message type works"
 else
@@ -131,16 +132,16 @@ echo ""
 echo "Phase 4: Testing notify-pm from agent window..."
 
 # Create an agent window
-tmux new-window -t "$SESSION_NAME" -n "developer" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "developer" -c "$TEST_DIR"
 sleep 1
 
 # Send notification from agent window (window 1)
 AGENT_MSG="AGENT_TEST_$(date +%s)"
-tmux send-keys -t "$SESSION_NAME:1" "$PROJECT_ROOT/bin/notify-pm.sh '[DONE] $AGENT_MSG'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "$PROJECT_ROOT/bin/notify-pm.sh '[DONE] $AGENT_MSG'" Enter
 sleep 2
 
 # Check output in agent window (no errors)
-AGENT_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME:1" -p)
+AGENT_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
 if echo "$AGENT_OUTPUT" | grep -q "Error:"; then
     fail "Agent window notification should not produce errors"
 else
@@ -153,7 +154,7 @@ if echo "$AGENT_OUTPUT" | grep -q -E "notify-pm.sh|Message sent|$AGENT_MSG"; the
 else
     # Could be timing issue, wait and retry
     sleep 1
-    AGENT_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME:1" -p -S -50)
+    AGENT_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p -S -50)
     if echo "$AGENT_OUTPUT" | grep -q -E "notify-pm.sh|Message sent|$AGENT_MSG"; then
         pass "Agent window notification command was executed"
     else

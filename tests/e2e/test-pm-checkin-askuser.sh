@@ -9,6 +9,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+export TMUX_SOCKET="yato-e2e-test"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 echo "╔══════════════════════════════════════════════════════════════╗"

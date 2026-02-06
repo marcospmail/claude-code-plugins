@@ -17,6 +17,7 @@ TEST_NAME="pm-file-access"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 SESSION_NAME="e2e-pm-access-$TEST_ID"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: PM File Access Guard Hook"
@@ -31,7 +32,7 @@ fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -87,10 +88,10 @@ print("Hello")
 EOF
 
 # Create tmux session with AGENT_ROLE=pm
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux setenv -t "$SESSION_NAME" AGENT_ROLE "pm"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" AGENT_ROLE "pm"
 
-if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+if tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
     pass "Tmux session created with AGENT_ROLE=pm"
 else
     fail "Failed to create tmux session"
@@ -260,7 +261,7 @@ echo ""
 echo "Phase 7: Testing with tmux AGENT_ROLE environment..."
 
 # Run from within tmux session
-tmux send-keys -t "$SESSION_NAME" "cd $TEST_DIR" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "cd $TEST_DIR" Enter
 sleep 1
 
 # Create a test script that runs the hook
@@ -272,11 +273,11 @@ EOF
 chmod +x "$TEST_DIR/test-hook.sh"
 
 # Run the test from within tmux
-tmux send-keys -t "$SESSION_NAME" "./test-hook.sh '$HOOK_SCRIPT'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "./test-hook.sh '$HOOK_SCRIPT'" Enter
 sleep 2
 
 # Capture output
-OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p 2>/dev/null | tail -20)
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null | tail -20)
 
 if echo "$OUTPUT" | grep -q "block\|PM FILE ACCESS DENIED"; then
     pass "Hook blocks PM when AGENT_ROLE set via tmux env"
