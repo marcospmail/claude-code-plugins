@@ -7,8 +7,11 @@
 # Checks daemon PID to show accurate running/stopped status.
 # Re-checks tmux env on each loop iteration (handles workflow creation after startup).
 
+# Support isolated tmux socket (used by e2e tests)
+TMUX_FLAGS="${TMUX_SOCKET:+-L $TMUX_SOCKET}"
+
 # Get the pane ID this script is running in (must target this specific pane)
-MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null)
+MY_PANE=$(tmux $TMUX_FLAGS display-message -p '#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null)
 
 # Clear screen at start - wait briefly for shell prompt to finish
 sleep 0.2
@@ -21,7 +24,7 @@ while true; do
     # Get workflow name from tmux environment variable (re-check each iteration for new workflows)
     CURRENT_WORKFLOW=""
     if [[ -n "$TMUX" ]]; then
-        CURRENT_WORKFLOW=$(tmux showenv WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
+        CURRENT_WORKFLOW=$(tmux $TMUX_FLAGS showenv WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
     fi
 
     # Determine STATE_DIR
@@ -43,12 +46,12 @@ while true; do
     if [[ -n "$STATE_DIR" && -f "$STATUS_FILE" ]]; then
         INTERVAL=$(grep 'checkin_interval_minutes:' "$STATUS_FILE" 2>/dev/null | awk '{print $2}')
         if [[ -n "$INTERVAL" && "$INTERVAL" != "_" ]]; then
-            tmux select-pane -t "$MY_PANE" -T "Check-ins (every ${INTERVAL}m, refresh: 2s)" 2>/dev/null
+            tmux $TMUX_FLAGS select-pane -t "$MY_PANE" -T "Check-ins (every ${INTERVAL}m, refresh: 2s)" 2>/dev/null
         else
-            tmux select-pane -t "$MY_PANE" -T "Check-ins (refresh: 2s)" 2>/dev/null
+            tmux $TMUX_FLAGS select-pane -t "$MY_PANE" -T "Check-ins (refresh: 2s)" 2>/dev/null
         fi
     else
-        tmux select-pane -t "$MY_PANE" -T "Check-ins (refresh: 2s)" 2>/dev/null
+        tmux $TMUX_FLAGS select-pane -t "$MY_PANE" -T "Check-ins (refresh: 2s)" 2>/dev/null
     fi
 
     # Display check-ins based on workflow and file state

@@ -23,6 +23,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Support isolated tmux socket (used by e2e tests)
+TMUX_FLAGS="${TMUX_SOCKET:+-L $TMUX_SOCKET}"
+
 # Source workflow utilities
 source "$SCRIPT_DIR/workflow-utils.sh"
 
@@ -216,7 +219,7 @@ for agent in "${CREATED_AGENTS[@]}"; do
 done
 echo ""
 echo "Layout verification:"
-tmux list-windows -t "$SESSION" -F "  Window #{window_index}: #{window_name}"
+tmux $TMUX_FLAGS list-windows -t "$SESSION" -F "  Window #{window_index}: #{window_name}"
 echo ""
 echo "All agents are running Claude and ready to receive tasks."
 echo ""

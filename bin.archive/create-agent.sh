@@ -28,6 +28,9 @@
 
 set -e
 
+# Support isolated tmux socket (used by e2e tests)
+TMUX_FLAGS="${TMUX_SOCKET:+-L $TMUX_SOCKET}"
+
 # Get script directory for portable paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -427,15 +430,15 @@ if [[ "$START_CLAUDE" == true ]]; then
         echo "Using model: $MODEL"
     fi
 
-    tmux send-keys -t "$AGENT_ID" "$CLAUDE_CMD" Enter
+    tmux $TMUX_FLAGS send-keys -t "$AGENT_ID" "$CLAUDE_CMD" Enter
     sleep 5  # Wait for Claude to start
 
     # Re-set pane title after Claude starts (Claude overrides it)
     # Do it multiple times to ensure it sticks
     if [[ "$USE_PANE" == true ]]; then
-        tmux select-pane -t "$AGENT_ID" -T "$WINDOW_NAME"
+        tmux $TMUX_FLAGS select-pane -t "$AGENT_ID" -T "$WINDOW_NAME"
         sleep 2
-        tmux select-pane -t "$AGENT_ID" -T "$WINDOW_NAME"
+        tmux $TMUX_FLAGS select-pane -t "$AGENT_ID" -T "$WINDOW_NAME"
     fi
 fi
 
@@ -527,7 +530,7 @@ fi
 # Final pane title set - after briefing when Claude is fully running
 if [[ "$USE_PANE" == true ]]; then
     sleep 1
-    tmux select-pane -t "$AGENT_ID" -T "$WINDOW_NAME"
+    tmux $TMUX_FLAGS select-pane -t "$AGENT_ID" -T "$WINDOW_NAME"
 fi
 
 echo ""

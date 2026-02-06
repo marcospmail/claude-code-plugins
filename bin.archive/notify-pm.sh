@@ -13,8 +13,11 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Support isolated tmux socket (used by e2e tests)
+TMUX_FLAGS="${TMUX_SOCKET:+-L $TMUX_SOCKET}"
+
 # Auto-detect current session
-SESSION=$(tmux display-message -p '#S' 2>/dev/null)
+SESSION=$(tmux $TMUX_FLAGS display-message -p '#S' 2>/dev/null)
 if [[ -z "$SESSION" ]]; then
     echo "Error: Not running in a tmux session"
     exit 1

@@ -35,9 +35,12 @@ fi
 WORKFLOW_NAME=$(create_workflow_folder "$PROJECT_PATH" "$TITLE")
 WORKFLOW_PATH="$PROJECT_PATH/.workflow/$WORKFLOW_NAME"
 
+# Support isolated tmux socket (used by e2e tests)
+TMUX_FLAGS="${TMUX_SOCKET:+-L $TMUX_SOCKET}"
+
 # Set WORKFLOW_NAME in tmux environment (if in tmux)
 if [[ -n "$TMUX" ]]; then
-    tmux setenv WORKFLOW_NAME "$WORKFLOW_NAME"
+    tmux $TMUX_FLAGS setenv WORKFLOW_NAME "$WORKFLOW_NAME"
 fi
 
 # NOTE: We intentionally do NOT create .workflow/current file
@@ -372,7 +375,7 @@ with open('$WORKFLOW_PATH/status.yml', 'w') as f:
 fi
 
 # Get session if in tmux and update status.yml directly
-SESSION=$(tmux display-message -p '#S' 2>/dev/null || echo "")
+SESSION=$(tmux $TMUX_FLAGS display-message -p '#S' 2>/dev/null || echo "")
 if [[ -n "$SESSION" ]]; then
     sed -i '' "s/^session: .*/session: \"$SESSION\"/" "$WORKFLOW_PATH/status.yml"
 fi
