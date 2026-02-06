@@ -15,6 +15,7 @@ TEST_DIR_A="/tmp/e2e-test-$TEST_NAME-A-$TEST_ID"
 TEST_DIR_B="/tmp/e2e-test-$TEST_NAME-B-$TEST_ID"
 BIN_DIR="$PROJECT_ROOT/bin"
 SESSION_A="e2e-wf-a-$TEST_ID"
+export TMUX_SOCKET="yato-e2e-test"
 SESSION_B="e2e-wf-b-$TEST_ID"
 
 echo "======================================================================"
@@ -30,8 +31,8 @@ fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_A" 2>/dev/null || true
-    tmux kill-session -t "$SESSION_B" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_A" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_B" 2>/dev/null || true
     rm -rf "$TEST_DIR_A" "$TEST_DIR_B" 2>/dev/null || true
     # Kill any pending check-in background processes
     pkill -f "schedule-checkin.*$TEST_DIR_A" 2>/dev/null || true
@@ -67,11 +68,11 @@ checkin_interval_minutes: 2
 EOF
 
 # Create tmux sessions with WORKFLOW_NAME env var
-tmux new-session -d -s "$SESSION_A" -c "$TEST_DIR_A"
-tmux setenv -t "$SESSION_A" WORKFLOW_NAME "001-workflow-a"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_A" -c "$TEST_DIR_A"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_A" WORKFLOW_NAME "001-workflow-a"
 
-tmux new-session -d -s "$SESSION_B" -c "$TEST_DIR_B"
-tmux setenv -t "$SESSION_B" WORKFLOW_NAME "001-workflow-b"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_B" -c "$TEST_DIR_B"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_B" WORKFLOW_NAME "001-workflow-b"
 
 echo "Test directories created:"
 echo "  Project A: $TEST_DIR_A (session: $SESSION_A)"
@@ -85,10 +86,10 @@ echo ""
 echo "Testing check-in file location..."
 
 # Run schedule-checkin.sh inside tmux sessions
-tmux send-keys -t "$SESSION_A" "cd $TEST_DIR_A && $BIN_DIR/schedule-checkin.sh 5 'Test A' '$SESSION_A:0'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" "cd $TEST_DIR_A && $BIN_DIR/schedule-checkin.sh 5 'Test A' '$SESSION_A:0'" Enter
 sleep 3
 
-tmux send-keys -t "$SESSION_B" "cd $TEST_DIR_B && $BIN_DIR/schedule-checkin.sh 5 'Test B' '$SESSION_B:0'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_B" "cd $TEST_DIR_B && $BIN_DIR/schedule-checkin.sh 5 'Test B' '$SESSION_B:0'" Enter
 sleep 3
 
 if [[ -f "$TEST_DIR_A/.workflow/001-workflow-a/checkins.json" ]]; then
@@ -144,7 +145,7 @@ echo ""
 echo "Testing cancel isolation..."
 
 # Cancel from Project A session
-tmux send-keys -t "$SESSION_A" "$BIN_DIR/cancel-checkin.sh" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" "$BIN_DIR/cancel-checkin.sh" Enter
 sleep 2
 
 # Check Project A is cancelled
@@ -230,14 +231,14 @@ TEST_SESSION="e2e-no-workflow-$TEST_ID"
 TEST_DIR_NO_WF="/tmp/e2e-no-workflow-$TEST_ID"
 mkdir -p "$TEST_DIR_NO_WF"
 
-tmux new-session -d -s "$TEST_SESSION" -c "$TEST_DIR_NO_WF"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$TEST_SESSION" -c "$TEST_DIR_NO_WF"
 # Do NOT set WORKFLOW_NAME
 
-tmux send-keys -t "$TEST_SESSION" "$BIN_DIR/schedule-checkin.sh 5 'Test' '$TEST_SESSION:0' 2>&1; echo DONE" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$TEST_SESSION" "$BIN_DIR/schedule-checkin.sh 5 'Test' '$TEST_SESSION:0' 2>&1; echo DONE" Enter
 sleep 3
 
-ERROR_OUTPUT=$(tmux capture-pane -t "$TEST_SESSION" -p)
-tmux kill-session -t "$TEST_SESSION" 2>/dev/null || true
+ERROR_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$TEST_SESSION" -p)
+tmux -L "$TMUX_SOCKET" kill-session -t "$TEST_SESSION" 2>/dev/null || true
 rm -rf "$TEST_DIR_NO_WF"
 
 if echo "$ERROR_OUTPUT" | grep -q "No WORKFLOW_NAME set"; then

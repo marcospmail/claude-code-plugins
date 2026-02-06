@@ -14,6 +14,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="pane-window-names"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-test-names-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: Pane and Window Names                             ║"
@@ -41,9 +42,9 @@ fail() {
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
-    tmux kill-session -t "e2e-helper-$$" 2>/dev/null || true
-    tmux kill-session -t "e2e-agent-names-$$" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "e2e-helper-$$" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "e2e-agent-names-$$" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
     rm -rf "/tmp/e2e-agent-test-$$" 2>/dev/null || true
     rm -f /tmp/e2e-deploy-$$.txt 2>/dev/null || true
@@ -62,8 +63,8 @@ echo "test file" > "$TEST_DIR/test.txt"
 
 # Deploy PM via helper session (since deploy-pm creates its own session)
 HELPER_SESSION="e2e-helper-$$"
-tmux new-session -d -s "$HELPER_SESSION" -c "$PROJECT_ROOT"
-tmux send-keys -t "$HELPER_SESSION" "cd $PROJECT_ROOT && uv run python lib/orchestrator.py deploy-pm '$SESSION_NAME' -p '$TEST_DIR' > /tmp/e2e-deploy-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-deploy-$$.txt" Enter
+tmux -L "$TMUX_SOCKET" new-session -d -s "$HELPER_SESSION" -c "$PROJECT_ROOT"
+tmux -L "$TMUX_SOCKET" send-keys -t "$HELPER_SESSION" "cd $PROJECT_ROOT && uv run python lib/orchestrator.py deploy-pm '$SESSION_NAME' -p '$TEST_DIR' > /tmp/e2e-deploy-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-deploy-$$.txt" Enter
 sleep 5
 
 # Check if deploy succeeded
@@ -77,13 +78,13 @@ fi
 # Wait for session to be created and verify it exists
 sleep 2
 for i in {1..10}; do
-    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    if tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
         break
     fi
     sleep 1
 done
 
-if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+if ! tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
     fail "Session '$SESSION_NAME' was not created by deploy-pm"
     exit 1
 fi
@@ -95,8 +96,8 @@ sleep 5
 PANE_0_TITLE=""
 PANE_1_TITLE=""
 for i in {1..5}; do
-    PANE_0_TITLE=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^0:" | cut -d: -f2-)
-    PANE_1_TITLE=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
+    PANE_0_TITLE=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^0:" | cut -d: -f2-)
+    PANE_1_TITLE=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
     if [[ -n "$PANE_0_TITLE" && -n "$PANE_1_TITLE" ]]; then
         break
     fi
@@ -129,8 +130,8 @@ echo ""
 sleep 6
 
 # Check pane titles again
-PANE_0_TITLE_AFTER=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^0:" | cut -d: -f2-)
-PANE_1_TITLE_AFTER=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
+PANE_0_TITLE_AFTER=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^0:" | cut -d: -f2-)
+PANE_1_TITLE_AFTER=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
 
 echo "Testing pane 0 still has Check-ins..."
 if [[ "$PANE_0_TITLE_AFTER" == *"Check-ins"* ]]; then
@@ -162,24 +163,24 @@ mkdir -p "$AGENT_TEST_DIR"
 echo "test" > "$AGENT_TEST_DIR/test.txt"
 
 # Create plain tmux session with shell
-tmux new-session -d -s "$AGENT_SESSION" -n "pm-checkins" -c "$AGENT_TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$AGENT_SESSION" -n "pm-checkins" -c "$AGENT_TEST_DIR"
 
-# Initialize workflow via tmux send-keys
-tmux send-keys -t "$AGENT_SESSION" "$PROJECT_ROOT/bin/init-workflow.sh '$AGENT_TEST_DIR' 'Test agent windows' > /tmp/e2e-init-$$.txt 2>&1" Enter
+# Initialize workflow via tmux -L "$TMUX_SOCKET" send-keys
+tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" "$PROJECT_ROOT/bin/init-workflow.sh '$AGENT_TEST_DIR' 'Test agent windows' > /tmp/e2e-init-$$.txt 2>&1" Enter
 sleep 3
 
 # Get workflow name and set it in the tmux session environment
 WORKFLOW_NAME=$(ls "$AGENT_TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
-tmux setenv -t "$AGENT_SESSION" WORKFLOW_NAME "$WORKFLOW_NAME"
+tmux -L "$TMUX_SOCKET" setenv -t "$AGENT_SESSION" WORKFLOW_NAME "$WORKFLOW_NAME"
 
 # Run create-team.sh from within the session (shell in window 0)
-tmux send-keys -t "$AGENT_SESSION:0" "cd $AGENT_TEST_DIR && $PROJECT_ROOT/bin/create-team.sh $AGENT_TEST_DIR developer qa" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION:0" "cd $AGENT_TEST_DIR && $PROJECT_ROOT/bin/create-team.sh $AGENT_TEST_DIR developer qa" Enter
 
 # Wait for agents to be created
 sleep 20
 
 # Check window names
-WINDOW_LIST=$(tmux list-windows -t "$AGENT_SESSION" -F "#{window_index}:#{window_name}" 2>/dev/null)
+WINDOW_LIST=$(tmux -L "$TMUX_SOCKET" list-windows -t "$AGENT_SESSION" -F "#{window_index}:#{window_name}" 2>/dev/null)
 
 # Window 1 should be developer
 if echo "$WINDOW_LIST" | grep -q "1:developer"; then
@@ -198,7 +199,7 @@ else
 fi
 
 # Verify window count
-WINDOW_COUNT=$(tmux list-windows -t "$AGENT_SESSION" 2>/dev/null | wc -l | tr -d ' ')
+WINDOW_COUNT=$(tmux -L "$TMUX_SOCKET" list-windows -t "$AGENT_SESSION" 2>/dev/null | wc -l | tr -d ' ')
 if [[ "$WINDOW_COUNT" -ge 3 ]]; then
     pass "Agent session has $WINDOW_COUNT windows (shell + 2 agents)"
 else
@@ -206,7 +207,7 @@ else
 fi
 
 # Clean up agent test session
-tmux kill-session -t "$AGENT_SESSION" 2>/dev/null || true
+tmux -L "$TMUX_SOCKET" kill-session -t "$AGENT_SESSION" 2>/dev/null || true
 rm -rf "$AGENT_TEST_DIR" 2>/dev/null || true
 
 # ============================================================
@@ -219,7 +220,7 @@ echo ""
 # Final check that PM pane name is still correct (with retry)
 PANE_1_FINAL=""
 for i in {1..5}; do
-    PANE_1_FINAL=$(tmux list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
+    PANE_1_FINAL=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
     if [[ -n "$PANE_1_FINAL" ]]; then
         break
     fi

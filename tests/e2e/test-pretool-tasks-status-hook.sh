@@ -14,6 +14,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="pretool-tasks-status"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-pretool-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: PreToolUse Tasks Status Reminder Hook"
@@ -28,7 +29,7 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -203,9 +204,9 @@ echo "Test directory: $TEST_DIR"
 echo "Session: $SESSION_NAME"
 
 # Create tmux session
-tmux new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
 
-if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+if ! tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
     fail "Failed to create tmux session"
     exit 1
 fi
@@ -213,13 +214,13 @@ fi
 pass "Tmux session created"
 
 # Start Claude with dangerously skip permissions
-tmux send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
 
 echo "Waiting for Claude to initialize..."
 sleep 12
 
 # Verify Claude started
-OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
 if echo "$OUTPUT" | grep -q "❯\|›\|>"; then
     pass "Claude CLI started (prompt visible)"
 else
@@ -230,15 +231,15 @@ fi
 
 # Send a request to edit tasks.json
 echo "Sending edit request..."
-tmux send-keys -t "$SESSION_NAME" "Edit .workflow/001-test/tasks.json and change status from blocked to completed"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Edit .workflow/001-test/tasks.json and change status from blocked to completed"
 sleep 1
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 
 echo "Waiting for Claude to process (this may take a moment)..."
 sleep 60
 
 # Capture output
-FINAL_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
+FINAL_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
 
 echo ""
 echo "Debug - Claude response:"
