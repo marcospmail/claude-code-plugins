@@ -15,6 +15,7 @@ BIN_DIR="$SCRIPT_DIR/../../bin"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-constraints-$TEST_ID"
 SESSION_NAME="e2e-constraints-$TEST_ID"
+export TMUX_SOCKET="yato-e2e-test"
 
 # Test counters
 TESTS_PASSED=0
@@ -31,7 +32,7 @@ fail() {
 }
 
 cleanup() {
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR"
     rm -f /tmp/e2e-init-workflow-$$.txt /tmp/e2e-create-agent-$$.txt 2>/dev/null || true
 }
@@ -50,8 +51,8 @@ echo "Test directory: $TEST_DIR"
 echo ""
 
 mkdir -p "$TEST_DIR"
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux send-keys -t "$SESSION_NAME" "git init -q && git config user.name Test && git config user.email test@test.com" Enter
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "git init -q && git config user.name Test && git config user.email test@test.com" Enter
 sleep 2
 
 # ============================================================
@@ -60,7 +61,7 @@ sleep 2
 
 echo "Test 1: Creating workflow and checking PM constraints.md..."
 
-tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/init-workflow.sh '$TEST_DIR' 'test-constraints' > /tmp/e2e-init-workflow-$$.txt 2>&1" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/init-workflow.sh '$TEST_DIR' 'test-constraints' > /tmp/e2e-init-workflow-$$.txt 2>&1" Enter
 sleep 3
 
 # Find the workflow directory
@@ -121,11 +122,11 @@ echo ""
 echo "Test 4: Creating agent and checking constraints.md..."
 
 # Set WORKFLOW_NAME env var in tmux session
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "$(basename "$WORKFLOW_DIR")"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "$(basename "$WORKFLOW_DIR")"
 
 # Create a developer agent via tmux
 WORKFLOW_NAME="$(basename "$WORKFLOW_DIR")"
-tmux send-keys -t "$SESSION_NAME" "$BIN_DIR/create-agent.sh '$SESSION_NAME' developer -p '$TEST_DIR' --pm-window '$SESSION_NAME:0' --no-start > /tmp/e2e-create-agent-$$.txt 2>&1" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/create-agent.sh '$SESSION_NAME' developer -p '$TEST_DIR' --pm-window '$SESSION_NAME:0' --no-start > /tmp/e2e-create-agent-$$.txt 2>&1" Enter
 sleep 5
 
 # Check for constraints.md in developer directory

@@ -15,6 +15,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="agent-polling-guidance"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-polling-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: Agent Polling Guidance (BUG 3)                    ║"
@@ -41,7 +42,7 @@ fail() {
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -54,15 +55,15 @@ echo "Phase 1: Setting up test environment..."
 mkdir -p "$TEST_DIR"
 echo "test" > "$TEST_DIR/app.js"
 
-tmux new-session -d -s "$SESSION_NAME" -n "pm" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -n "pm" -c "$TEST_DIR"
 
-tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test polling guidance'" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test polling guidance'" Enter
 sleep 3
 
 WORKFLOW_NAME=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1 | xargs basename)
 WORKFLOW_PATH="$TEST_DIR/.workflow/$WORKFLOW_NAME"
 
-tmux send-keys -t "$SESSION_NAME" "source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' developer:developer:sonnet" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' developer:developer:sonnet" Enter
 sleep 3
 
 echo "  - Workflow: $WORKFLOW_NAME"

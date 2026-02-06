@@ -17,6 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="dependency-check-hook"
 SESSION_NAME="e2e-deps-$$"
+export TMUX_SOCKET="yato-e2e-test"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -39,7 +40,7 @@ fail() {
 }
 
 cleanup() {
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
     rm -f /tmp/e2e-deps-$$.txt /tmp/e2e-deps-missing-$$.txt 2>/dev/null || true
 }
@@ -50,7 +51,7 @@ HOOKS_JSON="$PROJECT_ROOT/hooks/hooks.json"
 
 # Setup tmux session
 mkdir -p "$TEST_DIR"
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
 
 # ============================================================
 # PHASE 1: File existence and permissions
@@ -137,7 +138,7 @@ echo ""
 echo "Phase 3: Testing script when tmux is installed..."
 
 # Test 10: Script outputs nothing when tmux is installed
-tmux send-keys -t "$SESSION_NAME" "bash '$CHECK_DEPS_SCRIPT' > /tmp/e2e-deps-$$.txt 2>&1; echo EXITCODE:\$? >> /tmp/e2e-deps-$$.txt" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "bash '$CHECK_DEPS_SCRIPT' > /tmp/e2e-deps-$$.txt 2>&1; echo EXITCODE:\$? >> /tmp/e2e-deps-$$.txt" Enter
 sleep 2
 OUTPUT=$(grep -v "EXITCODE:" /tmp/e2e-deps-$$.txt 2>/dev/null)
 EXIT_CODE=$(grep "EXITCODE:" /tmp/e2e-deps-$$.txt 2>/dev/null | cut -d: -f2)
@@ -163,7 +164,7 @@ echo ""
 echo "Phase 4: Testing script when tmux is missing..."
 
 # Simulate tmux not being installed by modifying PATH
-tmux send-keys -t "$SESSION_NAME" "PATH=/usr/bin:/bin bash '$CHECK_DEPS_SCRIPT' > /tmp/e2e-deps-missing-$$.txt 2>&1" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "PATH=/usr/bin:/bin bash '$CHECK_DEPS_SCRIPT' > /tmp/e2e-deps-missing-$$.txt 2>&1" Enter
 sleep 2
 MISSING_OUTPUT=$(cat /tmp/e2e-deps-missing-$$.txt 2>/dev/null)
 
