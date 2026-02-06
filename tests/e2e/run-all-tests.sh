@@ -12,6 +12,8 @@ if [[ "$1" == "--verbose" ]] || [[ "$1" == "-v" ]]; then
     VERBOSE=true
 fi
 
+export TMUX_SOCKET="yato-e2e-test"
+
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║     TMux Orchestrator - E2E Test Suite                       ║"
@@ -33,8 +35,8 @@ for test_file in "$SCRIPT_DIR"/test-*.sh; do
         TOTAL_TESTS=$((TOTAL_TESTS + 1))
 
         # Clean up any stale e2e sessions from previous tests
-        tmux list-sessions 2>/dev/null | grep -E "^e2e-" | cut -d: -f1 | while read session; do
-            tmux kill-session -t "$session" 2>/dev/null || true
+        tmux -L "$TMUX_SOCKET" list-sessions 2>/dev/null | grep -E "^e2e-" | cut -d: -f1 | while read session; do
+            tmux -L "$TMUX_SOCKET" kill-session -t "$session" 2>/dev/null || true
         done
 
         # Delay between tests to allow background processes and tmux to settle
@@ -89,10 +91,18 @@ if [[ $FAILED_TESTS -gt 0 ]]; then
     echo "╔══════════════════════════════════════════════════════════════╗"
     echo "║  ❌ SOME TESTS FAILED                                        ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
+
+# Cleanup tmux socket
+tmux -L "$TMUX_SOCKET" kill-server 2>/dev/null || true
+
     exit 1
 else
     echo "╔══════════════════════════════════════════════════════════════╗"
     echo "║  ✅ ALL TESTS PASSED                                         ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
+
+# Cleanup tmux socket
+tmux -L "$TMUX_SOCKET" kill-server 2>/dev/null || true
+
     exit 0
 fi
