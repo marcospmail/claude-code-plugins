@@ -8,6 +8,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="loop-skill"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-loop-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: Loop Skill (via Claude + tmux)"
@@ -22,7 +23,7 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -38,18 +39,18 @@ echo ""
 
 echo "Starting tmux session and Claude..."
 # IMPORTANT: Use larger window size for Claude's TUI to work properly
-tmux new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-tmux send-keys -t "$SESSION_NAME" "claude" Enter
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
 
 # Wait for Claude to start and handle trust prompt
 echo "Waiting for trust prompt..."
 sleep 8
 
 # Check for trust prompt and send Enter
-OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
 if echo "$OUTPUT" | grep -qi "trust"; then
     echo "Trust prompt found, accepting..."
-    tmux send-keys -t "$SESSION_NAME" Enter
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
     sleep 15
 else
     echo "No trust prompt found, continuing..."
@@ -65,14 +66,14 @@ echo ""
 echo "Test 1: /loop with --times..."
 
 # Send text first, then Enter separately (required for Claude's TUI)
-tmux send-keys -t "$SESSION_NAME" "/loop say hello --times 2"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "/loop say hello --times 2"
 sleep 1
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30  # Wait for Claude to process skill (loop may complete within this time since it runs immediately)
 
 # Debug: show what Claude did
 echo "Debug - After /loop --times 2:"
-tmux capture-pane -t "$SESSION_NAME" -p | tail -20
+tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p | tail -20
 echo ""
 
 # Check for loop folder creation
@@ -99,7 +100,7 @@ else
     fail "Loop folder not created at $TEST_DIR/.workflow/loops/"
     # Debug: show what Claude output
     echo "  Debug - Claude output:"
-    tmux capture-pane -t "$SESSION_NAME" -p -S -50 | tail -20
+    tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 | tail -20
 fi
 
 # Check completion via meta.json (no global registry)
@@ -119,12 +120,12 @@ fi
 # Cancel this loop before next test
 echo ""
 echo "Cancelling loop before next test..."
-tmux send-keys -t "$SESSION_NAME" "/loop --cancel"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "/loop --cancel"
 sleep 1
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
 # Select first option if menu shown
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 3
 
 # Clean up loop folder for next test
@@ -138,14 +139,14 @@ echo "Test 2: /loop with --for and --every..."
 
 # Test 2: Create a loop with --for and --every (no interval - immediate execution)
 # Using --times instead of --for with interval, because intervals block the cancel test
-tmux send-keys -t "$SESSION_NAME" "/loop check system --times 10"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "/loop check system --times 10"
 sleep 1
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30  # Wait for loop creation and some executions
 
 # Debug: show what Claude did
 echo "Debug - After /loop --times 10:"
-tmux capture-pane -t "$SESSION_NAME" -p | tail -20
+tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p | tail -20
 echo ""
 
 # Get the new loop folder (should be different from test 1's folder)
@@ -171,7 +172,7 @@ if [[ -n "$LOOP_FOLDER" ]] && [[ -f "$LOOP_FOLDER/meta.json" ]]; then
 else
     fail "Loop folder not created for --times 10 test"
     echo "  Debug - Claude output:"
-    tmux capture-pane -t "$SESSION_NAME" -p -S -50 | tail -20
+    tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 | tail -20
 fi
 
 # ============================================================
@@ -183,18 +184,18 @@ echo "Test 3: /loop --cancel via Claude..."
 # Loop from test 2 is running with --times 10 and no interval
 # It executes immediately between iterations, so we need to catch
 # Claude between responses. Send Escape first to try to interrupt.
-tmux send-keys -t "$SESSION_NAME" Escape
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Escape
 sleep 2
 
 # Send /loop --cancel to Claude via tmux
-tmux send-keys -t "$SESSION_NAME" "/loop --cancel"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "/loop --cancel"
 sleep 1
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 45  # Wait for Claude to process skill and show AskUserQuestion
 
 # Debug: show what Claude did
 echo "Debug - After /loop --cancel:"
-CANCEL_OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -80 2>/dev/null)
+CANCEL_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -80 2>/dev/null)
 echo "$CANCEL_OUTPUT" | tail -25
 echo ""
 
@@ -211,16 +212,16 @@ fi
 # 1. AskUserQuestion menu (select with Enter)
 # 2. Edit permission prompt (select "1. Yes" with Enter)
 # Send Enter to approve/select
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 15
 
 # May need another Enter if there's another prompt
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 15  # Wait for Claude to execute cancel command
 
 # Debug: show after selection
 echo "Debug - After selection:"
-tmux capture-pane -t "$SESSION_NAME" -p | tail -20
+tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p | tail -20
 echo ""
 
 # Verify loop was cancelled by checking meta.json

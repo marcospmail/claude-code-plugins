@@ -19,6 +19,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="loop-cancel-project-dir"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-$TEST_NAME-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: Loop Cancel with --project parameter"
@@ -36,7 +37,7 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -52,18 +53,18 @@ echo
 
 echo "Starting tmux session and Claude..."
 # IMPORTANT: Use larger window size for Claude's TUI to work properly
-tmux new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-tmux send-keys -t "$SESSION_NAME" "claude" Enter
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
 
 # Wait for Claude to start and handle trust prompt
 echo "Waiting for Claude to start (checking for trust prompt)..."
 sleep 8
 
 # Check for trust prompt and send Enter
-OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
 if echo "$OUTPUT" | grep -qi "trust"; then
     echo "  Trust prompt found, accepting..."
-    tmux send-keys -t "$SESSION_NAME" Enter
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
     sleep 15
 else
     echo "  No trust prompt found, continuing..."
@@ -77,14 +78,14 @@ echo
 echo "Test 1: Starting a loop with --times 10 (long running)..."
 
 # Send text first, then Enter separately (required for Claude's TUI)
-tmux send-keys -t "$SESSION_NAME" "/loop monitor system status --times 10"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "/loop monitor system status --times 10"
 sleep 1
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30  # Wait for Claude to process skill and create loop
 
 # Debug: show what Claude did
 echo "  Debug - Claude output after starting loop:"
-tmux capture-pane -t "$SESSION_NAME" -p | tail -15
+tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p | tail -15
 echo
 
 # Check for loop folder creation in TEST_DIR (not in yato directory)
@@ -103,7 +104,7 @@ if [[ -n "$LOOP_FOLDER" ]] && [[ -f "$LOOP_FOLDER/meta.json" ]]; then
 else
     fail "Loop folder not created in project directory ($TEST_DIR/.workflow/loops/)"
     echo "  Debug - Full Claude output:"
-    tmux capture-pane -t "$SESSION_NAME" -p -S -50 | tail -30
+    tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 | tail -30
 
     # Check if loop was mistakenly created in yato directory
     if ls -d "$PROJECT_ROOT/.workflow/loops/"* 2>/dev/null | head -1; then
@@ -120,21 +121,21 @@ echo "Test 2: Cancelling loop with /loop --cancel..."
 echo "  (This is the critical test - verifies --project parameter is passed)"
 
 # Send Escape first to try to interrupt any ongoing operation
-tmux send-keys -t "$SESSION_NAME" Escape
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Escape
 sleep 2
 
 # Send /loop --cancel to Claude via tmux
-tmux send-keys -t "$SESSION_NAME" "/loop --cancel"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "/loop --cancel"
 sleep 1
-tmux send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 45  # Wait for Claude to process skill and show AskUserQuestion or list
 
 # Capture full output for verification
-OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
 
 # Debug: show what Claude did
 echo "  Debug - Claude output after /loop --cancel:"
-tmux capture-pane -t "$SESSION_NAME" -p -S -50 | tail -25
+tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 | tail -25
 echo
 
 # CRITICAL TEST: Did Claude find the loop?
@@ -156,11 +157,11 @@ if echo "$OUTPUT" | grep -qi "monitor.*system\|001-monitor\|Cancel all loops\|wh
     LOOP_FOUND=true
 
     # Select the first option (the loop we created)
-    tmux send-keys -t "$SESSION_NAME" Enter
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
     sleep 15
 
     # May need another Enter if there's another prompt
-    tmux send-keys -t "$SESSION_NAME" Enter
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
     sleep 10
 elif echo "$OUTPUT" | grep -qi "cancelled\|canceled\|Loop cancelled"; then
     # Claude may have auto-cancelled if only one loop
@@ -186,7 +187,7 @@ fi
 
 # Debug: show after selection
 echo "  Debug - After selection:"
-tmux capture-pane -t "$SESSION_NAME" -p | tail -15
+tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p | tail -15
 echo
 
 # ============================================================
