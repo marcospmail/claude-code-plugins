@@ -113,7 +113,7 @@ class TmuxOrchestrator:
 
     def create_window(self, session: str, name: str, path: Optional[str] = None) -> Optional[int]:
         """Create a new window in a session, returning the window index."""
-        cmd = ["tmux", "new-window", "-t", session, "-n", name, "-P", "-F", "#{window_index}"]
+        cmd = ["tmux", "new-window", "-d", "-t", session, "-n", name, "-P", "-F", "#{window_index}"]
         if path:
             cmd.extend(["-c", path])
 

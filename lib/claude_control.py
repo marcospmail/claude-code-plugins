@@ -117,7 +117,7 @@ class TmuxController:
     @staticmethod
     def create_window(session: str, name: str, path: Optional[str] = None) -> Optional[int]:
         """Create a new window in a session."""
-        args = ["new-window", "-t", session, "-n", name, "-P", "-F", "#{window_index}"]
+        args = ["new-window", "-d", "-t", session, "-n", name, "-P", "-F", "#{window_index}"]
         if path:
             args.extend(["-c", path])
 

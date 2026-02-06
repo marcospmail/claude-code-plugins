@@ -405,7 +405,7 @@ class AgentManager:
         # Create agent window
         print(f"Creating window '{name}' in session '{session}'...")
 
-        cmd = ["tmux", "new-window", "-t", session, "-n", name, "-P", "-F", "#{window_index}"]
+        cmd = ["tmux", "new-window", "-d", "-t", session, "-n", name, "-P", "-F", "#{window_index}"]
         if project_path:
             cmd.extend(["-c", project_path])
 
