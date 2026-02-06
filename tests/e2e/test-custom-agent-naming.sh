@@ -18,6 +18,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="custom-agent-naming"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-naming-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  E2E Test: Custom Agent Naming and Path References           ║"
@@ -45,7 +46,7 @@ fail() {
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
     rm -f /tmp/e2e-init-$$.txt 2>/dev/null || true
     rm -f /tmp/e2e-save-$$.txt 2>/dev/null || true
@@ -62,15 +63,15 @@ mkdir -p "$TEST_DIR"
 echo "function test() { return true; }" > "$TEST_DIR/app.js"
 
 # Create tmux session
-tmux new-session -d -s "$SESSION_NAME" -n "orchestrator" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -n "orchestrator" -c "$TEST_DIR"
 
-# Initialize workflow via tmux send-keys
-tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test custom naming' > /tmp/e2e-init-$$.txt 2>&1" Enter
+# Initialize workflow via tmux -L "$TMUX_SOCKET" send-keys
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test custom naming' > /tmp/e2e-init-$$.txt 2>&1" Enter
 sleep 3
 
 # Get workflow name and set it in the tmux session environment
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
-tmux setenv -t "$SESSION_NAME" WORKFLOW_NAME "$WORKFLOW_NAME"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "$WORKFLOW_NAME"
 WORKFLOW_PATH="$TEST_DIR/.workflow/$WORKFLOW_NAME"
 
 echo "  - Project created at $TEST_DIR"
@@ -83,8 +84,8 @@ echo ""
 # ============================================================
 echo "Phase 2: Saving team structure (simulating PM workflow)..."
 
-# Run save_team_structure via tmux send-keys
-tmux send-keys -t "$SESSION_NAME" "source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' discoverer:qa:opus impl:developer:opus > /tmp/e2e-save-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-save-$$.txt" Enter
+# Run save_team_structure via tmux -L "$TMUX_SOCKET" send-keys
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' discoverer:qa:opus impl:developer:opus > /tmp/e2e-save-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-save-$$.txt" Enter
 sleep 3
 
 # Read the output and exit code
@@ -106,8 +107,8 @@ echo ""
 echo "Phase 3: Creating team tmux windows..."
 echo "  Command: create-team.sh $TEST_DIR discoverer:qa:opus impl:developer:opus"
 
-# Create team with custom names via tmux send-keys
-tmux send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/create-team.sh '$TEST_DIR' discoverer:qa:opus impl:developer:opus > /tmp/e2e-create-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-create-$$.txt" Enter
+# Create team with custom names via tmux -L "$TMUX_SOCKET" send-keys
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/create-team.sh '$TEST_DIR' discoverer:qa:opus impl:developer:opus > /tmp/e2e-create-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-create-$$.txt" Enter
 sleep 10
 
 # Read the output and exit code
@@ -211,7 +212,7 @@ fi
 echo ""
 echo "Phase 7: Verifying window names..."
 
-WINDOW_LIST=$(tmux list-windows -t "$SESSION_NAME" -F "#{window_index}:#{window_name}" 2>/dev/null)
+WINDOW_LIST=$(tmux -L "$TMUX_SOCKET" list-windows -t "$SESSION_NAME" -F "#{window_index}:#{window_name}" 2>/dev/null)
 
 # Test 10: Window named "discoverer" (not "qa")
 if echo "$WINDOW_LIST" | grep -qi "discoverer"; then
