@@ -418,11 +418,16 @@ def run_daemon(
     def load_checkins():
         if not checkin_file.exists():
             return {"checkins": [], "daemon_pid": None}
-        try:
-            with open(checkin_file, "r") as f:
-                return json.load(f)
-        except:
-            return {"checkins": [], "daemon_pid": None}
+        for attempt in range(3):
+            try:
+                with open(checkin_file, "r") as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                if attempt < 2:
+                    time.sleep(0.1)
+        # All retries failed - return structure with OUR pid to avoid
+        # should_stop() falsely detecting a PID mismatch
+        return {"checkins": [], "daemon_pid": os.getpid()}
 
     def save_checkins(data):
         checkin_file.parent.mkdir(parents=True, exist_ok=True)
@@ -444,17 +449,32 @@ def run_daemon(
                 break
         return False
 
+    last_known_incomplete = [None]  # mutable container for closure
+
     def get_incomplete_tasks():
-        """Get count of incomplete tasks."""
+        """Get count of incomplete tasks, with retry to avoid race conditions.
+
+        On file read/parse errors (e.g. another process writing tasks.json),
+        retries up to 3 times. Returns last known good count if all retries fail,
+        preventing false 'all tasks complete' stops.
+        """
         if not tasks_file.exists():
             return 0
-        try:
-            with open(tasks_file, "r") as f:
-                data = json.load(f)
-            return len([t for t in data.get("tasks", [])
-                        if t.get("status") in ("pending", "in_progress", "blocked")])
-        except:
-            return 0
+        for attempt in range(3):
+            try:
+                with open(tasks_file, "r") as f:
+                    data = json.load(f)
+                count = len([t for t in data.get("tasks", [])
+                             if t.get("status") in ("pending", "in_progress", "blocked")])
+                last_known_incomplete[0] = count
+                return count
+            except (json.JSONDecodeError, IOError):
+                if attempt < 2:
+                    time.sleep(0.1)
+        # All retries failed - return last known count to avoid false stops
+        if last_known_incomplete[0] is not None:
+            return last_known_incomplete[0]
+        return -1
 
     def mark_checkin_done(checkin_id: str):
         """Mark a check-in as done."""
@@ -554,13 +574,14 @@ def run_daemon(
             if current_checkin_id:
                 mark_checkin_done(current_checkin_id)
 
-            # Check incomplete tasks
+            # Check incomplete tasks (-1 means file unreadable, treat as still active)
             incomplete = get_incomplete_tasks()
 
-            if incomplete > 0:
+            if incomplete != 0:
                 # Send check-in message
+                task_info = f"{incomplete} tasks remaining" if incomplete > 0 else "tasks file unreadable"
                 send_message(
-                    f"Time for check-in! ({incomplete} tasks remaining). "
+                    f"Time for check-in! ({task_info}). "
                     "REMINDER: If you received any [DONE] or [BLOCKED] notifications from agents, "
                     "update tasks.json immediately (change task status to 'completed' or 'blocked')."
                 )
