@@ -8,14 +8,14 @@
 # 2. Text displays cleanly without concatenation issues
 # 3. Status messages display correctly
 # 4. Daemon PID status is shown
+#
+# IMPORTANT: All execution goes through Claude Code in a tmux session.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="checkin-display-output"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
-BIN_DIR="$PROJECT_ROOT/bin"
-LIB_DIR="$PROJECT_ROOT/lib"
 SESSION_NAME="e2e-display-$TEST_ID"
 export TMUX_SOCKET="yato-e2e-test"
 
@@ -55,28 +55,64 @@ except:
 trap cleanup EXIT
 
 # ============================================================
-# Setup: Create test project and tmux session
+# Setup: Create test project and tmux session with Claude
 # ============================================================
+echo "Setting up test environment..."
 
 mkdir -p "$TEST_DIR"
 
-# Create tmux session WITHOUT workflow first
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+# Create tmux session with larger size for Claude TUI
+# IMPORTANT: Use -x 120 -y 40 for Claude's TUI to work properly
+# Window 0 will have: pane 0 (checkin-display), and we'll use window 1 for Claude
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
 
-echo "Test directory: $TEST_DIR"
-echo "Session: $SESSION_NAME"
+# Create a second window for Claude
+tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -n "claude" -c "$TEST_DIR"
+
+echo "  Test directory: $TEST_DIR"
+echo "  Session: $SESSION_NAME"
+
+# Start Claude in window 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "claude" Enter
+
+# Wait for Claude to start and handle trust prompt
+echo "  Waiting for Claude to start..."
+sleep 8
+
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
+    sleep 15
+else
+    echo "  No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  Test environment ready"
 echo ""
 
 # ============================================================
 # Test 1: Display shows "waiting for workflow" without script path
 # ============================================================
+echo "Test 1: Testing display without workflow..."
 
-echo "Testing display without workflow..."
+# Ask Claude to start checkin-display.sh in window 0
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: tmux -L $TMUX_SOCKET send-keys -t $SESSION_NAME:0 '$PROJECT_ROOT/bin.archive/checkin-display.sh' Enter"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
+sleep 10
 
-# Start checkin-display.sh in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "$BIN_DIR/checkin-display.sh" Enter
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
-# Wait for display to render with retry loop (robust under load)
+# Wait for display to render with retry loop
 WAITING_FOUND=false
 for i in {1..5}; do
     sleep 3
@@ -89,8 +125,6 @@ done
 
 # Check that script path is NOT in output (after initial display)
 if echo "$PANE_CONTENT" | grep -q "checkin-display.sh"; then
-    # Script path might appear once from the command, but shouldn't be in the display area
-    # Count occurrences
     PATH_COUNT=$(echo "$PANE_CONTENT" | grep -c "checkin-display.sh" || echo "0")
     if [[ "$PATH_COUNT" -gt 1 ]]; then
         fail "Script path appears multiple times in output ($PATH_COUNT times)"
@@ -111,9 +145,8 @@ fi
 # ============================================================
 # Test 2: Display shows "no check-ins scheduled" with workflow
 # ============================================================
-
 echo ""
-echo "Testing display with workflow but no check-ins..."
+echo "Test 2: Testing display with workflow but no check-ins..."
 
 # Create workflow directory
 mkdir -p "$TEST_DIR/.workflow/001-test"
@@ -125,7 +158,7 @@ EOF
 # Set WORKFLOW_NAME in tmux env
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test"
 
-# Wait for display to refresh with retry loop (more robust under load)
+# Wait for display to refresh with retry loop
 NO_CHECKINS_FOUND=false
 for i in {1..5}; do
     sleep 3
@@ -136,14 +169,13 @@ for i in {1..5}; do
     fi
 done
 
-# Check for "no check-ins scheduled" message
 if [[ "$NO_CHECKINS_FOUND" == "true" ]]; then
     pass "Shows 'no check-ins scheduled' message"
 else
     fail "Missing 'no check-ins scheduled' message"
 fi
 
-# Check for text concatenation issues (script path mixed with message)
+# Check for text concatenation issues
 if echo "$PANE_CONTENT" | grep -q "scheduled).*checkin-display\|scheduled).*yato"; then
     fail "Text concatenation issue detected"
 else
@@ -153,19 +185,25 @@ fi
 # ============================================================
 # Test 3: Display shows check-in status correctly with daemon
 # ============================================================
-
 echo ""
-echo "Testing display with pending check-in and daemon..."
+echo "Test 3: Testing display with pending check-in and daemon..."
 
-# Create checkins.json with a pending check-in AND daemon_pid
-FUTURE_TIME=$(date -v +5M +"%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "+5 minutes" +"%Y-%m-%dT%H:%M:%S")
+# Ask Claude to start the daemon
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py start 5 --note 'Test check-in note' --target '$SESSION_NAME:0' --workflow '001-test'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
+sleep 10
 
-# Start the daemon to get a real PID
-cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" start 5 --note "Test check-in note" --target "$SESSION_NAME:0" --workflow "001-test" > /dev/null 2>&1
-sleep 2
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
-# Wait for display to refresh with retry loop (more robust under load)
-# Display refreshes every 2s, we'll retry up to 8 times (16 seconds total)
+# Wait for display to refresh with retry loop
 PENDING_FOUND=false
 NOTE_FOUND=false
 DAEMON_FOUND=false
@@ -186,21 +224,18 @@ for i in {1..8}; do
     fi
 done
 
-# Check for pending indicator
 if [[ "$PENDING_FOUND" == "true" ]]; then
     pass "Shows [pending] status"
 else
     fail "Missing [pending] status"
 fi
 
-# Check for note content
 if [[ "$NOTE_FOUND" == "true" ]]; then
     pass "Shows check-in note"
 else
     fail "Missing check-in note"
 fi
 
-# Check for daemon status
 if [[ "$DAEMON_FOUND" == "true" ]]; then
     pass "Shows [DAEMON] running status"
 else
@@ -210,13 +245,23 @@ fi
 # ============================================================
 # Test 4: Display clears properly between updates
 # ============================================================
-
 echo ""
-echo "Testing display clears properly..."
+echo "Test 4: Testing display clears properly..."
 
-# Cancel daemon and update checkins
-cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" cancel --workflow "001-test" > /dev/null 2>&1
+# Ask Claude to cancel the daemon
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test'"
 sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
+sleep 10
+
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
 # Manually update checkins.json to show done entries
 cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
@@ -235,7 +280,7 @@ cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
 }
 EOF
 
-# Wait for display to refresh with retry loop (robust under load)
+# Wait for display to refresh with retry loop
 OLD_CLEARED=false
 DONE_FOUND=false
 for i in {1..5}; do
@@ -252,14 +297,12 @@ for i in {1..5}; do
     fi
 done
 
-# Old content should be gone
 if [[ "$OLD_CLEARED" == "true" ]]; then
     pass "Old content cleared properly"
 else
     fail "Old content still visible (display not clearing)"
 fi
 
-# New content should be visible
 if [[ "$DONE_FOUND" == "true" ]]; then
     pass "New [done] status visible"
 else
@@ -269,14 +312,13 @@ fi
 # ============================================================
 # Test 5: Pane title updates correctly (reads from status.yml)
 # ============================================================
-
 echo ""
-echo "Testing pane title updates..."
+echo "Test 5: Testing pane title updates..."
 
-# Set interval in status.yml (the single source of truth)
+# Set interval in status.yml
 sed -i '' 's/checkin_interval_minutes:.*/checkin_interval_minutes: 5/' "$TEST_DIR/.workflow/001-test/status.yml"
 
-# Wait for title update with retry loop (robust under load)
+# Wait for title update with retry loop
 TITLE_FOUND=false
 for i in {1..5}; do
     sleep 3
@@ -296,9 +338,8 @@ fi
 # ============================================================
 # Test 6: Display shows DEAD daemon status
 # ============================================================
-
 echo ""
-echo "Testing display shows dead daemon..."
+echo "Test 6: Testing display shows dead daemon..."
 
 # Set a fake PID that doesn't exist
 cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
@@ -316,7 +357,7 @@ cat > "$TEST_DIR/.workflow/001-test/checkins.json" << EOF
 }
 EOF
 
-# Wait for display to show dead daemon with retry loop (robust under load)
+# Wait for display to show dead daemon with retry loop
 DEAD_FOUND=false
 for i in {1..5}; do
     sleep 3
@@ -336,7 +377,6 @@ fi
 # ============================================================
 # Results
 # ============================================================
-
 echo ""
 echo "======================================================================"
 TOTAL=$((TESTS_PASSED + TESTS_FAILED))

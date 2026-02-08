@@ -13,10 +13,10 @@
 - ALWAYS keep working or notify PM - never stop silently
 
 ### In Practice:
-- **If you need information**: Notify PM with: notify-pm.sh "[BLOCKED] Need database connection details"
-- **If you have a question**: Notify PM with: notify-pm.sh "[HELP] Should I apply migration to production?"
-- **If you're done**: Notify PM with: notify-pm.sh "[DONE] Completed task X"
-- **If you're stuck**: Notify PM with: notify-pm.sh "[BLOCKED] Cannot proceed because Y"
+- **If you need information**: Notify PM with: `/notify-pm [BLOCKED] Need database connection details`
+- **If you have a question**: Notify PM with: `/notify-pm [HELP] Should I apply migration to production?`
+- **If you're done**: Notify PM with: `/notify-pm [DONE] Completed task X`
+- **If you're stuck**: Notify PM with: `/notify-pm [BLOCKED] Cannot proceed because Y`
 
 ### The PM Will:
 - Ask the user questions on your behalf
@@ -36,8 +36,8 @@
 {{ responsibilities }}
 
 ## Communication
-- Notify PM using: notify-pm.sh "[STATUS] message"
-- PM is always at window 0, pane 1 - notify-pm.sh handles this automatically
+- Notify PM using: `/notify-pm [STATUS] message`
+- PM is always at window 0, pane 1 - the skill handles this automatically
 - Check agent-tasks.md for your assigned tasks
 
 ## Waiting for Dependencies (IMPORTANT)
@@ -62,7 +62,7 @@ for i in 1 2 3 4 5; do
   sleep $((i * 30))
 done
 if [[ ! -f "expected_file.md" ]]; then
-  notify-pm.sh "[BLOCKED] Waited 5 times for expected_file.md - still missing"
+  # Use /notify-pm skill: /notify-pm [BLOCKED] Waited 5 times for expected_file.md - still missing
 fi
 ```
 

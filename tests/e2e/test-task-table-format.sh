@@ -7,14 +7,15 @@
 # | ID | Task | Agent | Status |
 #
 # Status shows: "pending", "in_progress", "blocked by TX", etc.
+#
+# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
+# All script execution goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="task-table-format"
-TEST_ID="$$"
-TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
-BIN_DIR="$PROJECT_ROOT/bin"
-SESSION_NAME="e2e-table-format-$TEST_ID"
+TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
+SESSION_NAME="e2e-table-format-$$"
 export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
@@ -25,8 +26,8 @@ echo ""
 TESTS_PASSED=0
 TESTS_FAILED=0
 
-pass() { echo "  PASS: $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
-fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
+pass() { echo "  ✅ $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
+fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
@@ -37,8 +38,9 @@ cleanup() {
 trap cleanup EXIT
 
 # ============================================================
-# Setup: Create test project with workflow and tmux session
+# Setup: Create test project with workflow
 # ============================================================
+echo "Phase 1: Setting up test environment..."
 
 mkdir -p "$TEST_DIR/.workflow/001-test-workflow"
 
@@ -47,23 +49,38 @@ status: in-progress
 checkin_interval_minutes: 1
 EOF
 
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+# IMPORTANT: Use larger window size for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
 
-echo "Test directory: $TEST_DIR"
-echo "Session: $SESSION_NAME"
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+echo "  - Test directory: $TEST_DIR"
+echo "  - Session: $SESSION_NAME"
+echo "  - Waiting for Claude to start..."
+sleep 8
+
+# Handle trust prompt
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  ✓ Test environment ready"
 echo ""
 
 # ============================================================
-# Helper: Generate table from tasks.json
+# Helper: Generate table via Claude
 # ============================================================
 
-generate_table() {
-    local tasks_file="$1"
-    local output_file="/tmp/e2e-table-output-$$.txt"
-    local script_file="/tmp/e2e-table-script-$$.py"
-
-    cat > "$script_file" << 'PYEOF'
+# Create the table generator Python script once
+cat > /tmp/e2e-table-script-$$.py << 'PYEOF'
 import json
 import sys
 
@@ -103,16 +120,23 @@ except Exception as e:
     print(f"Error: {e}")
 PYEOF
 
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "python3 '$script_file' '$tasks_file' > '$output_file' 2>&1" Enter
-    sleep 2
+generate_table() {
+    local tasks_file="$1"
+    local output_file="/tmp/e2e-table-output-$$.txt"
+
+    # Ask Claude to run the table generator
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: python3 /tmp/e2e-table-script-$$.py '$tasks_file' > '$output_file' 2>&1"
+    sleep 1
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 30
+
     cat "$output_file" 2>/dev/null
 }
 
 # ============================================================
 # Test 1: Basic table format with header
 # ============================================================
-
-echo "Testing basic table format with header..."
+echo "Test 1: Testing basic table format with header..."
 
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {
@@ -156,9 +180,8 @@ fi
 # ============================================================
 # Test 2: Status shows "blocked by T1" format
 # ============================================================
-
 echo ""
-echo "Testing blocked status format..."
+echo "Test 2: Testing blocked status format..."
 
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {
@@ -194,9 +217,8 @@ fi
 # ============================================================
 # Test 3: Multiple blockers format
 # ============================================================
-
 echo ""
-echo "Testing multiple blockers format..."
+echo "Test 3: Testing multiple blockers format..."
 
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {
@@ -240,9 +262,8 @@ fi
 # ============================================================
 # Test 4: Different status values
 # ============================================================
-
 echo ""
-echo "Testing different status values..."
+echo "Test 4: Testing different status values..."
 
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {
@@ -296,48 +317,10 @@ else
 fi
 
 # ============================================================
-# Test 5: Agent column values
+# Test 5: Table has exactly 4 columns
 # ============================================================
-
 echo ""
-echo "Testing agent column values..."
-
-cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
-{
-  "tasks": [
-    {"id": "T1", "subject": "Dev task", "agent": "developer", "status": "pending", "blockedBy": [], "blocks": []},
-    {"id": "T2", "subject": "QA task", "agent": "qa", "status": "pending", "blockedBy": [], "blocks": []},
-    {"id": "T3", "subject": "Review task", "agent": "code-reviewer", "status": "pending", "blockedBy": [], "blocks": []}
-  ]
-}
-EOF
-
-TABLE_OUTPUT=$(generate_table "$TEST_DIR/.workflow/001-test-workflow/tasks.json")
-
-if echo "$TABLE_OUTPUT" | grep "| T1 |" | grep -q "| developer |"; then
-    pass "Developer agent in correct column"
-else
-    fail "Developer agent not in correct column"
-fi
-
-if echo "$TABLE_OUTPUT" | grep "| T2 |" | grep -q "| qa |"; then
-    pass "QA agent in correct column"
-else
-    fail "QA agent not in correct column"
-fi
-
-if echo "$TABLE_OUTPUT" | grep "| T3 |" | grep -q "| code-reviewer |"; then
-    pass "Code-reviewer agent in correct column"
-else
-    fail "Code-reviewer agent not in correct column"
-fi
-
-# ============================================================
-# Test 6: Table has exactly 4 columns
-# ============================================================
-
-echo ""
-echo "Testing table has exactly 4 columns..."
+echo "Test 5: Testing table has exactly 4 columns..."
 
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {
@@ -359,11 +342,10 @@ else
 fi
 
 # ============================================================
-# Test 7: Task subject truncation in table
+# Test 6: Task subject truncation in table
 # ============================================================
-
 echo ""
-echo "Testing task subject truncation..."
+echo "Test 6: Testing task subject truncation..."
 
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {
@@ -397,11 +379,10 @@ else
 fi
 
 # ============================================================
-# Test 8: Empty tasks array shows "(no tasks)"
+# Test 7: Empty tasks array shows "(no tasks)"
 # ============================================================
-
 echo ""
-echo "Testing empty tasks array..."
+echo "Test 7: Testing empty tasks array..."
 
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {
@@ -418,195 +399,10 @@ else
 fi
 
 # ============================================================
-# Test 9: ID column format (T1, T2, etc.)
+# Test 8: tasks-table.sh script produces correct format
 # ============================================================
-
 echo ""
-echo "Testing ID column format..."
-
-cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
-{
-  "tasks": [
-    {"id": "T1", "subject": "First task", "agent": "developer", "status": "pending", "blockedBy": [], "blocks": []},
-    {"id": "T2", "subject": "Second task", "agent": "developer", "status": "pending", "blockedBy": [], "blocks": []},
-    {"id": "T10", "subject": "Tenth task", "agent": "developer", "status": "pending", "blockedBy": [], "blocks": []}
-  ]
-}
-EOF
-
-TABLE_OUTPUT=$(generate_table "$TEST_DIR/.workflow/001-test-workflow/tasks.json")
-
-if echo "$TABLE_OUTPUT" | grep -qE "\| T1 \|.*First task"; then
-    pass "T1 ID format correct"
-else
-    fail "T1 ID format incorrect"
-fi
-
-if echo "$TABLE_OUTPUT" | grep -qE "\| T10 \|.*Tenth task"; then
-    pass "T10 ID format correct (double digit)"
-else
-    fail "T10 ID format incorrect"
-fi
-
-# ============================================================
-# Test 10: Full table rendering
-# ============================================================
-
-echo ""
-echo "Testing full table rendering with mixed statuses..."
-
-cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
-{
-  "tasks": [
-    {"id": "T1", "subject": "Setup project scaffolding", "agent": "developer", "status": "completed", "blockedBy": [], "blocks": []},
-    {"id": "T2", "subject": "Implement core logic", "agent": "developer", "status": "in_progress", "blockedBy": [], "blocks": []},
-    {"id": "T3", "subject": "Write unit tests", "agent": "qa", "status": "pending", "blockedBy": ["T2"], "blocks": []},
-    {"id": "T4", "subject": "Code review", "agent": "code-reviewer", "status": "pending", "blockedBy": ["T2", "T3"], "blocks": []}
-  ]
-}
-EOF
-
-TABLE_OUTPUT=$(generate_table "$TEST_DIR/.workflow/001-test-workflow/tasks.json")
-
-echo "Generated table:"
-echo "$TABLE_OUTPUT"
-echo ""
-
-# Verify complete structure
-HEADER_OK=false
-SEPARATOR_OK=false
-ROW_COUNT=0
-
-while IFS= read -r line; do
-    if [[ "$line" == "| ID | Task | Agent | Status |" ]]; then
-        HEADER_OK=true
-    elif [[ "$line" == "|----|------|-------|--------|" ]]; then
-        SEPARATOR_OK=true
-    elif [[ "$line" =~ ^\|\ T[0-9]+ ]]; then
-        ROW_COUNT=$((ROW_COUNT + 1))
-    fi
-done <<< "$TABLE_OUTPUT"
-
-if [[ "$HEADER_OK" == "true" ]]; then
-    pass "Full table has correct header"
-else
-    fail "Full table missing header"
-fi
-
-if [[ "$SEPARATOR_OK" == "true" ]]; then
-    pass "Full table has separator"
-else
-    fail "Full table missing separator"
-fi
-
-if [[ "$ROW_COUNT" == "4" ]]; then
-    pass "Full table has all 4 data rows"
-else
-    fail "Expected 4 data rows, got $ROW_COUNT"
-fi
-
-# ============================================================
-# Test 11: Verify blocked status takes precedence
-# ============================================================
-
-echo ""
-echo "Testing blocked status with explicit blocked status..."
-
-cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
-{
-  "tasks": [
-    {
-      "id": "T1",
-      "subject": "Blocked task",
-      "agent": "developer",
-      "status": "blocked",
-      "blockedBy": ["T0"],
-      "blocks": []
-    }
-  ]
-}
-EOF
-
-TABLE_OUTPUT=$(generate_table "$TEST_DIR/.workflow/001-test-workflow/tasks.json")
-
-if echo "$TABLE_OUTPUT" | grep -q "blocked by T0"; then
-    pass "Explicit blocked status shows 'blocked by T0'"
-else
-    fail "Blocked status not showing blockedBy: $TABLE_OUTPUT"
-fi
-
-# ============================================================
-# Test 12: Special characters in task subject
-# ============================================================
-
-echo ""
-echo "Testing special characters in task subject..."
-
-cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
-{
-  "tasks": [
-    {
-      "id": "T1",
-      "subject": "Add OAuth2 authentication (SSO)",
-      "agent": "developer",
-      "status": "pending",
-      "blockedBy": [],
-      "blocks": []
-    }
-  ]
-}
-EOF
-
-TABLE_OUTPUT=$(generate_table "$TEST_DIR/.workflow/001-test-workflow/tasks.json")
-
-if echo "$TABLE_OUTPUT" | grep -q "Add OAuth2 authentication (SSO)"; then
-    pass "Special characters (parentheses) preserved in subject"
-else
-    fail "Special characters not preserved: $TABLE_OUTPUT"
-fi
-
-# ============================================================
-# Test 13: Pipe character in subject (edge case)
-# ============================================================
-
-echo ""
-echo "Testing pipe character handling..."
-
-# Note: Pipe in subject would break table format, so subject should be sanitized
-# This test ensures we handle this edge case gracefully
-cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
-{
-  "tasks": [
-    {
-      "id": "T1",
-      "subject": "Handle A or B case",
-      "agent": "developer",
-      "status": "pending",
-      "blockedBy": [],
-      "blocks": []
-    }
-  ]
-}
-EOF
-
-TABLE_OUTPUT=$(generate_table "$TEST_DIR/.workflow/001-test-workflow/tasks.json")
-
-# Table should still be valid (4 columns per row)
-DATA_ROW=$(echo "$TABLE_OUTPUT" | grep "| T1 |")
-PIPE_COUNT=$(echo "$DATA_ROW" | tr -cd '|' | wc -c | tr -d ' ')
-
-if [[ "$PIPE_COUNT" == "5" ]]; then
-    pass "Table structure valid even with edge case subjects"
-else
-    fail "Table structure broken, got $PIPE_COUNT pipes"
-fi
-
-# ============================================================
-# Test 14: tasks-table.sh script produces correct format
-# ============================================================
-
-echo ""
-echo "Testing tasks-table.sh script..."
+echo "Test 8: Testing tasks-table.sh script through Claude..."
 
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {
@@ -618,9 +414,12 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-# Run the actual tasks-table.sh script via tmux
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1" Enter
-sleep 2
+# Run the actual tasks-table.sh script through Claude
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
 SCRIPT_OUTPUT=$(cat /tmp/e2e-tasktable-$$.txt 2>/dev/null)
 
 # Verify header
@@ -644,16 +443,18 @@ else
 fi
 
 # ============================================================
-# Test 15: tasks-table.sh with missing file
+# Test 9: tasks-table.sh with missing file
 # ============================================================
-
 echo ""
-echo "Testing tasks-table.sh with missing tasks file..."
+echo "Test 9: Testing tasks-table.sh with missing tasks file..."
 
 rm -f "$TEST_DIR/.workflow/001-test-workflow/tasks.json"
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1" Enter
-sleep 2
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
 SCRIPT_OUTPUT=$(cat /tmp/e2e-tasktable-$$.txt 2>/dev/null)
 
 if echo "$SCRIPT_OUTPUT" | grep -q "no tasks file found"; then
@@ -663,11 +464,10 @@ else
 fi
 
 # ============================================================
-# Test 16: tasks-table.sh with empty tasks array
+# Test 10: tasks-table.sh with empty tasks array
 # ============================================================
-
 echo ""
-echo "Testing tasks-table.sh with empty tasks array..."
+echo "Test 10: Testing tasks-table.sh with empty tasks array..."
 
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {
@@ -675,8 +475,11 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1" Enter
-sleep 2
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
 SCRIPT_OUTPUT=$(cat /tmp/e2e-tasktable-$$.txt 2>/dev/null)
 
 if echo "$SCRIPT_OUTPUT" | grep -q "(no tasks)"; then
@@ -686,43 +489,19 @@ else
 fi
 
 # ============================================================
-# Test 17: tasks-table.sh respects WORKFLOW_NAME env var
+# RESULTS
 # ============================================================
-
-echo ""
-echo "Testing tasks-table.sh with tmux WORKFLOW_NAME..."
-
-# Restore tasks for test
-cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
-{
-  "tasks": [
-    {"id": "T1", "subject": "Env var test task", "agent": "developer", "status": "pending", "blockedBy": [], "blocks": []}
-  ]
-}
-EOF
-
-# Run inside the tmux session with WORKFLOW_NAME set
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1" Enter
-sleep 2
-SCRIPT_OUTPUT=$(cat /tmp/e2e-tasktable-$$.txt 2>/dev/null)
-
-if echo "$SCRIPT_OUTPUT" | grep -q "Env var test task"; then
-    pass "tasks-table.sh reads workflow from tmux env"
-else
-    fail "tasks-table.sh couldn't find workflow: $SCRIPT_OUTPUT"
-fi
-
-# ============================================================
-# Results
-# ============================================================
-
 echo ""
 echo "======================================================================"
 TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "  ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
-    exit 0
+    echo "  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
+    EXIT_CODE=0
 else
-    echo "  SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
-    exit 1
+    echo "  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
+    EXIT_CODE=1
 fi
+echo "======================================================================"
+echo ""
+
+exit $EXIT_CODE

@@ -17,6 +17,9 @@
 # 2. Verify hook respects session isolation (agent A != agent B)
 # 3. Verify hook fallback works with single active loop
 # 4. Verify hook fallback doesn't fire with multiple active loops
+#
+# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
+# All script execution goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -33,28 +36,52 @@ echo ""
 TESTS_PASSED=0
 TESTS_FAILED=0
 
-pass() { echo "  PASS: $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
-fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
+pass() { echo "  ✅ $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
+fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""
     echo "Cleaning up..."
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
+    rm -rf /tmp/e2e-hook-isolation-$$ /tmp/e2e-hook-fallback-single-$$ /tmp/e2e-hook-fallback-multi-$$ 2>/dev/null || true
+    rm -f /tmp/e2e-hook-result-$$.txt 2>/dev/null || true
 }
 trap cleanup EXIT
+
+# Setup test directory
+mkdir -p "$TEST_DIR"
+
+# IMPORTANT: Use larger window size for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+echo "  - Waiting for Claude to start..."
+sleep 8
+
+# Handle trust prompt
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  ✓ Test environment ready"
+echo ""
+
+SKILL_FILE="$PROJECT_ROOT/skills/loop/SKILL.md"
+HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/loop-stop-hook.py"
 
 # ============================================================
 # Test 1: Verify SKILL.md uses $CLAUDE_CODE_SESSION_ID
 # ============================================================
-echo ""
 echo "Test 1: SKILL.md uses CLAUDE_CODE_SESSION_ID (not timestamp)..."
-echo ""
-
-# Setup test directory (needed by later tests)
-mkdir -p "$TEST_DIR"
-
-SKILL_FILE="$PROJECT_ROOT/skills/loop/SKILL.md"
 
 # Test 1a: SKILL.md should contain $CLAUDE_CODE_SESSION_ID
 if grep -q 'CLAUDE_CODE_SESSION_ID' "$SKILL_FILE"; then
@@ -82,7 +109,6 @@ fi
 # ============================================================
 echo ""
 echo "Test 2: Hook respects session isolation..."
-echo ""
 
 # Create test directory with loop
 TEST_DIR_2="/tmp/e2e-hook-isolation-$$"
@@ -104,25 +130,22 @@ cat > "$TEST_DIR_2/.workflow/loops/001-test/meta.json" <<'EOF'
 }
 EOF
 
-HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/loop-stop-hook.py"
-
 # Test 2a: Agent A (matching session) should get loop continuation
-echo "Test 2a: Agent A (matching session_id) should continue loop..."
-INPUT_A=$(cat <<EOF
-{
-  "cwd": "$TEST_DIR_2",
-  "session_id": "session-agent-A"
-}
-EOF
-)
+echo "  Test 2a: Agent A (matching session_id) should continue loop..."
 
-OUTPUT_A=$(echo "$INPUT_A" | python3 "$HOOK_SCRIPT" 2>&1)
+INPUT_A='{"cwd": "'"$TEST_DIR_2"'", "session_id": "session-agent-A"}'
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_A' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
+OUTPUT_A=$(cat /tmp/e2e-hook-result-$$.txt 2>/dev/null)
 
 if echo "$OUTPUT_A" | grep -q '"decision": "block"'; then
     pass "Agent A receives loop continuation (decision: block)"
 else
     fail "Agent A did not receive loop continuation"
-    echo "  Output: $OUTPUT_A"
 fi
 
 if echo "$OUTPUT_A" | grep -q "check logs"; then
@@ -133,27 +156,25 @@ fi
 
 # Test 2b: Agent B (different session) should NOT get loop continuation
 echo ""
-echo "Test 2b: Agent B (different session_id) should NOT continue loop..."
-INPUT_B=$(cat <<EOF
-{
-  "cwd": "$TEST_DIR_2",
-  "session_id": "session-agent-B"
-}
-EOF
-)
+echo "  Test 2b: Agent B (different session_id) should NOT continue loop..."
 
-OUTPUT_B=$(echo "$INPUT_B" | python3 "$HOOK_SCRIPT" 2>&1)
+INPUT_B='{"cwd": "'"$TEST_DIR_2"'", "session_id": "session-agent-B"}'
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_B' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
+OUTPUT_B=$(cat /tmp/e2e-hook-result-$$.txt 2>/dev/null)
 
 if [[ -z "$OUTPUT_B" ]]; then
     pass "Agent B ignored (no output from hook)"
 elif echo "$OUTPUT_B" | grep -q '"decision": "block"'; then
     fail "Agent B incorrectly received loop continuation"
-    echo "  Output: $OUTPUT_B"
 else
     pass "Agent B ignored (output not a block decision)"
 fi
 
-# Cleanup
 rm -rf "$TEST_DIR_2"
 
 # ============================================================
@@ -161,9 +182,7 @@ rm -rf "$TEST_DIR_2"
 # ============================================================
 echo ""
 echo "Test 3: Hook fallback works with single active loop (no session_id)..."
-echo ""
 
-# Create test directory with single loop (no session_id in hook input)
 TEST_DIR_3="/tmp/e2e-hook-fallback-single-$$"
 mkdir -p "$TEST_DIR_3/.workflow/loops/001-monitor"
 
@@ -182,21 +201,19 @@ cat > "$TEST_DIR_3/.workflow/loops/001-monitor/meta.json" <<'EOF'
 }
 EOF
 
-# Hook input WITHOUT session_id (simulates older Claude Code or missing context)
-INPUT_NO_SESSION=$(cat <<EOF
-{
-  "cwd": "$TEST_DIR_3"
-}
-EOF
-)
+INPUT_NO_SESSION='{"cwd": "'"$TEST_DIR_3"'"}'
 
-OUTPUT_NO_SESSION=$(echo "$INPUT_NO_SESSION" | python3 "$HOOK_SCRIPT" 2>&1)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_NO_SESSION' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
+OUTPUT_NO_SESSION=$(cat /tmp/e2e-hook-result-$$.txt 2>/dev/null)
 
 if echo "$OUTPUT_NO_SESSION" | grep -q '"decision": "block"'; then
     pass "Fallback works: single active loop continued"
 else
     fail "Fallback failed: single active loop not continued"
-    echo "  Output: $OUTPUT_NO_SESSION"
 fi
 
 if echo "$OUTPUT_NO_SESSION" | grep -q "monitor status"; then
@@ -205,7 +222,6 @@ else
     fail "Fallback loop missing prompt"
 fi
 
-# Cleanup
 rm -rf "$TEST_DIR_3"
 
 # ============================================================
@@ -213,9 +229,7 @@ rm -rf "$TEST_DIR_3"
 # ============================================================
 echo ""
 echo "Test 4: Hook fallback doesn't fire with multiple active loops..."
-echo ""
 
-# Create test directory with TWO active loops
 TEST_DIR_4="/tmp/e2e-hook-fallback-multi-$$"
 mkdir -p "$TEST_DIR_4/.workflow/loops/001-first"
 mkdir -p "$TEST_DIR_4/.workflow/loops/002-second"
@@ -251,116 +265,112 @@ cat > "$TEST_DIR_4/.workflow/loops/002-second/meta.json" <<'EOF'
 EOF
 
 # Test 4a: No session_id with multiple loops should produce NO output
-echo "Test 4a: Multiple loops with no session_id should be ignored..."
-INPUT_MULTI_NO_SESSION=$(cat <<EOF
-{
-  "cwd": "$TEST_DIR_4"
-}
-EOF
-)
+echo "  Test 4a: Multiple loops with no session_id should be ignored..."
 
-OUTPUT_MULTI_NO_SESSION=$(echo "$INPUT_MULTI_NO_SESSION" | python3 "$HOOK_SCRIPT" 2>&1)
+INPUT_MULTI_NO_SESSION='{"cwd": "'"$TEST_DIR_4"'"}'
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_NO_SESSION' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
+OUTPUT_MULTI_NO_SESSION=$(cat /tmp/e2e-hook-result-$$.txt 2>/dev/null)
 
 if [[ -z "$OUTPUT_MULTI_NO_SESSION" ]]; then
     pass "Multiple loops with no session_id correctly ignored"
 elif echo "$OUTPUT_MULTI_NO_SESSION" | grep -q '"decision": "block"'; then
     fail "Hook incorrectly picked a loop from multiple active loops"
-    echo "  Output: $OUTPUT_MULTI_NO_SESSION"
 else
     pass "Multiple loops with no session_id ignored (non-block output)"
 fi
 
 # Test 4b: Matching session_id should get the correct loop
 echo ""
-echo "Test 4b: Matching session_id should get correct loop from multiple..."
-INPUT_MULTI_SESSION_1=$(cat <<EOF
-{
-  "cwd": "$TEST_DIR_4",
-  "session_id": "session-loop-1"
-}
-EOF
-)
+echo "  Test 4b: Matching session_id should get correct loop from multiple..."
 
-OUTPUT_MULTI_SESSION_1=$(echo "$INPUT_MULTI_SESSION_1" | python3 "$HOOK_SCRIPT" 2>&1)
+INPUT_MULTI_SESSION_1='{"cwd": "'"$TEST_DIR_4"'", "session_id": "session-loop-1"}'
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_SESSION_1' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
+OUTPUT_MULTI_SESSION_1=$(cat /tmp/e2e-hook-result-$$.txt 2>/dev/null)
 
 if echo "$OUTPUT_MULTI_SESSION_1" | grep -q '"decision": "block"'; then
     pass "Loop 1 found by matching session_id"
 else
     fail "Loop 1 not found despite matching session_id"
-    echo "  Output: $OUTPUT_MULTI_SESSION_1"
 fi
 
 if echo "$OUTPUT_MULTI_SESSION_1" | grep -q "check first"; then
     pass "Correct loop (001-first) returned"
 else
     fail "Wrong loop returned or prompt missing"
-    echo "  Output: $OUTPUT_MULTI_SESSION_1"
 fi
 
 # Test 4c: Different session_id should get different loop
 echo ""
-echo "Test 4c: Different session_id should get different loop..."
-INPUT_MULTI_SESSION_2=$(cat <<EOF
-{
-  "cwd": "$TEST_DIR_4",
-  "session_id": "session-loop-2"
-}
-EOF
-)
+echo "  Test 4c: Different session_id should get different loop..."
 
-OUTPUT_MULTI_SESSION_2=$(echo "$INPUT_MULTI_SESSION_2" | python3 "$HOOK_SCRIPT" 2>&1)
+INPUT_MULTI_SESSION_2='{"cwd": "'"$TEST_DIR_4"'", "session_id": "session-loop-2"}'
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_SESSION_2' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
+OUTPUT_MULTI_SESSION_2=$(cat /tmp/e2e-hook-result-$$.txt 2>/dev/null)
 
 if echo "$OUTPUT_MULTI_SESSION_2" | grep -q '"decision": "block"'; then
     pass "Loop 2 found by matching session_id"
 else
     fail "Loop 2 not found despite matching session_id"
-    echo "  Output: $OUTPUT_MULTI_SESSION_2"
 fi
 
 if echo "$OUTPUT_MULTI_SESSION_2" | grep -q "check second"; then
     pass "Correct loop (002-second) returned"
 else
     fail "Wrong loop returned or prompt missing"
-    echo "  Output: $OUTPUT_MULTI_SESSION_2"
 fi
 
 # Test 4d: Unknown session_id should be ignored
 echo ""
-echo "Test 4d: Unknown session_id should be ignored..."
-INPUT_MULTI_UNKNOWN=$(cat <<EOF
-{
-  "cwd": "$TEST_DIR_4",
-  "session_id": "session-unknown-xyz"
-}
-EOF
-)
+echo "  Test 4d: Unknown session_id should be ignored..."
 
-OUTPUT_MULTI_UNKNOWN=$(echo "$INPUT_MULTI_UNKNOWN" | python3 "$HOOK_SCRIPT" 2>&1)
+INPUT_MULTI_UNKNOWN='{"cwd": "'"$TEST_DIR_4"'", "session_id": "session-unknown-xyz"}'
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_UNKNOWN' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
+OUTPUT_MULTI_UNKNOWN=$(cat /tmp/e2e-hook-result-$$.txt 2>/dev/null)
 
 if [[ -z "$OUTPUT_MULTI_UNKNOWN" ]]; then
     pass "Unknown session_id correctly ignored"
 elif echo "$OUTPUT_MULTI_UNKNOWN" | grep -q '"decision": "block"'; then
     fail "Unknown session received loop continuation"
-    echo "  Output: $OUTPUT_MULTI_UNKNOWN"
 else
     pass "Unknown session_id ignored (non-block output)"
 fi
 
-# Cleanup
 rm -rf "$TEST_DIR_4"
 
 # ============================================================
-# Results
+# RESULTS
 # ============================================================
 echo ""
 echo "======================================================================"
 TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "  ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
-    echo "======================================================================"
-    exit 0
+    echo "  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
+    EXIT_CODE=0
 else
-    echo "  SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
-    echo "======================================================================"
-    exit 1
+    echo "  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
+    EXIT_CODE=1
 fi
+echo "======================================================================"
+echo ""
+
+exit $EXIT_CODE

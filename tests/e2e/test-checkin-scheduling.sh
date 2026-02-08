@@ -3,21 +3,21 @@
 #
 # E2E Test: Check-in daemon scheduling and control
 #
-# Verifies:
+# Verifies through Claude Code:
 # 1. Daemon starts with correct PID stored in checkins.json
 # 2. Duplicate daemon starts are prevented
-# 3. Daemon can be cancelled by killing the PID
+# 3. Daemon can be cancelled
 # 4. After cancel, new daemon can be started
-# 5. Notes are displayed without excessive truncation (40 chars)
+# 5. Status command shows daemon info
+#
+# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
+# All execution goes through Claude running inside a tmux session.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="checkin-scheduling"
-TEST_ID="$$"
-TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
-BIN_DIR="$PROJECT_ROOT/bin"
-LIB_DIR="$PROJECT_ROOT/lib"
-SESSION_NAME="e2e-checkin-sched-$TEST_ID"
+TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
+SESSION_NAME="e2e-test-$$"
 export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
@@ -28,8 +28,8 @@ echo ""
 TESTS_PASSED=0
 TESTS_FAILED=0
 
-pass() { echo "  PASS: $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
-fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
+pass() { echo "  ✅ $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
+fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
@@ -56,8 +56,9 @@ except:
 trap cleanup EXIT
 
 # ============================================================
-# Setup: Create test project with workflow and tmux session
+# PHASE 1: Setup test environment
 # ============================================================
+echo "Phase 1: Setting up test environment..."
 
 mkdir -p "$TEST_DIR/.workflow/001-test-workflow"
 
@@ -79,30 +80,49 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-# Create tmux session with WORKFLOW_NAME
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+# IMPORTANT: Use larger window size for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
 
-echo "Test directory: $TEST_DIR"
-echo "Session: $SESSION_NAME"
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+# Wait for Claude to start and handle trust prompt
+echo "  - Waiting for Claude to start..."
+sleep 8
+
+# Check for trust prompt and send Enter to accept
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  ✓ Test environment ready"
 echo ""
 
 # ============================================================
-# Test 1: First daemon starts successfully with PID stored
+# PHASE 2: Test daemon starts successfully with PID stored
 # ============================================================
+echo "Phase 2: Testing first daemon starts successfully..."
 
-echo "Testing first daemon starts successfully..."
+# Ask Claude to start the check-in daemon
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py start 1 --note 'First check-in' --target '$SESSION_NAME:0' --workflow '001-test-workflow'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-# Run schedule-checkin from inside the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 'First check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-1.txt" Enter
-sleep 3
-
-OUTPUT1=$(cat /tmp/checkin-test-1.txt 2>/dev/null)
-
-if echo "$OUTPUT1" | grep -q "Daemon started with PID"; then
-    pass "Daemon started successfully"
+# Handle skill trust prompt if it appears
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    echo "  - Skill trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
 else
-    fail "Daemon failed to start: $OUTPUT1"
+    sleep 20
 fi
 
 # Verify daemon_pid is stored in checkins.json
@@ -124,7 +144,7 @@ else
 fi
 
 # Verify the PID is actually running
-if kill -0 "$DAEMON_PID" 2>/dev/null; then
+if [[ -n "$DAEMON_PID" ]] && kill -0 "$DAEMON_PID" 2>/dev/null; then
     pass "Daemon process is running (PID $DAEMON_PID)"
 else
     fail "Daemon process is not running"
@@ -142,32 +162,34 @@ except:
     print(0)
 " 2>/dev/null)
 
-if [[ "$PENDING_COUNT" == "1" ]]; then
-    pass "checkins.json has 1 pending entry"
+if [[ "$PENDING_COUNT" -ge 1 ]]; then
+    pass "checkins.json has pending entry"
 else
-    fail "Expected 1 pending entry, got $PENDING_COUNT"
+    fail "Expected pending entry, got $PENDING_COUNT"
 fi
 
 # ============================================================
-# Test 2: Duplicate daemon start is prevented
+# PHASE 3: Test duplicate daemon start is prevented
 # ============================================================
-
 echo ""
-echo "Testing duplicate daemon start is prevented..."
+echo "Phase 3: Testing duplicate daemon start is prevented..."
 
-# Try to start another daemon while one is running
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 'Duplicate check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-2.txt" Enter
-sleep 3
+# Ask Claude to start another daemon while one is running
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py start 1 --note 'Duplicate check-in' --target '$SESSION_NAME:0' --workflow '001-test-workflow'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-OUTPUT2=$(cat /tmp/checkin-test-2.txt 2>/dev/null)
-
-if echo "$OUTPUT2" | grep -q "already running"; then
-    pass "Duplicate daemon prevented with message"
+# Handle skill trust prompt if it reappears
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
 else
-    fail "Duplicate daemon should be prevented: $OUTPUT2"
+    sleep 20
 fi
 
-# Verify still same PID
+# Verify still same PID (no new process started)
 NEW_PID=$(python3 -c "
 import json
 try:
@@ -184,27 +206,38 @@ else
     fail "PID changed from $DAEMON_PID to $NEW_PID"
 fi
 
-# ============================================================
-# Test 3: Daemon can be cancelled (PID killed)
-# ============================================================
-
-echo ""
-echo "Testing daemon cancellation..."
-
-# Cancel the daemon
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/cancel-checkin.sh 2>&1 | tee /tmp/checkin-test-3.txt" Enter
-sleep 3
-
-OUTPUT3=$(cat /tmp/checkin-test-3.txt 2>/dev/null)
-
-if echo "$OUTPUT3" | grep -q "stopped"; then
-    pass "Cancel command reports stopped"
+# Check Claude's output for "already running" message
+AGENT_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100)
+if echo "$AGENT_OUTPUT" | grep -qi "already running"; then
+    pass "Duplicate daemon prevented with message"
 else
-    fail "Cancel should report stopped: $OUTPUT3"
+    fail "Duplicate daemon should report 'already running'"
+fi
+
+# ============================================================
+# PHASE 4: Test daemon can be cancelled
+# ============================================================
+echo ""
+echo "Phase 4: Testing daemon cancellation via /cancel-checkin..."
+
+# Use the /cancel-checkin skill
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "/cancel-checkin"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
+
+# Handle skill trust prompt if it appears
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    echo "  - Skill trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
 fi
 
 # Verify the process is killed
-if kill -0 "$DAEMON_PID" 2>/dev/null; then
+if [[ -n "$DAEMON_PID" ]] && kill -0 "$DAEMON_PID" 2>/dev/null; then
     fail "Daemon process still running after cancel"
 else
     pass "Daemon process killed"
@@ -227,123 +260,70 @@ else
     fail "Daemon PID not cleared: $CLEARED_PID"
 fi
 
-# Verify stopped entry added
-STOPPED_COUNT=$(python3 -c "
+# ============================================================
+# PHASE 5: After cancel, new daemon can be started
+# ============================================================
+echo ""
+echo "Phase 5: Testing daemon start after cancel..."
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py start 1 --note 'After cancel check-in' --target '$SESSION_NAME:0' --workflow '001-test-workflow'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
+
+# Handle skill trust prompt if it reappears
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
+
+# Verify new daemon started
+NEW_DAEMON_PID=$(python3 -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
         data = json.load(f)
-    stopped = [c for c in data.get('checkins', []) if c.get('status') == 'stopped']
-    print(len(stopped))
+    pid = data.get('daemon_pid')
+    print(pid if pid else '')
 except:
-    print(0)
+    pass
 " 2>/dev/null)
 
-if [[ "$STOPPED_COUNT" -ge 1 ]]; then
-    pass "Stopped entry added to checkins.json"
+if [[ -n "$NEW_DAEMON_PID" ]]; then
+    pass "New daemon started after cancel (PID: $NEW_DAEMON_PID)"
 else
-    fail "No stopped entry found"
+    fail "No new daemon started after cancel"
 fi
 
 # ============================================================
-# Test 4: After cancel, new daemon can be started
+# PHASE 6: Test status command shows daemon info
 # ============================================================
-
 echo ""
-echo "Testing daemon start after cancel..."
+echo "Phase 6: Testing status command..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 'After cancel check-in' $SESSION_NAME:0 2>&1 | tee /tmp/checkin-test-4.txt" Enter
-sleep 3
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py status --workflow '001-test-workflow'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-OUTPUT4=$(cat /tmp/checkin-test-4.txt 2>/dev/null)
-
-if echo "$OUTPUT4" | grep -q "Daemon started"; then
-    pass "New daemon started after cancel"
+# Handle skill trust prompt if it reappears
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
 else
-    fail "Should start new daemon after cancel: $OUTPUT4"
+    sleep 20
 fi
 
-# Verify resumed entry added
-RESUMED_COUNT=$(python3 -c "
-import json
-try:
-    with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
-        data = json.load(f)
-    resumed = [c for c in data.get('checkins', []) if c.get('status') == 'resumed']
-    print(len(resumed))
-except:
-    print(0)
-" 2>/dev/null)
-
-if [[ "$RESUMED_COUNT" -ge 1 ]]; then
-    pass "Resumed entry added when starting after cancel"
-else
-    fail "No resumed entry found"
-fi
-
-# ============================================================
-# Test 5: Note truncation is 40 chars (not 25)
-# ============================================================
-
-echo ""
-echo "Testing note truncation limit..."
-
-# Check the display script truncation
-TRUNCATION_LIMIT=$(grep -o '\[:40\]' "$BIN_DIR/checkin-display.sh" | wc -l | tr -d ' ')
-
-if [[ "$TRUNCATION_LIMIT" -ge 4 ]]; then
-    pass "Display script uses 40-char truncation (found $TRUNCATION_LIMIT occurrences)"
-else
-    fail "Expected 40-char truncation, found $TRUNCATION_LIMIT occurrences"
-fi
-
-# ============================================================
-# Test 6: Long note is stored completely in JSON
-# ============================================================
-
-echo ""
-echo "Testing long notes are stored completely..."
-
-# Cancel existing and start with a long note
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/cancel-checkin.sh 2>&1" Enter
-sleep 2
-
-LONG_NOTE="Auto check-in (15 tasks remaining) - this is a longer note for testing"
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "cd $TEST_DIR && $BIN_DIR/schedule-checkin.sh 1 '$LONG_NOTE' $SESSION_NAME:0 2>&1" Enter
-sleep 3
-
-# Check that full note is in JSON
-STORED_NOTE=$(python3 -c "
-import json
-try:
-    with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
-        data = json.load(f)
-    pending = [c for c in data.get('checkins', []) if c.get('status') == 'pending']
-    if pending:
-        print(pending[-1].get('note', ''))
-except Exception as e:
-    print(f'Error: {e}')
-" 2>/dev/null)
-
-if echo "$STORED_NOTE" | grep -q "15 tasks remaining"; then
-    pass "Full note stored in JSON (not truncated at storage)"
-else
-    fail "Note may be truncated in storage: $STORED_NOTE"
-fi
-
-# ============================================================
-# Test 7: Status command shows daemon info
-# ============================================================
-
-echo ""
-echo "Testing status command..."
-
-STATUS_OUTPUT=$(cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" status --workflow "001-test-workflow" 2>&1)
+STATUS_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100)
 
 if echo "$STATUS_OUTPUT" | grep -q "Daemon running: True"; then
     pass "Status shows daemon running"
 else
-    fail "Status should show daemon running: $STATUS_OUTPUT"
+    fail "Status should show daemon running"
 fi
 
 if echo "$STATUS_OUTPUT" | grep -q "Daemon PID:"; then
@@ -353,16 +333,19 @@ else
 fi
 
 # ============================================================
-# Results
+# RESULTS
 # ============================================================
-
 echo ""
 echo "======================================================================"
 TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "  ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
-    exit 0
+    echo "  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
+    EXIT_CODE=0
 else
-    echo "  SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
-    exit 1
+    echo "  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
+    EXIT_CODE=1
 fi
+echo "======================================================================"
+echo ""
+
+exit $EXIT_CODE

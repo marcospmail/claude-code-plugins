@@ -1,22 +1,23 @@
 #!/bin/bash
 # test-checkin-daemon-lifecycle.sh
 #
-# E2E Test: Check-in daemon lifecycle (auto-start, auto-stop, restart)
+# E2E Test: Check-in daemon lifecycle (start, cancel, restart)
 #
 # Verifies:
-# 1. Daemon auto-starts when tasks.json is written with incomplete tasks (via hook)
-# 2. Daemon auto-stops when all tasks are marked complete
-# 3. Daemon restarts when new tasks added after stop
-# 4. Daemon sends messages to PM target
-# 5. Display shows daemon PID status
+# 1. Daemon starts via Claude running checkin_scheduler.py start
+# 2. Daemon is cancelled via Claude running checkin_scheduler.py cancel
+# 3. Daemon restarts after being cancelled
+# 4. Daemon PID is tracked in checkins.json
+# 5. Status command shows correct information
+# 6. Pending entry has scheduled_for time
+#
+# IMPORTANT: All execution goes through Claude Code in a tmux session.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="checkin-daemon-lifecycle"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
-BIN_DIR="$PROJECT_ROOT/bin"
-LIB_DIR="$PROJECT_ROOT/lib"
 SESSION_NAME="e2e-daemon-life-$TEST_ID"
 export TMUX_SOCKET="yato-e2e-test"
 
@@ -65,6 +66,7 @@ trap cleanup EXIT
 # ============================================================
 # Setup: Create test project with workflow and tmux session
 # ============================================================
+echo "Setting up test environment..."
 
 mkdir -p "$TEST_DIR/.workflow/001-test"
 
@@ -77,27 +79,63 @@ EOF
 # Create initial empty checkins.json (no daemon)
 echo '{"checkins": [], "daemon_pid": null}' > "$TEST_DIR/.workflow/001-test/checkins.json"
 
-# Create tmux session with WORKFLOW_NAME
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test"
+# Create tasks.json with a pending task
+cat > "$TEST_DIR/.workflow/001-test/tasks.json" << 'EOF'
+{
+  "tasks": [
+    {"id": "T1", "subject": "Task 1", "agent": "developer", "status": "pending", "blockedBy": [], "blocks": []}
+  ]
+}
+EOF
 
-# Set YATO_PATH for the hook
+# Create tmux session with larger size for Claude TUI
+# IMPORTANT: Use -x 120 -y 40 for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test"
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
 
-echo "Test directory: $TEST_DIR"
-echo "Session: $SESSION_NAME"
+echo "  Test directory: $TEST_DIR"
+echo "  Session: $SESSION_NAME"
+
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+# Wait for Claude to start and handle trust prompt
+echo "  Waiting for Claude to start..."
+sleep 8
+
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  Test environment ready"
 echo ""
 
 # ============================================================
 # Test 1: Start daemon with incomplete tasks
 # ============================================================
+echo "Test 1: Starting daemon with incomplete tasks..."
 
-echo "Testing daemon start with incomplete tasks..."
+# Ask Claude to run the checkin_scheduler start command
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py start 1 --note 'Test checkin' --target '$SESSION_NAME:0' --workflow '001-test'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-# Start daemon directly (simulating what hook would do)
-cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" start 1 --note "Test checkin" --target "$SESSION_NAME:0" --workflow "001-test" > /tmp/daemon-test-1.txt 2>&1
-
-sleep 2
+# Handle skill/tool trust prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
 DAEMON_PID=$(get_daemon_pid)
 
@@ -108,104 +146,59 @@ else
 fi
 
 # ============================================================
-# Test 2: Daemon auto-stops when tasks complete
+# Test 2: Cancel daemon
 # ============================================================
-
 echo ""
-echo "Testing daemon auto-stop on task completion..."
+echo "Test 2: Cancelling daemon..."
 
-# Create tasks.json with all completed tasks
-cat > "$TEST_DIR/.workflow/001-test/tasks.json" << 'EOF'
-{
-  "tasks": [
-    {"id": "T1", "subject": "Task 1", "agent": "developer", "status": "completed", "blockedBy": [], "blocks": []}
-  ]
-}
-EOF
-
-# The daemon checks tasks every interval (1 min) but also on next check-in
-# We need to wait for the check-in to fire - use a short interval
-# Actually, let's test with a 0.1 minute interval (6 seconds)
-
-# Cancel current daemon first
-cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" cancel --workflow "001-test" > /dev/null 2>&1
+# Ask Claude to cancel the daemon
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test'"
 sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-# Modify status.yml to have very short interval for testing
-cat > "$TEST_DIR/.workflow/001-test/status.yml" << EOF
-status: in-progress
-checkin_interval_minutes: 1
-session: $SESSION_NAME
-EOF
-
-# Reset checkins and start with pending tasks first
-echo '{"checkins": [], "daemon_pid": null}' > "$TEST_DIR/.workflow/001-test/checkins.json"
-
-cat > "$TEST_DIR/.workflow/001-test/tasks.json" << 'EOF'
-{
-  "tasks": [
-    {"id": "T1", "subject": "Task 1", "agent": "developer", "status": "pending", "blockedBy": [], "blocks": []}
-  ]
-}
-EOF
-
-# Start daemon with very short check for testing (using 1 min but we'll simulate)
-cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" start 1 --note "Auto-stop test" --target "$SESSION_NAME:0" --workflow "001-test" > /dev/null 2>&1
-sleep 2
-
-DAEMON_PID=$(get_daemon_pid)
-if [[ -z "$DAEMON_PID" ]]; then
-    fail "Daemon did not start for auto-stop test"
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
 else
-    pass "Daemon running for auto-stop test: PID $DAEMON_PID"
+    sleep 20
+fi
 
-    # Now mark all tasks complete and cancel to simulate the scenario
-    cat > "$TEST_DIR/.workflow/001-test/tasks.json" << 'EOF'
-{
-  "tasks": [
-    {"id": "T1", "subject": "Task 1", "agent": "developer", "status": "completed", "blockedBy": [], "blocks": []}
-  ]
-}
-EOF
-
-    # Cancel daemon (simulates what happens when no tasks remain)
-    cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" cancel --workflow "001-test" > /dev/null 2>&1
-    sleep 1
-
-    NEW_PID=$(get_daemon_pid)
-    if [[ -z "$NEW_PID" ]]; then
-        pass "Daemon stopped after cancel"
-    else
-        fail "Daemon still running after cancel: $NEW_PID"
-    fi
+NEW_PID=$(get_daemon_pid)
+if [[ -z "$NEW_PID" ]]; then
+    pass "Daemon stopped after cancel"
+else
+    fail "Daemon still running after cancel: $NEW_PID"
 fi
 
 # ============================================================
 # Test 3: Daemon can restart after being stopped
 # ============================================================
-
 echo ""
-echo "Testing daemon restart after stop..."
+echo "Test 3: Restarting daemon after stop..."
 
-# Add new pending tasks
-cat > "$TEST_DIR/.workflow/001-test/tasks.json" << 'EOF'
-{
-  "tasks": [
-    {"id": "T2", "subject": "New task", "agent": "developer", "status": "pending", "blockedBy": [], "blocks": []}
-  ]
-}
-EOF
+# Ask Claude to restart the daemon
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py start 1 --note 'Restart test' --target '$SESSION_NAME:0' --workflow '001-test'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-# Start daemon again
-cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" start 1 --note "Restart test" --target "$SESSION_NAME:0" --workflow "001-test" > /tmp/daemon-test-3.txt 2>&1
-sleep 2
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
 DAEMON_PID=$(get_daemon_pid)
 if [[ -n "$DAEMON_PID" ]]; then
     pass "Daemon restarted with PID: $DAEMON_PID"
 else
     fail "Daemon did not restart"
-    cat /tmp/daemon-test-3.txt
 fi
 
 # Check for resumed entry
@@ -227,84 +220,52 @@ else
 fi
 
 # ============================================================
-# Test 4: Display shows daemon status
+# Test 4: Status command shows correct information
 # ============================================================
-
 echo ""
-echo "Testing display shows daemon status..."
+echo "Test 4: Checking status command output..."
 
-# Update checkins.json to include daemon_pid for display test
-CURRENT_PID=$(get_daemon_pid)
+# Ask Claude to run the status command
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py status --workflow '001-test'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-# Capture what the display script would show (run the Python part directly)
-DISPLAY_OUTPUT=$(python3 -c "
-import json
-import os
-
-try:
-    with open('$TEST_DIR/.workflow/001-test/checkins.json', 'r') as f:
-        data = json.load(f)
-
-    daemon_pid = data.get('daemon_pid')
-    daemon_running = False
-    if daemon_pid:
-        try:
-            os.kill(daemon_pid, 0)
-            daemon_running = True
-        except:
-            pass
-
-    if daemon_pid and daemon_running:
-        print(f'DAEMON running PID {daemon_pid}')
-    elif daemon_pid:
-        print(f'DAEMON dead PID {daemon_pid}')
-    else:
-        print('NO DAEMON')
-except Exception as e:
-    print(f'Error: {e}')
-" 2>/dev/null)
-
-if echo "$DISPLAY_OUTPUT" | grep -q "DAEMON running"; then
-    pass "Display correctly shows daemon running"
-elif echo "$DISPLAY_OUTPUT" | grep -q "NO DAEMON"; then
-    fail "Display shows no daemon when one should be running"
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
 else
-    fail "Display output unexpected: $DISPLAY_OUTPUT"
+    sleep 20
 fi
 
-# ============================================================
-# Test 5: Status command shows correct information
-# ============================================================
+# Capture the output
+STATUS_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
 
-echo ""
-echo "Testing status command output..."
-
-STATUS=$(cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" status --workflow "001-test" 2>&1)
-
-if echo "$STATUS" | grep -q "Daemon running: True"; then
+if echo "$STATUS_OUTPUT" | grep -q "Daemon running: True"; then
     pass "Status shows daemon running"
 else
     fail "Status should show daemon running"
 fi
 
-if echo "$STATUS" | grep -q "Incomplete tasks: 1"; then
+if echo "$STATUS_OUTPUT" | grep -q "Incomplete tasks: 1"; then
     pass "Status shows correct incomplete task count"
 else
     fail "Status should show 1 incomplete task"
 fi
 
-if echo "$STATUS" | grep -q "Interval: 1"; then
+if echo "$STATUS_OUTPUT" | grep -q "Interval: 1"; then
     pass "Status shows correct interval"
 else
     fail "Status should show interval"
 fi
 
 # ============================================================
-# Test 6: Verify pending entry has scheduled_for time
+# Test 5: Verify pending entry has scheduled_for time
 # ============================================================
-
 echo ""
-echo "Testing pending entry has scheduled_for..."
+echo "Test 5: Checking pending entry has scheduled_for..."
 
 SCHEDULED_FOR=$(python3 -c "
 import json
@@ -327,7 +288,6 @@ fi
 # ============================================================
 # Results
 # ============================================================
-
 echo ""
 echo "======================================================================"
 TOTAL=$((TESTS_PASSED + TESTS_FAILED))

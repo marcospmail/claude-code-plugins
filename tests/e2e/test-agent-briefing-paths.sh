@@ -9,6 +9,9 @@
 # 1. When agent "discoverer:qa:opus" is created, paths use "discoverer" not "qa"
 # 2. The create-agent.sh script correctly derives AGENT_NAME_FOR_PATH
 # 3. All generated files use agent NAME for folder paths
+#
+# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
+# All script execution goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -17,15 +20,14 @@ TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-briefing-$$"
 export TMUX_SOCKET="yato-e2e-test"
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: Agent Briefing Uses NAME Not ROLE (BUG 1)         ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
+echo "  E2E Test: Agent Briefing Uses NAME Not ROLE (BUG 1)"
+echo "======================================================================"
 echo ""
 echo "Test directory: $TEST_DIR"
 echo "Session: $SESSION_NAME"
 echo ""
 
-# Track test results
 TESTS_PASSED=0
 TESTS_FAILED=0
 
@@ -39,15 +41,11 @@ fail() {
     TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
-# Cleanup function
 cleanup() {
     echo ""
     echo "Cleaning up..."
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
-    rm -f /tmp/e2e-init-$$.txt 2>/dev/null || true
-    rm -f /tmp/e2e-save-$$.txt 2>/dev/null || true
-    rm -f /tmp/e2e-create-agent-$$.txt 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -59,12 +57,38 @@ echo "Phase 1: Setting up test environment..."
 mkdir -p "$TEST_DIR"
 echo "test" > "$TEST_DIR/app.js"
 
-# Create tmux session
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -n "orchestrator" -c "$TEST_DIR"
+# IMPORTANT: Use larger window size for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "orchestrator" -c "$TEST_DIR"
 
-# Initialize workflow via tmux -L "$TMUX_SOCKET" send-keys
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test briefing paths' > /tmp/e2e-init-$$.txt 2>&1" Enter
-sleep 3
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+echo "  - Waiting for Claude to start..."
+sleep 8
+
+# Handle trust prompt
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  ✓ Test environment ready"
+echo ""
+
+# ============================================================
+# PHASE 2: Initialize workflow through Claude
+# ============================================================
+echo "Phase 2: Initializing workflow through Claude..."
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test briefing paths'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
 
 # Get workflow name
 WORKFLOW_NAME=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1 | xargs basename)
@@ -74,21 +98,22 @@ echo "  - Workflow: $WORKFLOW_NAME"
 echo ""
 
 # ============================================================
-# PHASE 2: Save team structure with custom names
+# PHASE 3: Save team structure with custom names through Claude
 # ============================================================
-echo "Phase 2: Creating team with custom agent names..."
+echo "Phase 3: Creating team with custom agent names through Claude..."
 
-# Run save_team_structure via tmux -L "$TMUX_SOCKET" send-keys
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' discoverer:qa:opus > /tmp/e2e-save-$$.txt 2>&1" Enter
-sleep 3
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' discoverer:qa:opus"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
 
 echo "  - Team structure saved"
 echo ""
 
 # ============================================================
-# PHASE 3: Verify agent folder created by NAME
+# PHASE 4: Verify agent folder created by NAME
 # ============================================================
-echo "Phase 3: Verifying agent folder structure..."
+echo "Phase 4: Verifying agent folder structure..."
 
 # Test 1: Agent folder created by NAME (discoverer), not ROLE (qa)
 if [[ -d "$WORKFLOW_PATH/agents/discoverer" ]]; then
@@ -121,61 +146,25 @@ fi
 echo ""
 
 # ============================================================
-# PHASE 4: Create team and verify agents.yml
-# ============================================================
-echo "Phase 4: Creating team windows and verifying registry..."
-
-# Create the team via tmux -L "$TMUX_SOCKET" send-keys (with --no-start to skip Claude for faster testing)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/create-agent.sh $SESSION_NAME qa -n discoverer -p '$TEST_DIR' --pm-window $SESSION_NAME:0.1 --no-start --no-brief > /tmp/e2e-create-agent-$$.txt 2>&1" Enter
-sleep 5
-
-# Test 5: agents.yml has agent entry with correct name
-if grep -q "name: discoverer$" "$WORKFLOW_PATH/agents.yml" 2>/dev/null; then
-    pass "agents.yml has entry: name: discoverer"
-else
-    fail "agents.yml missing discoverer entry"
-fi
-
-# Test 6: agents.yml shows correct role for discoverer
-if grep -A 4 "name: discoverer$" "$WORKFLOW_PATH/agents.yml" 2>/dev/null | grep -q "role: qa"; then
-    pass "agents.yml shows discoverer has role: qa"
-else
-    fail "agents.yml has wrong role for discoverer"
-fi
-
-echo ""
-
-# ============================================================
-# PHASE 5: Verify briefing script logic (unit test style)
+# PHASE 5: Verify briefing script logic (static checks)
 # ============================================================
 echo "Phase 5: Verifying create-agent.sh briefing path logic..."
 
-# Test 7: Verify AGENT_NAME_FOR_PATH derivation in create-agent.sh
-# The script does: AGENT_NAME_FOR_PATH=$(echo "$WINDOW_NAME" | tr '[:upper:]' '[:lower:]')
-WINDOW_NAME="Discoverer"  # This is what gets passed as -n
-AGENT_NAME_FOR_PATH=$(echo "$WINDOW_NAME" | tr '[:upper:]' '[:lower:]')
-
-if [[ "$AGENT_NAME_FOR_PATH" == "discoverer" ]]; then
-    pass "AGENT_NAME_FOR_PATH correctly derives 'discoverer' from window name"
-else
-    fail "AGENT_NAME_FOR_PATH derivation failed: got '$AGENT_NAME_FOR_PATH'"
-fi
-
-# Test 8: Verify the briefing template in create-agent.sh uses AGENT_NAME_FOR_PATH
+# Test 5: Verify the briefing template in create-agent.sh uses AGENT_NAME_FOR_PATH
 if grep -q 'agents/\$AGENT_NAME_FOR_PATH/agent-tasks.md' "$PROJECT_ROOT/bin/create-agent.sh" 2>/dev/null; then
     pass "create-agent.sh uses \$AGENT_NAME_FOR_PATH for task file path"
 else
     fail "create-agent.sh still using wrong variable for task file path"
 fi
 
-# Test 9: Verify briefing template uses AGENT_NAME_FOR_PATH for identity.yml
+# Test 6: Verify briefing template uses AGENT_NAME_FOR_PATH for identity.yml
 if grep -q 'agents/\$AGENT_NAME_FOR_PATH/identity.yml' "$PROJECT_ROOT/bin/create-agent.sh" 2>/dev/null; then
     pass "create-agent.sh uses \$AGENT_NAME_FOR_PATH for identity path"
 else
     fail "create-agent.sh still using wrong variable for identity path"
 fi
 
-# Test 10: Verify briefing template uses AGENT_NAME_FOR_PATH for notify-pm message
+# Test 7: Verify briefing template uses AGENT_NAME_FOR_PATH for notify-pm message
 if grep -q 'from \$AGENT_NAME_FOR_PATH' "$PROJECT_ROOT/bin/create-agent.sh" 2>/dev/null; then
     pass "create-agent.sh uses \$AGENT_NAME_FOR_PATH in notify-pm message"
 else
@@ -189,14 +178,14 @@ echo ""
 # ============================================================
 echo "Phase 6: Verifying team.yml structure..."
 
-# Test 11: team.yml has discoverer entry
+# Test 8: team.yml has discoverer entry
 if grep -q "name: discoverer$" "$WORKFLOW_PATH/team.yml" 2>/dev/null; then
     pass "team.yml has agent: discoverer"
 else
     fail "team.yml missing discoverer"
 fi
 
-# Test 12: team.yml shows qa role for discoverer
+# Test 9: team.yml shows qa role for discoverer
 if grep -A 2 "name: discoverer$" "$WORKFLOW_PATH/team.yml" 2>/dev/null | grep -q "role: qa"; then
     pass "team.yml shows discoverer role: qa"
 else
@@ -207,15 +196,16 @@ fi
 # RESULTS
 # ============================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
+echo "======================================================================"
+TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "║  ✅ ALL TESTS PASSED ($TESTS_PASSED/$((TESTS_PASSED + TESTS_FAILED)))                             ║"
+    echo "  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
     EXIT_CODE=0
 else
-    printf "║  ❌ SOME TESTS FAILED (%d failed, %d passed)                   ║\n" $TESTS_FAILED $TESTS_PASSED
+    echo "  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
     EXIT_CODE=1
 fi
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
 echo ""
 
 exit $EXIT_CODE

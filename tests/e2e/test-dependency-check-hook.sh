@@ -12,6 +12,9 @@
 # 6. hooks.json configuration is valid
 # 7. Script is executable
 # 8. CLAUDE_PLUGIN_ROOT path is used correctly
+#
+# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
+# All script execution goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -20,12 +23,11 @@ SESSION_NAME="e2e-deps-$$"
 export TMUX_SOCKET="yato-e2e-test"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: Dependency Check Hook                             ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
+echo "  E2E Test: Dependency Check Hook"
+echo "======================================================================"
 echo ""
 
-# Track test results
 TESTS_PASSED=0
 TESTS_FAILED=0
 
@@ -40,6 +42,8 @@ fail() {
 }
 
 cleanup() {
+    echo ""
+    echo "Cleaning up..."
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
     rm -f /tmp/e2e-deps-$$.txt /tmp/e2e-deps-missing-$$.txt 2>/dev/null || true
@@ -49,9 +53,31 @@ trap cleanup EXIT
 CHECK_DEPS_SCRIPT="$PROJECT_ROOT/hooks/scripts/check-deps.sh"
 HOOKS_JSON="$PROJECT_ROOT/hooks/hooks.json"
 
-# Setup tmux session
+# Setup test environment
 mkdir -p "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+
+# IMPORTANT: Use larger window size for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+echo "  - Waiting for Claude to start..."
+sleep 8
+
+# Handle trust prompt
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  ✓ Test environment ready"
+echo ""
 
 # ============================================================
 # PHASE 1: File existence and permissions
@@ -133,16 +159,19 @@ fi
 echo ""
 
 # ============================================================
-# PHASE 3: Script behavior when tmux IS installed
+# PHASE 3: Script behavior when tmux IS installed (via Claude)
 # ============================================================
 echo "Phase 3: Testing script when tmux is installed..."
 
-# Test 10: Script outputs nothing when tmux is installed
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "bash '$CHECK_DEPS_SCRIPT' > /tmp/e2e-deps-$$.txt 2>&1; echo EXITCODE:\$? >> /tmp/e2e-deps-$$.txt" Enter
-sleep 2
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: bash '$CHECK_DEPS_SCRIPT' > /tmp/e2e-deps-$$.txt 2>&1 && echo EXITCODE:0 >> /tmp/e2e-deps-$$.txt || echo EXITCODE:\$? >> /tmp/e2e-deps-$$.txt"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
 OUTPUT=$(grep -v "EXITCODE:" /tmp/e2e-deps-$$.txt 2>/dev/null)
 EXIT_CODE=$(grep "EXITCODE:" /tmp/e2e-deps-$$.txt 2>/dev/null | cut -d: -f2)
 
+# Test 10: Script outputs nothing when tmux is installed
 if [[ -z "$OUTPUT" ]]; then
     pass "Script outputs nothing when tmux is installed"
 else
@@ -159,13 +188,15 @@ fi
 echo ""
 
 # ============================================================
-# PHASE 4: Script behavior when tmux is MISSING
+# PHASE 4: Script behavior when tmux is MISSING (via Claude)
 # ============================================================
 echo "Phase 4: Testing script when tmux is missing..."
 
-# Simulate tmux not being installed by modifying PATH
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "PATH=/usr/bin:/bin bash '$CHECK_DEPS_SCRIPT' > /tmp/e2e-deps-missing-$$.txt 2>&1" Enter
-sleep 2
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: PATH=/usr/bin:/bin bash '$CHECK_DEPS_SCRIPT' > /tmp/e2e-deps-missing-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
 MISSING_OUTPUT=$(cat /tmp/e2e-deps-missing-$$.txt 2>/dev/null)
 
 # Test 12: Script outputs JSON when tmux is missing
@@ -254,20 +285,20 @@ else
     fail "Context doesn't mention Yato skills won't work"
 fi
 
-echo ""
-
 # ============================================================
 # RESULTS
 # ============================================================
-echo "╔══════════════════════════════════════════════════════════════╗"
+echo ""
+echo "======================================================================"
+TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "║  ✅ ALL TESTS PASSED ($TESTS_PASSED/$((TESTS_PASSED + TESTS_FAILED)))                              ║"
+    echo "  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
     EXIT_CODE=0
 else
-    printf "║  ❌ SOME TESTS FAILED (%d failed, %d passed)                    ║\n" $TESTS_FAILED $TESTS_PASSED
+    echo "  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
     EXIT_CODE=1
 fi
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
 echo ""
 
 exit $EXIT_CODE

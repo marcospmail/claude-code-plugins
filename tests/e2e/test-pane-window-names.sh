@@ -8,6 +8,9 @@
 # 2. checkin-display.sh doesn't overwrite PM pane name
 # 3. Agent windows get correct names
 # 4. Pane titles are preserved over time (checkin-display loop)
+#
+# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
+# All script execution goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -16,15 +19,14 @@ TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-test-names-$$"
 export TMUX_SOCKET="yato-e2e-test"
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: Pane and Window Names                             ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
+echo "  E2E Test: Pane and Window Names"
+echo "======================================================================"
 echo ""
 echo "Test directory: $TEST_DIR"
 echo "Session: $SESSION_NAME"
 echo ""
 
-# Track test results
 TESTS_PASSED=0
 TESTS_FAILED=0
 
@@ -38,7 +40,6 @@ fail() {
     TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
-# Cleanup function
 cleanup() {
     echo ""
     echo "Cleaning up..."
@@ -47,8 +48,7 @@ cleanup() {
     tmux -L "$TMUX_SOCKET" kill-session -t "e2e-agent-names-$$" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
     rm -rf "/tmp/e2e-agent-test-$$" 2>/dev/null || true
-    rm -f /tmp/e2e-deploy-$$.txt 2>/dev/null || true
-    rm -f /tmp/e2e-init-$$.txt 2>/dev/null || true
+    rm -f /tmp/e2e-deploy-$$.txt /tmp/e2e-init-$$.txt 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -61,22 +61,37 @@ echo ""
 mkdir -p "$TEST_DIR"
 echo "test file" > "$TEST_DIR/test.txt"
 
-# Deploy PM via helper session (since deploy-pm creates its own session)
+# IMPORTANT: Use larger window size for Claude's TUI to work properly
 HELPER_SESSION="e2e-helper-$$"
-tmux -L "$TMUX_SOCKET" new-session -d -s "$HELPER_SESSION" -c "$PROJECT_ROOT"
-tmux -L "$TMUX_SOCKET" send-keys -t "$HELPER_SESSION" "cd $PROJECT_ROOT && uv run python lib/orchestrator.py deploy-pm '$SESSION_NAME' -p '$TEST_DIR' > /tmp/e2e-deploy-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-deploy-$$.txt" Enter
-sleep 5
+tmux -L "$TMUX_SOCKET" new-session -d -s "$HELPER_SESSION" -x 120 -y 40 -c "$PROJECT_ROOT"
 
-# Check if deploy succeeded
-DEPLOY_OUTPUT=$(cat /tmp/e2e-deploy-$$.txt 2>/dev/null | grep -v "^EXIT:" || true)
-DEPLOY_EXIT=$(grep "^EXIT:" /tmp/e2e-deploy-$$.txt 2>/dev/null | cut -d: -f2 || echo "1")
-if [[ $DEPLOY_EXIT -ne 0 ]]; then
-    echo "deploy-pm failed with exit code $DEPLOY_EXIT"
-    echo "Output: $DEPLOY_OUTPUT"
+# Start Claude in the helper session
+tmux -L "$TMUX_SOCKET" send-keys -t "$HELPER_SESSION" "claude" Enter
+
+echo "  - Waiting for Claude to start..."
+sleep 8
+
+# Handle trust prompt
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$HELPER_SESSION" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$HELPER_SESSION" Enter
+    sleep 15
+else
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
 fi
 
-# Wait for session to be created and verify it exists
-sleep 2
+echo "  ✓ Test environment ready"
+echo ""
+
+# Deploy PM via Claude
+tmux -L "$TMUX_SOCKET" send-keys -t "$HELPER_SESSION" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/orchestrator.py deploy-pm '$SESSION_NAME' -p '$TEST_DIR' > /tmp/e2e-deploy-$$.txt 2>&1"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$HELPER_SESSION" Enter
+sleep 30
+
+# Wait for session to be created
 for i in {1..10}; do
     if tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
         break
@@ -86,13 +101,15 @@ done
 
 if ! tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
     fail "Session '$SESSION_NAME' was not created by deploy-pm"
+    echo "  Deploy output:"
+    cat /tmp/e2e-deploy-$$.txt 2>/dev/null
     exit 1
 fi
 
 # Wait for checkin-display.sh to run and set pane titles
 sleep 5
 
-# Check pane titles with retry (titles may take a moment to be set)
+# Check pane titles with retry
 PANE_0_TITLE=""
 PANE_1_TITLE=""
 for i in {1..5}; do
@@ -126,10 +143,8 @@ echo ""
 echo "Phase 2: Verifying pane names persist (waiting 6s for loop)..."
 echo ""
 
-# Wait for checkin-display.sh loop to run a few more times
 sleep 6
 
-# Check pane titles again
 PANE_0_TITLE_AFTER=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^0:" | cut -d: -f2-)
 PANE_1_TITLE_AFTER=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
 
@@ -155,29 +170,41 @@ echo ""
 echo "Phase 3: Testing agent window names..."
 echo ""
 
-# Create a separate session for testing agent window names
-# (deploy-pm session has Claude running, can't run shell commands there)
 AGENT_SESSION="e2e-agent-names-$$"
 AGENT_TEST_DIR="/tmp/e2e-agent-test-$$"
 mkdir -p "$AGENT_TEST_DIR"
 echo "test" > "$AGENT_TEST_DIR/test.txt"
 
-# Create plain tmux session with shell
-tmux -L "$TMUX_SOCKET" new-session -d -s "$AGENT_SESSION" -n "pm-checkins" -c "$AGENT_TEST_DIR"
+# Create a new session for agent testing with Claude
+tmux -L "$TMUX_SOCKET" new-session -d -s "$AGENT_SESSION" -x 120 -y 40 -n "pm-checkins" -c "$AGENT_TEST_DIR"
 
-# Initialize workflow via tmux -L "$TMUX_SOCKET" send-keys
-tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" "$PROJECT_ROOT/bin/init-workflow.sh '$AGENT_TEST_DIR' 'Test agent windows' > /tmp/e2e-init-$$.txt 2>&1" Enter
-sleep 3
+# Start Claude in the agent session
+tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" "claude" Enter
+sleep 8
+
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$AGENT_SESSION" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" Enter
+    sleep 15
+else
+    sleep 5
+fi
+
+# Initialize workflow through Claude
+tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$AGENT_TEST_DIR' 'Test agent windows'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" Enter
+sleep 30
 
 # Get workflow name and set it in the tmux session environment
 WORKFLOW_NAME=$(ls "$AGENT_TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
 tmux -L "$TMUX_SOCKET" setenv -t "$AGENT_SESSION" WORKFLOW_NAME "$WORKFLOW_NAME"
 
-# Run create-team.sh from within the session (shell in window 0)
-tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION:0" "cd $AGENT_TEST_DIR && $PROJECT_ROOT/bin/create-team.sh $AGENT_TEST_DIR developer qa" Enter
-
-# Wait for agents to be created
-sleep 20
+# Create team through Claude
+tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" "Run this exact command in bash: $PROJECT_ROOT/bin/create-team.sh '$AGENT_TEST_DIR' developer qa"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" Enter
+sleep 30
 
 # Check window names
 WINDOW_LIST=$(tmux -L "$TMUX_SOCKET" list-windows -t "$AGENT_SESSION" -F "#{window_index}:#{window_name}" 2>/dev/null)
@@ -211,13 +238,12 @@ tmux -L "$TMUX_SOCKET" kill-session -t "$AGENT_SESSION" 2>/dev/null || true
 rm -rf "$AGENT_TEST_DIR" 2>/dev/null || true
 
 # ============================================================
-# PHASE 4: Final PM pane persistence check (back to original session)
+# PHASE 4: Final PM pane persistence check
 # ============================================================
 echo ""
 echo "Phase 4: Final PM pane persistence check..."
 echo ""
 
-# Final check that PM pane name is still correct (with retry)
 PANE_1_FINAL=""
 for i in {1..5}; do
     PANE_1_FINAL=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F "#{pane_index}:#{pane_title}" 2>/dev/null | grep "^1:" | cut -d: -f2-)
@@ -237,15 +263,16 @@ fi
 # RESULTS
 # ============================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
+echo "======================================================================"
+TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "║  ✅ ALL TESTS PASSED ($TESTS_PASSED/$((TESTS_PASSED + TESTS_FAILED)))                              ║"
+    echo "  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
     EXIT_CODE=0
 else
-    echo "║  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)                    ║"
+    echo "  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
     EXIT_CODE=1
 fi
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
 echo ""
 
 exit $EXIT_CODE

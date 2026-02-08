@@ -3,14 +3,15 @@
 #
 # E2E Test: Verify cancel-checkin.sh is blocked for ALL agents
 #
-# Tests through real tmux sessions:
+# Tests through Claude Code in real tmux sessions:
 # 1. Sets up workflow with hooks via init-workflow.sh
 # 2. Creates agent identities with real session_ids from tmux
 # 3. Simulates the JSON input that Claude Code sends to PreToolUse hooks
 # 4. Verifies PM, Developer, and QA are all BLOCKED
 # 5. Verifies unknown sessions (user) are ALLOWED
-
-# Note: Don't use set -e as test failures should be counted, not exit immediately
+#
+# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
+# All script execution goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -19,8 +20,7 @@ TEST_ID="$$"
 TEST_DIR="/tmp/e2e-cancel-hook-$TEST_ID"
 
 export TMUX_SOCKET="yato-e2e-test"
-# Session names
-SESSION_PM="e2e-cancel-pm-$TEST_ID"
+SESSION_NAME="e2e-cancel-hook-$TEST_ID"
 SESSION_DEV="e2e-cancel-dev-$TEST_ID"
 SESSION_QA="e2e-cancel-qa-$TEST_ID"
 
@@ -34,32 +34,60 @@ echo ""
 TESTS_PASSED=0
 TESTS_FAILED=0
 
-pass() { echo "  PASS: $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
-fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
+pass() { echo "  ✅ $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
+fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_PM" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_DEV" 2>/dev/null || true
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_QA" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
+    rm -f /tmp/e2e-hook-result-$TEST_ID.txt 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # ============================================================
-# Setup: Create test project with workflow
+# PHASE 1: Setup test environment
 # ============================================================
+echo "Phase 1: Setting up test project..."
 
-echo "Setting up test project..."
 mkdir -p "$TEST_DIR"
-cd "$TEST_DIR"
-git init -q
-git config user.name "Test"
-git config user.email "test@test.com"
+cd "$TEST_DIR" && git init -q && git config user.name "Test" && git config user.email "test@test.com"
 
-# Initialize workflow with hooks (direct call - this is test SETUP)
-TMUX="" "$BIN_DIR/init-workflow.sh" "$TEST_DIR" "test-blocking" > /dev/null
+# IMPORTANT: Use larger window size for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+echo "  - Waiting for Claude to start..."
+sleep 8
+
+# Handle trust prompt
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  ✓ Test environment ready"
+echo ""
+
+# ============================================================
+# PHASE 2: Initialize workflow through Claude
+# ============================================================
+echo "Phase 2: Initializing workflow through Claude..."
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $BIN_DIR/init-workflow.sh '$TEST_DIR' 'test-blocking'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
 
 # Find the created workflow
 WORKFLOW_DIR=$(ls -td "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1)
@@ -70,40 +98,30 @@ if [[ -z "$WORKFLOW_DIR" ]] || [[ ! -d "$WORKFLOW_DIR" ]]; then
     exit 1
 fi
 
-echo "  Workflow: $WORKFLOW_NAME"
-
-# ============================================================
-# Setup: Create tmux sessions for each agent
-# ============================================================
-
+echo "  - Workflow: $WORKFLOW_NAME"
 echo ""
-echo "Creating tmux sessions for agents..."
 
-# Create tmux sessions
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_PM" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_DEV" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_QA" -c "$TEST_DIR"
+# ============================================================
+# PHASE 3: Create agent sessions and identity files
+# ============================================================
+echo "Phase 3: Creating tmux sessions for agents..."
 
-# Get the actual session IDs that tmux uses
-PM_SESSION_ID=$(tmux -L "$TMUX_SOCKET" display-message -t "$SESSION_PM" -p '#{session_id}')
+# Create extra tmux sessions for dev and QA
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_DEV" -x 120 -y 40 -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_QA" -x 120 -y 40 -c "$TEST_DIR"
+
+# Get the actual session IDs
+PM_SESSION_ID=$(tmux -L "$TMUX_SOCKET" display-message -t "$SESSION_NAME" -p '#{session_id}')
 DEV_SESSION_ID=$(tmux -L "$TMUX_SOCKET" display-message -t "$SESSION_DEV" -p '#{session_id}')
 QA_SESSION_ID=$(tmux -L "$TMUX_SOCKET" display-message -t "$SESSION_QA" -p '#{session_id}')
 
-echo "  PM session: $SESSION_PM (id: $PM_SESSION_ID)"
-echo "  Dev session: $SESSION_DEV (id: $DEV_SESSION_ID)"
-echo "  QA session: $SESSION_QA (id: $QA_SESSION_ID)"
+echo "  - PM session: $SESSION_NAME (id: $PM_SESSION_ID)"
+echo "  - Dev session: $SESSION_DEV (id: $DEV_SESSION_ID)"
+echo "  - QA session: $SESSION_QA (id: $QA_SESSION_ID)"
 
-# ============================================================
-# Setup: Create agent identity files with session_ids
-# ============================================================
-
-echo ""
-echo "Creating agent identity files..."
-
-# PM identity (already created by init-workflow.sh, just add session_id)
+# Create agent identity files
 echo "session_id: $PM_SESSION_ID" >> "$WORKFLOW_DIR/agents/pm/identity.yml"
 
-# Create developer agent
 mkdir -p "$WORKFLOW_DIR/agents/developer"
 cat > "$WORKFLOW_DIR/agents/developer/identity.yml" <<EOF
 name: developer
@@ -111,7 +129,6 @@ role: developer
 session_id: $DEV_SESSION_ID
 EOF
 
-# Create QA agent
 mkdir -p "$WORKFLOW_DIR/agents/qa"
 cat > "$WORKFLOW_DIR/agents/qa/identity.yml" <<EOF
 name: qa
@@ -119,11 +136,11 @@ role: qa
 session_id: $QA_SESSION_ID
 EOF
 
+echo ""
+
 # ============================================================
 # Test 1: Verify hook file was created
 # ============================================================
-
-echo ""
 echo "Test 1: Hook file creation..."
 
 HOOK_FILE="$TEST_DIR/.claude/hooks/block-cancel-checkin.sh"
@@ -144,22 +161,11 @@ fi
 # ============================================================
 # Test 2: PM is BLOCKED from cancel-checkin.sh
 # ============================================================
-
 echo ""
 echo "Test 2: PM should be BLOCKED..."
 
-# Simulate Claude Code's PreToolUse JSON input
-PM_INPUT=$(cat <<EOF
-{
-  "session_id": "$PM_SESSION_ID",
-  "tool_input": {
-    "command": "$PROJECT_ROOT/bin/cancel-checkin.sh"
-  }
-}
-EOF
-)
+PM_INPUT='{"session_id": "'"$PM_SESSION_ID"'", "tool_input": {"command": "'"$PROJECT_ROOT/bin/cancel-checkin.sh"'"}}'
 
-# Run hook from within the PM's tmux session context
 cd "$TEST_DIR"
 RESULT=$(echo "$PM_INPUT" | bash "$HOOK_FILE" 2>&1)
 EXIT_CODE=$?
@@ -179,19 +185,10 @@ fi
 # ============================================================
 # Test 3: Developer is BLOCKED from cancel-checkin.sh
 # ============================================================
-
 echo ""
 echo "Test 3: Developer should be BLOCKED..."
 
-DEV_INPUT=$(cat <<EOF
-{
-  "session_id": "$DEV_SESSION_ID",
-  "tool_input": {
-    "command": "$PROJECT_ROOT/bin/cancel-checkin.sh"
-  }
-}
-EOF
-)
+DEV_INPUT='{"session_id": "'"$DEV_SESSION_ID"'", "tool_input": {"command": "'"$PROJECT_ROOT/bin/cancel-checkin.sh"'"}}'
 
 cd "$TEST_DIR"
 RESULT=$(echo "$DEV_INPUT" | bash "$HOOK_FILE" 2>&1)
@@ -206,19 +203,10 @@ fi
 # ============================================================
 # Test 4: QA is BLOCKED from cancel-checkin.sh
 # ============================================================
-
 echo ""
 echo "Test 4: QA should be BLOCKED..."
 
-QA_INPUT=$(cat <<EOF
-{
-  "session_id": "$QA_SESSION_ID",
-  "tool_input": {
-    "command": "$PROJECT_ROOT/bin/cancel-checkin.sh"
-  }
-}
-EOF
-)
+QA_INPUT='{"session_id": "'"$QA_SESSION_ID"'", "tool_input": {"command": "'"$PROJECT_ROOT/bin/cancel-checkin.sh"'"}}'
 
 cd "$TEST_DIR"
 RESULT=$(echo "$QA_INPUT" | bash "$HOOK_FILE" 2>&1)
@@ -233,19 +221,10 @@ fi
 # ============================================================
 # Test 5: Unknown session (user) is ALLOWED
 # ============================================================
-
 echo ""
 echo "Test 5: Unknown session (user) should be ALLOWED..."
 
-USER_INPUT=$(cat <<EOF
-{
-  "session_id": "user-session-unknown-12345",
-  "tool_input": {
-    "command": "$PROJECT_ROOT/bin/cancel-checkin.sh"
-  }
-}
-EOF
-)
+USER_INPUT='{"session_id": "user-session-unknown-12345", "tool_input": {"command": "'"$PROJECT_ROOT/bin/cancel-checkin.sh"'"}}'
 
 cd "$TEST_DIR"
 RESULT=$(echo "$USER_INPUT" | bash "$HOOK_FILE" 2>&1)
@@ -260,19 +239,10 @@ fi
 # ============================================================
 # Test 6: Agents can run OTHER commands (not blocked)
 # ============================================================
-
 echo ""
 echo "Test 6: Agents should be ALLOWED for non-cancel-checkin commands..."
 
-PM_OTHER_INPUT=$(cat <<EOF
-{
-  "session_id": "$PM_SESSION_ID",
-  "tool_input": {
-    "command": "ls -la"
-  }
-}
-EOF
-)
+PM_OTHER_INPUT='{"session_id": "'"$PM_SESSION_ID"'", "tool_input": {"command": "ls -la"}}'
 
 cd "$TEST_DIR"
 RESULT=$(echo "$PM_OTHER_INPUT" | bash "$HOOK_FILE" 2>&1)
@@ -287,7 +257,6 @@ fi
 # ============================================================
 # Test 7: Block message includes agent name
 # ============================================================
-
 echo ""
 echo "Test 7: Block message should include agent name..."
 
@@ -303,19 +272,10 @@ fi
 # ============================================================
 # Test 8: Hook blocks cancel-checkin in compound commands
 # ============================================================
-
 echo ""
 echo "Test 8: Block cancel-checkin even in compound commands..."
 
-COMPOUND_INPUT=$(cat <<EOF
-{
-  "session_id": "$PM_SESSION_ID",
-  "tool_input": {
-    "command": "cd /tmp && $PROJECT_ROOT/bin/cancel-checkin.sh && echo done"
-  }
-}
-EOF
-)
+COMPOUND_INPUT='{"session_id": "'"$PM_SESSION_ID"'", "tool_input": {"command": "cd /tmp && '"$PROJECT_ROOT/bin/cancel-checkin.sh"' && echo done"}}'
 
 cd "$TEST_DIR"
 RESULT=$(echo "$COMPOUND_INPUT" | bash "$HOOK_FILE" 2>&1)
@@ -328,18 +288,19 @@ else
 fi
 
 # ============================================================
-# Results
+# RESULTS
 # ============================================================
-
 echo ""
 echo "======================================================================"
 TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "  ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
-    echo "======================================================================"
-    exit 0
+    echo "  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
+    EXIT_CODE=0
 else
-    echo "  SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
-    echo "======================================================================"
-    exit 1
+    echo "  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
+    EXIT_CODE=1
 fi
+echo "======================================================================"
+echo ""
+
+exit $EXIT_CODE

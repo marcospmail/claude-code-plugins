@@ -9,6 +9,9 @@
 # 1. New agents get instructions containing "Waiting for Dependencies" section
 # 2. Instructions mention max retry guidance
 # 3. Instructions tell agents to notify PM when blocked
+#
+# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
+# All script execution goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -17,14 +20,13 @@ TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-polling-$$"
 export TMUX_SOCKET="yato-e2e-test"
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: Agent Polling Guidance (BUG 3)                    ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
+echo "  E2E Test: Agent Polling Guidance (BUG 3)"
+echo "======================================================================"
 echo ""
 echo "Test directory: $TEST_DIR"
 echo ""
 
-# Track test results
 TESTS_PASSED=0
 TESTS_FAILED=0
 
@@ -38,7 +40,6 @@ fail() {
     TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
-# Cleanup function
 cleanup() {
     echo ""
     echo "Cleaning up..."
@@ -48,31 +49,69 @@ cleanup() {
 trap cleanup EXIT
 
 # ============================================================
-# PHASE 1: Setup and create agent
+# PHASE 1: Setup and create agent through Claude
 # ============================================================
 echo "Phase 1: Setting up test environment..."
 
 mkdir -p "$TEST_DIR"
 echo "test" > "$TEST_DIR/app.js"
 
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -n "pm" -c "$TEST_DIR"
+# IMPORTANT: Use larger window size for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "pm" -c "$TEST_DIR"
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test polling guidance'" Enter
-sleep 3
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+echo "  - Waiting for Claude to start..."
+sleep 8
+
+# Handle trust prompt
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  ✓ Test environment ready"
+echo ""
+
+# ============================================================
+# PHASE 2: Initialize workflow through Claude
+# ============================================================
+echo "Phase 2: Initializing workflow through Claude..."
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test polling guidance'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
 
 WORKFLOW_NAME=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1 | xargs basename)
 WORKFLOW_PATH="$TEST_DIR/.workflow/$WORKFLOW_NAME"
-
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' developer:developer:sonnet" Enter
-sleep 3
 
 echo "  - Workflow: $WORKFLOW_NAME"
 echo ""
 
 # ============================================================
-# PHASE 2: Verify polling guidance in generated instructions
+# PHASE 3: Save team structure through Claude
 # ============================================================
-echo "Phase 2: Checking agent instructions for polling guidance..."
+echo "Phase 3: Saving team structure through Claude..."
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' developer:developer:sonnet"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
+echo "  - Team structure saved"
+echo ""
+
+# ============================================================
+# PHASE 4: Verify polling guidance in generated instructions
+# ============================================================
+echo "Phase 4: Checking agent instructions for polling guidance..."
 
 INSTRUCTIONS_FILE="$WORKFLOW_PATH/agents/developer/instructions.md"
 
@@ -122,9 +161,9 @@ fi
 echo ""
 
 # ============================================================
-# PHASE 3: Verify init-agent-files.sh template contains guidance
+# PHASE 5: Verify init-agent-files.sh template contains guidance
 # ============================================================
-echo "Phase 3: Checking init-agent-files.sh template..."
+echo "Phase 5: Checking init-agent-files.sh template..."
 
 INIT_SCRIPT="$PROJECT_ROOT/bin/init-agent-files.sh"
 
@@ -139,15 +178,16 @@ fi
 # RESULTS
 # ============================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
+echo "======================================================================"
+TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "║  ✅ ALL TESTS PASSED ($TESTS_PASSED/$((TESTS_PASSED + TESTS_FAILED)))                                ║"
+    echo "  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
     EXIT_CODE=0
 else
-    printf "║  ❌ SOME TESTS FAILED (%d failed, %d passed)                      ║\n" $TESTS_FAILED $TESTS_PASSED
+    echo "  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
     EXIT_CODE=1
 fi
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
 echo ""
 
 exit $EXIT_CODE

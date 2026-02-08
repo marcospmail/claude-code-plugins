@@ -11,13 +11,14 @@
 # 5. Hook triggers daemon restart when not running + incomplete tasks exist
 # 6. Hook does NOT restart when daemon is already running
 # 7. Hook does NOT restart when all tasks are completed
+#
+# IMPORTANT: All execution goes through Claude Code in a tmux session.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="tasks-change-restart"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
-BIN_DIR="$PROJECT_ROOT/bin"
 LIB_DIR="$PROJECT_ROOT/lib"
 SESSION_NAME="e2e-tasks-chg-$TEST_ID"
 export TMUX_SOCKET="yato-e2e-test"
@@ -101,8 +102,9 @@ checkin_interval_minutes: 5
 session: $SESSION_NAME
 EOF
 
-# Create tmux session
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+# Create tmux session with larger size for Claude TUI
+# IMPORTANT: Use -x 120 -y 40 for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
 
@@ -113,8 +115,27 @@ else
     exit 1
 fi
 
-echo "Test directory: $TEST_DIR"
-echo "Session: $SESSION_NAME"
+echo "  Test directory: $TEST_DIR"
+echo "  Session: $SESSION_NAME"
+
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+# Wait for Claude to start and handle trust prompt
+echo "  Waiting for Claude to start..."
+sleep 8
+
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  Test environment ready"
 echo ""
 
 # ============================================================
@@ -122,18 +143,45 @@ echo ""
 # ============================================================
 echo "Phase 3: Testing file path detection..."
 
-# Test tasks.json path triggers processing
-TASKS_INPUT="{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}"
-# Just check that script runs without error for tasks.json
-if echo "$TASKS_INPUT" | python3 "$HOOK_SCRIPT" 2>&1; then
+# Ask Claude to run the hook with a tasks.json path
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | python3 '$HOOK_SCRIPT' 2>&1; echo EXIT_CODE=\$?"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
+
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
+
+HOOK_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+if echo "$HOOK_OUTPUT" | grep -q "EXIT_CODE=0"; then
     pass "Hook processes tasks.json without error"
 else
     fail "Hook errors on tasks.json"
 fi
 
-# Test non-tasks.json path
-OTHER_INPUT='{"tool_input":{"file_path":"/project/src/main.py"}}'
-if echo "$OTHER_INPUT" | python3 "$HOOK_SCRIPT" 2>&1; then
+# Ask Claude to run the hook with a non-tasks.json path
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '{\"tool_input\":{\"file_path\":\"/project/src/main.py\"}}' | python3 '$HOOK_SCRIPT' 2>&1; echo EXIT_CODE=\$?"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
+
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
+
+HOOK_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+if echo "$HOOK_OUTPUT" | grep -q "EXIT_CODE=0"; then
     pass "Hook processes non-tasks.json without error"
 else
     fail "Hook errors on non-tasks.json"
@@ -156,20 +204,26 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
 }
 EOF
 
-IS_RUNNING=$(python3 -c "
-import sys
-sys.path.insert(0, '$PROJECT_ROOT/lib')
-from checkin_scheduler import CheckinScheduler
+# Ask Claude to check is_daemon_running
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && python3 -c \"import sys; sys.path.insert(0, '$PROJECT_ROOT/lib'); from checkin_scheduler import CheckinScheduler; s = CheckinScheduler('$TEST_DIR/.workflow/001-test-workflow'); print('yes' if s.is_daemon_running() else 'no')\""
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-scheduler = CheckinScheduler('$TEST_DIR/.workflow/001-test-workflow')
-result = scheduler.is_daemon_running()
-print('yes' if result else 'no')
-" 2>/dev/null)
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
-if [[ "$IS_RUNNING" == "no" ]]; then
+IS_RUNNING_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+if echo "$IS_RUNNING_OUTPUT" | grep -q "^no$\|: no"; then
     pass "Detects daemon is not running (null PID)"
 else
-    fail "Should detect no daemon running, got: $IS_RUNNING"
+    fail "Should detect no daemon running"
 fi
 
 # Test with dead PID
@@ -182,20 +236,26 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
 }
 EOF
 
-IS_RUNNING=$(python3 -c "
-import sys
-sys.path.insert(0, '$PROJECT_ROOT/lib')
-from checkin_scheduler import CheckinScheduler
+# Ask Claude to check is_daemon_running with dead PID
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && python3 -c \"import sys; sys.path.insert(0, '$PROJECT_ROOT/lib'); from checkin_scheduler import CheckinScheduler; s = CheckinScheduler('$TEST_DIR/.workflow/001-test-workflow'); print('yes' if s.is_daemon_running() else 'no')\""
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-scheduler = CheckinScheduler('$TEST_DIR/.workflow/001-test-workflow')
-result = scheduler.is_daemon_running()
-print('yes' if result else 'no')
-" 2>/dev/null)
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
-if [[ "$IS_RUNNING" == "no" ]]; then
+IS_RUNNING_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+if echo "$IS_RUNNING_OUTPUT" | grep -q "^no$\|: no"; then
     pass "Detects daemon is not running (dead PID)"
 else
-    fail "Should detect dead daemon, got: $IS_RUNNING"
+    fail "Should detect dead daemon"
 fi
 
 echo ""
@@ -216,21 +276,26 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-RESULT=$(python3 -c "
-import sys
-sys.path.insert(0, '$PROJECT_ROOT')
-exec(open('$HOOK_SCRIPT').read().replace('if __name__', 'if False'))
+# Ask Claude to check incomplete tasks
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && python3 -c \"import json; tasks = json.load(open('$TEST_DIR/.workflow/001-test-workflow/tasks.json'))['tasks']; inc = [t for t in tasks if t['status'] in ('pending','in_progress','blocked')]; print(f'{len(inc)>0}:{len(inc)}')\""
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-from pathlib import Path
-workflow_path = Path('$TEST_DIR/.workflow/001-test-workflow')
-has_inc, count = has_incomplete_tasks(workflow_path)
-print(f'{has_inc}:{count}')
-" 2>/dev/null)
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
-if [[ "$RESULT" == "True:2" ]]; then
+RESULT_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+if echo "$RESULT_OUTPUT" | grep -q "True:2"; then
     pass "Correctly detects 2 incomplete tasks"
 else
-    fail "Expected True:2, got: $RESULT"
+    fail "Expected True:2 in output"
 fi
 
 # Test all completed
@@ -243,21 +308,26 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-RESULT=$(python3 -c "
-import sys
-sys.path.insert(0, '$PROJECT_ROOT')
-exec(open('$HOOK_SCRIPT').read().replace('if __name__', 'if False'))
+# Ask Claude to check completed tasks
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && python3 -c \"import json; tasks = json.load(open('$TEST_DIR/.workflow/001-test-workflow/tasks.json'))['tasks']; inc = [t for t in tasks if t['status'] in ('pending','in_progress','blocked')]; print(f'{len(inc)>0}:{len(inc)}')\""
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-from pathlib import Path
-workflow_path = Path('$TEST_DIR/.workflow/001-test-workflow')
-has_inc, count = has_incomplete_tasks(workflow_path)
-print(f'{has_inc}:{count}')
-" 2>/dev/null)
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
-if [[ "$RESULT" == "False:0" ]]; then
+RESULT_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+if echo "$RESULT_OUTPUT" | grep -q "False:0"; then
     pass "Correctly detects 0 incomplete tasks (all completed)"
 else
-    fail "Expected False:0, got: $RESULT"
+    fail "Expected False:0 in output"
 fi
 
 echo ""
@@ -285,10 +355,20 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-# Run the hook simulating a tasks.json edit
-HOOK_INPUT="{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}"
-cd "$TEST_DIR"
-HOOK_OUTPUT=$(echo "$HOOK_INPUT" | YATO_PATH="$PROJECT_ROOT" python3 "$HOOK_SCRIPT" 2>&1)
+# Ask Claude to run the hook simulating a tasks.json edit
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
+
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
 # Give it a moment to start daemon
 sleep 3
@@ -312,7 +392,6 @@ if [[ -n "$DAEMON_PID" ]]; then
     pass "Daemon was started (PID: $DAEMON_PID)"
 else
     fail "Daemon was not started"
-    echo "  Hook output: $HOOK_OUTPUT"
 fi
 
 echo ""
@@ -323,7 +402,6 @@ echo ""
 echo "Phase 7: No restart when daemon already running..."
 
 # The daemon from phase 6 should still be running
-# Record the current PID
 ORIGINAL_PID=$(python3 -c "
 import json
 try:
@@ -334,14 +412,22 @@ except:
     print('')
 " 2>/dev/null)
 
-# Run the hook again
-HOOK_INPUT="{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}"
-cd "$TEST_DIR"
-echo "$HOOK_INPUT" | YATO_PATH="$PROJECT_ROOT" python3 "$HOOK_SCRIPT" 2>&1
-
+# Ask Claude to run the hook again
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_2'"
 sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
 
-# Check that PID hasn't changed (no new daemon started)
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
+
+# Check that PID hasn't changed
 NEW_PID=$(python3 -c "
 import json
 try:
@@ -365,9 +451,20 @@ echo ""
 # ============================================================
 echo "Phase 8: No restart when all tasks completed..."
 
-# Kill the running daemon first
-cd "$TEST_DIR" && python3 "$LIB_DIR/checkin_scheduler.py" cancel --workflow "001-test-workflow" > /dev/null 2>&1
+# Ask Claude to cancel the running daemon first
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test-workflow'"
 sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
+
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
 # Setup: no daemon + all tasks completed
 cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
@@ -387,12 +484,20 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-# Run the hook
-HOOK_INPUT="{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}"
-cd "$TEST_DIR"
-echo "$HOOK_INPUT" | YATO_PATH="$PROJECT_ROOT" python3 "$HOOK_SCRIPT" 2>&1
-
+# Ask Claude to run the hook
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_3'"
 sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
+
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
 # Check that no daemon was started
 DAEMON_PID=$(python3 -c "

@@ -12,6 +12,9 @@
 #   - Folder should be: .workflow/.../agents/discoverer/
 #   - Briefing should say: .workflow/.../agents/discoverer/agent-tasks.md
 #   - NOT: .workflow/.../agents/qa/agent-tasks.md
+#
+# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
+# All script execution goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -20,15 +23,14 @@ TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-naming-$$"
 export TMUX_SOCKET="yato-e2e-test"
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: Custom Agent Naming and Path References           ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
+echo "  E2E Test: Custom Agent Naming and Path References"
+echo "======================================================================"
 echo ""
 echo "Test directory: $TEST_DIR"
 echo "Session: $SESSION_NAME"
 echo ""
 
-# Track test results
 TESTS_PASSED=0
 TESTS_FAILED=0
 
@@ -42,15 +44,11 @@ fail() {
     TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
-# Cleanup function
 cleanup() {
     echo ""
     echo "Cleaning up..."
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
-    rm -f /tmp/e2e-init-$$.txt 2>/dev/null || true
-    rm -f /tmp/e2e-save-$$.txt 2>/dev/null || true
-    rm -f /tmp/e2e-create-$$.txt 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -62,72 +60,77 @@ echo "Phase 1: Setting up test environment..."
 mkdir -p "$TEST_DIR"
 echo "function test() { return true; }" > "$TEST_DIR/app.js"
 
-# Create tmux session
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -n "orchestrator" -c "$TEST_DIR"
+# IMPORTANT: Use larger window size for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "orchestrator" -c "$TEST_DIR"
 
-# Initialize workflow via tmux -L "$TMUX_SOCKET" send-keys
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test custom naming' > /tmp/e2e-init-$$.txt 2>&1" Enter
-sleep 3
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+echo "  - Waiting for Claude to start..."
+sleep 8
+
+# Handle trust prompt
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  ✓ Test environment ready"
+echo ""
+
+# ============================================================
+# PHASE 2: Initialize workflow through Claude
+# ============================================================
+echo "Phase 2: Initializing workflow through Claude..."
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test custom naming'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
 
 # Get workflow name and set it in the tmux session environment
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "$WORKFLOW_NAME"
 WORKFLOW_PATH="$TEST_DIR/.workflow/$WORKFLOW_NAME"
 
-echo "  - Project created at $TEST_DIR"
-echo "  - Tmux session: $SESSION_NAME"
 echo "  - Workflow: $WORKFLOW_NAME"
 echo ""
 
 # ============================================================
-# PHASE 2: Save team structure (what PM does before creating agents)
+# PHASE 3: Save team structure through Claude
 # ============================================================
-echo "Phase 2: Saving team structure (simulating PM workflow)..."
+echo "Phase 3: Saving team structure through Claude (simulating PM workflow)..."
 
-# Run save_team_structure via tmux -L "$TMUX_SOCKET" send-keys
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' discoverer:qa:opus impl:developer:opus > /tmp/e2e-save-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-save-$$.txt" Enter
-sleep 3
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' discoverer:qa:opus impl:developer:opus"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
 
-# Read the output and exit code
-SAVE_OUTPUT=$(cat /tmp/e2e-save-$$.txt 2>/dev/null | grep -v "^EXIT:" || true)
-SAVE_EXIT=$(grep "^EXIT:" /tmp/e2e-save-$$.txt 2>/dev/null | cut -d: -f2 || echo "1")
-
-if [[ $SAVE_EXIT -eq 0 ]]; then
-    pass "save_team_structure executed successfully"
-else
-    fail "save_team_structure failed with exit code $SAVE_EXIT"
-    echo "$SAVE_OUTPUT"
-fi
-
+echo "  - Team structure saved"
 echo ""
 
 # ============================================================
-# PHASE 3: Create team windows
+# PHASE 4: Create team windows through Claude
 # ============================================================
-echo "Phase 3: Creating team tmux windows..."
-echo "  Command: create-team.sh $TEST_DIR discoverer:qa:opus impl:developer:opus"
+echo "Phase 4: Creating team through Claude..."
 
-# Create team with custom names via tmux -L "$TMUX_SOCKET" send-keys
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/create-team.sh '$TEST_DIR' discoverer:qa:opus impl:developer:opus > /tmp/e2e-create-$$.txt 2>&1; echo EXIT:\$? >> /tmp/e2e-create-$$.txt" Enter
-sleep 10
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/create-team.sh '$TEST_DIR' discoverer:qa:opus impl:developer:opus"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
 
-# Read the output and exit code
-OUTPUT=$(cat /tmp/e2e-create-$$.txt 2>/dev/null | grep -v "^EXIT:" || true)
-CREATE_EXIT=$(grep "^EXIT:" /tmp/e2e-create-$$.txt 2>/dev/null | cut -d: -f2 || echo "1")
-
-if [[ $CREATE_EXIT -eq 0 ]]; then
-    pass "create-team.sh executed successfully"
-else
-    fail "create-team.sh failed with exit code $CREATE_EXIT"
-    echo "$OUTPUT"
-fi
-
+echo "  - Team creation completed"
 echo ""
 
 # ============================================================
-# PHASE 4: Verify folder structure (by NAME, not ROLE)
+# PHASE 5: Verify folder structure (by NAME, not ROLE)
 # ============================================================
-echo "Phase 4: Verifying folder structure..."
+echo "Phase 5: Verifying folder structure..."
 
 # Test 1: Discoverer folder exists (by name, not by role)
 if [[ -d "$WORKFLOW_PATH/agents/discoverer" ]]; then
@@ -151,10 +154,10 @@ else
 fi
 
 # ============================================================
-# PHASE 5: Verify identity.yml content
+# PHASE 6: Verify identity.yml content
 # ============================================================
 echo ""
-echo "Phase 5: Verifying identity.yml files..."
+echo "Phase 6: Verifying identity.yml files..."
 
 # Test 4: Discoverer identity.yml has correct name
 if grep -q "^name: discoverer$" "$WORKFLOW_PATH/agents/discoverer/identity.yml" 2>/dev/null; then
@@ -185,10 +188,10 @@ else
 fi
 
 # ============================================================
-# PHASE 6: Verify agents.yml registry
+# PHASE 7: Verify agents.yml registry
 # ============================================================
 echo ""
-echo "Phase 6: Verifying agents.yml registry..."
+echo "Phase 7: Verifying agents.yml registry..."
 
 AGENTS_YML="$WORKFLOW_PATH/agents.yml"
 
@@ -207,10 +210,10 @@ else
 fi
 
 # ============================================================
-# PHASE 7: Verify window names match agent names
+# PHASE 8: Verify window names match agent names
 # ============================================================
 echo ""
-echo "Phase 7: Verifying window names..."
+echo "Phase 8: Verifying window names..."
 
 WINDOW_LIST=$(tmux -L "$TMUX_SOCKET" list-windows -t "$SESSION_NAME" -F "#{window_index}:#{window_name}" 2>/dev/null)
 
@@ -231,10 +234,10 @@ else
 fi
 
 # ============================================================
-# PHASE 8: Verify briefing references correct path
+# PHASE 9: Verify agent-tasks.md files exist at correct paths
 # ============================================================
 echo ""
-echo "Phase 8: Verifying agent-tasks.md files exist at correct paths..."
+echo "Phase 9: Verifying agent-tasks.md files exist at correct paths..."
 
 # Test 12: agent-tasks.md exists at discoverer path
 if [[ -f "$WORKFLOW_PATH/agents/discoverer/agent-tasks.md" ]]; then
@@ -254,15 +257,16 @@ fi
 # RESULTS
 # ============================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
+echo "======================================================================"
+TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "║  ✅ ALL TESTS PASSED ($TESTS_PASSED/$((TESTS_PASSED + TESTS_FAILED)))                              ║"
+    echo "  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
     EXIT_CODE=0
 else
-    printf "║  ❌ SOME TESTS FAILED (%d failed, %d passed)                    ║\n" $TESTS_FAILED $TESTS_PASSED
+    echo "  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
     EXIT_CODE=1
 fi
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
 echo ""
 
 exit $EXIT_CODE

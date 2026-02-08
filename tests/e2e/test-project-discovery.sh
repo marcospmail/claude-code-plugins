@@ -8,6 +8,9 @@
 # 2. The skill does NOT contain redundant project type detection bash commands
 # 3. The skill instructs using Task tool with Explore agent for codebase analysis
 # 4. The workflow creates proper context files
+#
+# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
+# Phase 5 workflow creation goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -16,9 +19,9 @@ TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-$TEST_NAME-$$"
 export TMUX_SOCKET="yato-e2e-test"
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: Project Discovery in yato-existing-project        ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
+echo "  E2E Test: Project Discovery in yato-existing-project"
+echo "======================================================================"
 echo ""
 echo "Test directory: $TEST_DIR"
 echo "Project root: $PROJECT_ROOT"
@@ -30,7 +33,6 @@ TESTS_FAILED=0
 pass() { echo "  ✅ $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
 fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
-# Cleanup function
 cleanup() {
     echo ""
     echo "Cleaning up..."
@@ -41,7 +43,10 @@ trap cleanup EXIT
 
 # Setup test environment
 mkdir -p "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+echo "function test() { return true; }" > "$TEST_DIR/app.js"
+
+# Initialize git so init-workflow.sh works
+cd "$TEST_DIR" && git init -q && git config user.name 'Test' && git config user.email 'test@test.com'
 
 SKILL_FILE="$PROJECT_ROOT/skills/yato-existing-project/SKILL.md"
 
@@ -144,18 +149,43 @@ else
 fi
 
 # ============================================================
-# PHASE 5: Test actual workflow context file creation
+# PHASE 5: Test workflow context file creation through Claude
 # ============================================================
 echo ""
-echo "Phase 5: Workflow context files created by init-workflow.sh..."
+echo "Phase 5: Workflow context files created through Claude..."
 echo ""
 
-# Create a test project
-echo "function test() { return true; }" > "$TEST_DIR/app.js"
+# IMPORTANT: Use larger window size for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
 
-# Run init-workflow.sh via tmux
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test project discovery'" Enter
-sleep 3
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+# Wait for Claude to start
+echo "  - Waiting for Claude to start..."
+sleep 8
+
+# Handle trust prompt
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
+fi
+
+# Ask Claude to run init-workflow.sh
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test project discovery'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
+# Debug output
+echo "  Debug - After workflow init:"
+tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -30 | tail -15
+echo ""
 
 # Get workflow name
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
@@ -192,16 +222,16 @@ fi
 # RESULTS
 # ============================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
+echo "======================================================================"
 TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "║  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)                                  ║"
+    echo "  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
     EXIT_CODE=0
 else
-    echo "║  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)                   ║"
+    echo "  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
     EXIT_CODE=1
 fi
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
 echo ""
 
 exit $EXIT_CODE

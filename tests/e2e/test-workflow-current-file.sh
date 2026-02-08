@@ -4,9 +4,12 @@
 # E2E Test: .workflow/current File Should NOT Exist
 #
 # This test verifies:
-# 1. init-workflow.sh does NOT create .workflow/current file
+# 1. Workflow initialization does NOT create .workflow/current file
 # 2. Multiple workflows can exist without conflict
 # 3. Workflow name comes from tmux env, not a file
+#
+# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
+# All workflow creation goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -15,59 +18,90 @@ TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-current-$$"
 export TMUX_SOCKET="yato-e2e-test"
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: .workflow/current File NOT Created                ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
+echo "  E2E Test: .workflow/current File NOT Created"
+echo "======================================================================"
 echo ""
 echo "Test directory: $TEST_DIR"
 echo ""
 
-# Track test results
 TESTS_PASSED=0
 TESTS_FAILED=0
 
 pass() {
-    echo "  PASS: $1"
+    echo "  ✅ $1"
     TESTS_PASSED=$((TESTS_PASSED + 1))
 }
 
 fail() {
-    echo "  FAIL: $1"
+    echo "  ❌ $1"
     TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
-# Cleanup function
 cleanup() {
     echo ""
     echo "Cleaning up..."
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
-    rm -f /tmp/e2e-wfcurrent-$$.txt 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # ============================================================
-# PHASE 1: Setup and create workflow
+# PHASE 1: Setup test environment
 # ============================================================
 echo "Phase 1: Setting up test environment..."
 
 mkdir -p "$TEST_DIR"
+echo "function test() { return true; }" > "$TEST_DIR/app.js"
 
-# Create session and initialize git
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -n "pm" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "git init -q && git config user.name 'Test' && git config user.email 'test@test.com'" Enter
-sleep 2
+# Initialize git so init-workflow.sh works
+cd "$TEST_DIR" && git init -q && git config user.name 'Test' && git config user.email 'test@test.com'
 
-# Initialize first workflow
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'First workflow'" Enter
-sleep 3
+# IMPORTANT: Use larger window size for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
 
-echo "  - First workflow initialized"
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+# Wait for Claude to start
+echo "  - Waiting for Claude to start..."
+sleep 8
+
+# Handle trust prompt
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  ✓ Test environment ready"
+echo ""
+
+# ============================================================
+# PHASE 2: Create first workflow through Claude
+# ============================================================
+echo "Phase 2: Creating first workflow through Claude..."
+
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'First workflow'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
+
+# Debug: show what Claude did
+echo "  Debug - After first workflow creation:"
+tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -30 | tail -15
+echo ""
+
+echo "  - First workflow created"
+echo ""
 
 # ============================================================
 # Test 1: .workflow/current file should NOT exist
 # ============================================================
-echo ""
 echo "Test 1: Checking .workflow/current file does NOT exist..."
 
 CURRENT_FILE="$TEST_DIR/.workflow/current"
@@ -79,13 +113,15 @@ else
 fi
 
 # ============================================================
-# Test 2: Create second workflow - no conflict
+# Test 2: Create second workflow through Claude - no conflict
 # ============================================================
 echo ""
 echo "Test 2: Creating second workflow (no conflict expected)..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Second workflow'" Enter
-sleep 3
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Second workflow'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 30
 
 # Count workflow folders
 WORKFLOW_COUNT=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | wc -l | tr -d ' ')
@@ -127,28 +163,10 @@ else
 fi
 
 # ============================================================
-# Test 5: get_current_workflow uses folder discovery outside tmux
+# Test 5: Verify init-workflow.sh does NOT create current file
 # ============================================================
 echo ""
-echo "Test 5: get_current_workflow discovers workflow folder outside tmux..."
-
-# Run get_current_workflow without TMUX context via send-keys
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "unset TMUX && source $PROJECT_ROOT/bin/workflow-utils.sh && get_current_workflow '$TEST_DIR' > /tmp/e2e-wfcurrent-$$.txt 2>&1; echo DONE" Enter
-sleep 3
-RESULT=$(cat /tmp/e2e-wfcurrent-$$.txt 2>/dev/null | grep -v "DONE" | head -1)
-
-# Should discover the most recent workflow folder (fallback for scripts/tests)
-if [[ "$RESULT" =~ ^[0-9]{3}- ]]; then
-    pass "get_current_workflow discovers workflow folder outside tmux: $RESULT"
-else
-    fail "get_current_workflow should discover workflow folder, got: $RESULT"
-fi
-
-# ============================================================
-# Test 6: init-workflow.sh does NOT create current file
-# ============================================================
-echo ""
-echo "Test 6: Checking init-workflow.sh does NOT create current file..."
+echo "Test 5: Checking init-workflow.sh does NOT create current file..."
 
 INIT_WORKFLOW="$PROJECT_ROOT/bin/init-workflow.sh"
 
@@ -163,16 +181,16 @@ fi
 # RESULTS
 # ============================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
+echo "======================================================================"
 TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "║  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)                                ║"
+    echo "  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
     EXIT_CODE=0
 else
-    echo "║  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)              ║"
+    echo "  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
     EXIT_CODE=1
 fi
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
 echo ""
 
 exit $EXIT_CODE

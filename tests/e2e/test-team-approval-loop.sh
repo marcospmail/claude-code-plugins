@@ -8,6 +8,8 @@
 # 2. Requiring explicit "Yes, looks good" before saving team
 # 3. Re-asking after user provides changes via "Other"
 # 4. Never saving team until user explicitly approves
+#
+# IMPORTANT: All execution goes through Claude Code in a tmux session.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -16,18 +18,18 @@ TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-$TEST_NAME-$$"
 export TMUX_SOCKET="yato-e2e-test"
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: Team Approval Loop                                ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo "======================================================================"
+echo "  E2E Test: Team Approval Loop"
+echo "======================================================================"
 echo ""
-echo "Project root: $PROJECT_ROOT"
+echo "  Project root: $PROJECT_ROOT"
 echo ""
 
 TESTS_PASSED=0
 TESTS_FAILED=0
 
-pass() { echo "  ✅ $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
-fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
+pass() { echo "  PASS: $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
+fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 # Cleanup function
 cleanup() {
@@ -39,13 +41,52 @@ cleanup() {
 trap cleanup EXIT
 
 # Setup test environment
+echo "Setting up test environment..."
 mkdir -p "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+
+# Create tmux session with larger size for Claude TUI
+# IMPORTANT: Use -x 120 -y 40 for Claude's TUI to work properly
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+
+# Wait for Claude to start and handle trust prompt
+echo "  Waiting for Claude to start..."
+sleep 8
+
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
+else
+    echo "  No trust prompt found, continuing..."
+    sleep 5
+fi
+
+echo "  Test environment ready"
+echo ""
 
 ORCHESTRATOR_FILE="$PROJECT_ROOT/lib/orchestrator.py"
 
 echo "Testing PM briefing for team approval loop..."
 echo ""
+
+# Ask Claude to grep for AskUserQuestion in orchestrator.py
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: grep -c 'AskUserQuestion' '$ORCHESTRATOR_FILE' && grep -c 'Does this team structure work' '$ORCHESTRATOR_FILE'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
+
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
 
 # Test 1: PM uses AskUserQuestion for team approval
 echo "Test 1: AskUserQuestion for team approval..."
@@ -113,18 +154,29 @@ else
     fail "Expected 1 option for team approval, found $OPTION_COUNT"
 fi
 
+# Ask Claude to verify the file exists and has approval content
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: grep -l 'CRITICAL TEAM APPROVAL LOOP' '$ORCHESTRATOR_FILE' && echo 'APPROVAL_LOOP_FOUND'"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+sleep 10
+
+# Handle any prompts
+SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
+    sleep 20
+else
+    sleep 20
+fi
+
 # Results
 echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
+echo "======================================================================"
 TOTAL=$((TESTS_PASSED + TESTS_FAILED))
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    echo "║  ✅ ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)                                  ║"
-    EXIT_CODE=0
+    echo "  ALL TESTS PASSED ($TESTS_PASSED/$TOTAL)"
+    exit 0
 else
-    echo "║  ❌ SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)                   ║"
-    EXIT_CODE=1
+    echo "  SOME TESTS FAILED ($TESTS_FAILED failed, $TESTS_PASSED passed)"
+    exit 1
 fi
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
-
-exit $EXIT_CODE
