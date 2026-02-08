@@ -11,12 +11,21 @@ Note: Registry operations have been moved to WorkflowRegistry.
 This module focuses on pure tmux operations only.
 """
 
+import os
 import subprocess
 import json
 import time
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
+
+
+def _tmux_cmd() -> list:
+    """Return tmux command with optional -L socket flag from TMUX_SOCKET env var."""
+    socket = os.environ.get("TMUX_SOCKET")
+    if socket:
+        return ["tmux", "-L", socket]
+    return ["tmux"]
 
 
 @dataclass
@@ -252,16 +261,18 @@ class TmuxOrchestrator:
             True if successful, False otherwise
         """
         try:
+            tmux = _tmux_cmd()
+
             # Step 1: Select the target pane to ensure it's active
             subprocess.run(
-                ["tmux", "select-pane", "-t", target],
+                tmux + ["select-pane", "-t", target],
                 capture_output=True,
                 check=False  # Don't fail if pane can't be selected
             )
 
             # Step 2: Exit copy mode if active (prevents / triggering search)
             subprocess.run(
-                ["tmux", "send-keys", "-t", target, "-X", "cancel"],
+                tmux + ["send-keys", "-t", target, "-X", "cancel"],
                 capture_output=True,
                 check=False  # Don't fail if not in copy mode
             )
@@ -269,8 +280,14 @@ class TmuxOrchestrator:
             # Step 3: Brief wait for UI
             time.sleep(0.5)
 
+            # Step 3.5: Append MESSAGE_SUFFIX from config if set
+            from lib.config import get as get_config
+            suffix = get_config("MESSAGE_SUFFIX")
+            if suffix:
+                message = message + suffix
+
             # Step 4: Send the message text
-            cmd = ["tmux", "send-keys", "-t", target, message]
+            cmd = tmux + ["send-keys", "-t", target, message]
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 print(f"Error sending message: {result.stderr}")
@@ -281,7 +298,7 @@ class TmuxOrchestrator:
                 time.sleep(1.0)
 
                 # Step 6: Send Enter to submit
-                cmd = ["tmux", "send-keys", "-t", target, "Enter"]
+                cmd = tmux + ["send-keys", "-t", target, "Enter"]
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode != 0:
                     print(f"Error sending Enter: {result.stderr}")
