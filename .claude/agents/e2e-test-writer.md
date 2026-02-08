@@ -63,6 +63,25 @@ sleep 15  # Wait for Claude to process and execute
 uv run python lib/loop_manager.py start "check logs" --times 3
 ```
 
+### MANDATORY: Use Dedicated Tmux Socket
+
+All tests MUST use a dedicated tmux socket to isolate from the user's real tmux sessions. This prevents tests from interfering with running work.
+
+**Pattern:**
+```bash
+export TMUX_SOCKET="yato-e2e-test"
+```
+
+Then ALL tmux commands must use `-L "$TMUX_SOCKET"`:
+```bash
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "command" Enter
+tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100
+tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
+```
+
+**NEVER use bare `tmux` without `-L "$TMUX_SOCKET"` in tests.**
+
 ### Timing and Determinism
 - Wait appropriately for Claude to process (10-15 seconds for startup, 5-15 seconds per command)
 - Use unique session names with PID: `SESSION="e2e-test-$$"`
@@ -80,6 +99,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_NAME="feature-name"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$$"
 SESSION_NAME="e2e-test-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
 echo "  E2E Test: Feature Name"
@@ -94,7 +114,7 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -102,17 +122,17 @@ trap cleanup EXIT
 # Setup phase
 echo "Setting up test environment..."
 mkdir -p "$TEST_DIR"
-tmux new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux send-keys -t "$SESSION_NAME" "claude" Enter
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
 sleep 10  # Wait for Claude to start
 
 # Test phase
 echo "Testing feature..."
-tmux send-keys -t "$SESSION_NAME" "/skill-command args" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "/skill-command args" Enter
 sleep 15  # Wait for Claude to process
 
 # Verify phase
-OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -100)
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100)
 if echo "$OUTPUT" | grep -q "Expected text"; then
     pass "Feature works correctly"
 else
@@ -133,10 +153,11 @@ fi
 ```
 
 ### Tmux Patterns
+- **Always use socket**: `export TMUX_SOCKET="yato-e2e-test"` and `-L "$TMUX_SOCKET"` on every tmux command
 - Session format: `e2e-test-$TEST_NAME-$$` (unique per test run)
-- Capture output: `tmux capture-pane -t "$SESSION" -p -S -100`
-- Send commands: `tmux send-keys -t "$SESSION" "command" Enter`
-- Always set working directory: `tmux new-session -d -s "$SESSION" -c "$TEST_DIR"`
+- Capture output: `tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION" -p -S -100`
+- Send commands: `tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" "command" Enter`
+- Always set working directory: `tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION" -c "$TEST_DIR"`
 
 ### Test Verification Methods
 - Grep output for expected text patterns
@@ -144,6 +165,53 @@ fi
 - Verify JSON/YAML structure
 - Count specific occurrences in output
 - Validate state changes in workflow files
+
+### MANDATORY: Always Use Real Claude Code Sessions
+
+Tests MUST run through a real Claude Code session. **Never call Python scripts, CLI commands, or bash scripts directly from the test runner.** All execution must go through Claude running inside a tmux window.
+
+**Pattern for asking Claude to run commands:**
+```bash
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "claude" Enter
+sleep 8
+
+# Handle trust prompt
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
+if echo "$OUTPUT" | grep -qi "trust"; then
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" Enter
+    sleep 15
+else
+    sleep 5
+fi
+
+# Ask Claude to execute something
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "Run this exact command in bash: some command here"
+sleep 1
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" Enter
+sleep 20  # Wait for Claude to process
+```
+
+**For skills:** use `/skill-name args` directly.
+**For Python functions:** ask Claude to run the Python command in bash.
+
+### MANDATORY: Use $PROJECT_ROOT for Yato Python Imports
+
+When tests need to call Yato Python modules (e.g., `from lib.tmux_utils import send_message`), you MUST `cd $PROJECT_ROOT` first, NOT `cd $TEST_DIR`. The `lib/` package lives in the yato project directory, not in the temp test directory.
+
+**CORRECT:**
+```bash
+cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' uv run python -c "from lib.tmux_utils import send_message; ..."
+```
+
+**INCORRECT (will fail with ImportError):**
+```bash
+cd $TEST_DIR && uv run python -c "from lib.tmux_utils import send_message; ..."
+```
+
+- `$PROJECT_ROOT` = yato source code (where `lib/` lives) — use for Python imports
+- `$TEST_DIR` = temp directory in `/tmp` — use for test data, configs, workflow state
+- `YATO_PATH=$TEST_DIR` — env var that tells yato code where to find config/defaults.conf
 
 ## Best Practices
 
@@ -163,18 +231,19 @@ fi
 # Test that a skill command executes and produces expected output
 TEST_DIR="/tmp/e2e-test-skill-$$"
 SESSION="e2e-test-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 mkdir -p "$TEST_DIR"
-tmux new-session -d -s "$SESSION" -c "$TEST_DIR"
-tmux send-keys -t "$SESSION" "claude" Enter
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" "claude" Enter
 sleep 10
 
 # Send skill command
-tmux send-keys -t "$SESSION" "/loop check status" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" "/loop check status" Enter
 sleep 15
 
 # Verify output
-OUTPUT=$(tmux capture-pane -t "$SESSION" -p -S -100)
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION" -p -S -100)
 if echo "$OUTPUT" | grep -q "Loop started"; then
     pass "Skill command executed successfully"
 fi
@@ -186,14 +255,15 @@ fi
 # Test that a skill creates the expected files
 TEST_DIR="/tmp/e2e-test-files-$$"
 SESSION="e2e-test-$$"
+export TMUX_SOCKET="yato-e2e-test"
 
 mkdir -p "$TEST_DIR/.workflow/001-test"
-tmux new-session -d -s "$SESSION" -c "$TEST_DIR"
-tmux send-keys -t "$SESSION" "claude" Enter
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" "claude" Enter
 sleep 10
 
 # Run skill that should create files
-tmux send-keys -t "$SESSION" "/create-config" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" "/create-config" Enter
 sleep 10
 
 # Verify file was created
