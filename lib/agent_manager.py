@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "pyyaml>=6.0",
+#     "jinja2>=3.1",
+# ]
+# ///
 """
 Agent Manager - Create and manage Claude agents.
 
@@ -14,6 +21,7 @@ Provides functions for:
 - Sending briefings to agents
 """
 
+import glob as globmod
 import os
 import subprocess
 import sys
@@ -21,17 +29,25 @@ import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
+# Ensure yato venv site-packages are available when running from outside the project
+_script_dir = Path(__file__).resolve().parent
+_project_root = _script_dir.parent
+_venv_site = globmod.glob(str(_project_root / ".venv" / "lib" / "python*" / "site-packages"))
+if _venv_site and _venv_site[0] not in sys.path:
+    sys.path.insert(0, _venv_site[0])
+
+import yaml
 from jinja2 import Environment, FileSystemLoader
 
 # Handle imports for both `uv run` and direct script execution
 try:
     from lib.workflow_ops import WorkflowOps
-    from lib.tmux_utils import send_message
+    from lib.tmux_utils import send_message, _tmux_cmd
 except ModuleNotFoundError:
     # Running as script, add parent directory to path
-    sys.path.insert(0, str(Path(__file__).parent.parent))
+    sys.path.insert(0, str(_project_root))
     from lib.workflow_ops import WorkflowOps
-    from lib.tmux_utils import send_message
+    from lib.tmux_utils import send_message, _tmux_cmd
 
 
 class AgentManager:
@@ -191,6 +207,17 @@ class AgentManager:
         else:
             self.jinja_env = None
 
+    # Default model per role
+    ROLE_DEFAULT_MODELS = {
+        "code-reviewer": "opus",
+        "security-reviewer": "opus",
+        "pm": "opus",
+    }
+
+    def _get_default_model(self, role: str) -> str:
+        """Get the default model for a role."""
+        return self.ROLE_DEFAULT_MODELS.get(role.lower(), "sonnet")
+
     def _get_role_config(self, role: str) -> Dict[str, Any]:
         """Get configuration for a role."""
         role_lower = role.lower()
@@ -309,11 +336,36 @@ class AgentManager:
             "agent_purpose": role_config["purpose"],
             "role_description": role_description,
             "responsibilities": "\n".join(f"- {r}" for r in role_config["responsibilities"]),
+            "role": role,
         })
         (agent_dir / "instructions.md").write_text(instructions_content)
 
-        # Create constraints.md (empty by default - user can customize)
-        constraints_content = """# Constraints
+        # Create constraints.md
+        if role == "pm":
+            # PM gets specific constraints
+            constraints_content = """# PM Constraints
+
+## Forbidden Actions
+- You CANNOT modify any code files
+- Do NOT write implementation code
+- Do NOT run tests directly (delegate to QA agent)
+- Do NOT make git commits (delegate to agents)
+- NEVER call cancel-checkin.sh - the check-in loop stops AUTOMATICALLY when all tasks are completed
+  (only the USER can stop the loop early via /cancel-checkin if they choose to)
+
+## Required Actions
+- ALWAYS delegate implementation to agents
+- ALWAYS update tasks.json when tasks change status
+- ALWAYS provide specific, actionable feedback
+
+## Communication Rules
+- Keep messages concise and actionable
+- Include acceptance criteria in task assignments
+- Respond to agent check-ins promptly
+"""
+        else:
+            # Other agents get customizable constraints
+            constraints_content = """# Constraints
 
 # Add project-specific constraints for this agent below.
 # Examples:
@@ -345,6 +397,112 @@ class AgentManager:
         template = self.jinja_env.get_template(template_name)
         return template.render(**context)
 
+    def _resolve_agent_name(self, role: str, name: Optional[str], project_path: Optional[str]) -> str:
+        """
+        Resolve the agent name, handling duplicates with smart numbering.
+
+        When no custom name is given, uses the role as the name. If an agent
+        with that name already exists in agents.yml, numbers them (qa-1, qa-2).
+
+        Args:
+            role: Agent role
+            name: Custom name (if provided, used as-is)
+            project_path: Project path for agents.yml lookup
+
+        Returns:
+            Resolved agent name (lowercase)
+        """
+        if name is not None:
+            return name.lower()
+
+        base_name = role.lower()
+
+        # Check agents.yml for existing agents with same role
+        if not project_path:
+            return base_name
+
+        workflow_path = WorkflowOps.get_current_workflow_path(project_path)
+        if not workflow_path:
+            return base_name
+
+        agents_file = workflow_path / "agents.yml"
+        if not agents_file.exists():
+            return base_name
+
+        try:
+            with open(agents_file, "r") as f:
+                data = yaml.safe_load(f)
+        except Exception:
+            return base_name
+
+        if not data or "agents" not in data or not data["agents"]:
+            return base_name
+
+        existing_agents = data["agents"]
+
+        # Count existing agents with same role
+        same_role_agents = [a for a in existing_agents if a.get("role") == role]
+
+        if not same_role_agents:
+            # No existing agents of this role - use base name
+            return base_name
+
+        # There are existing agents with this role - we need to number
+        # Check if the existing one was already numbered
+        existing_names = [a.get("name", "") for a in same_role_agents]
+
+        if len(same_role_agents) == 1 and existing_names[0] == base_name:
+            # One existing agent with base name - rename it to -1 and use -2
+            self._rename_agent(project_path, workflow_path, base_name, f"{base_name}-1", role)
+            return f"{base_name}-2"
+
+        # Multiple existing - find next number
+        max_num = 0
+        for a_name in existing_names:
+            if a_name.startswith(f"{base_name}-"):
+                try:
+                    num = int(a_name[len(base_name) + 1:])
+                    if num > max_num:
+                        max_num = num
+                except ValueError:
+                    pass
+            elif a_name == base_name:
+                # Unnumbered existing - should have been renamed already
+                pass
+
+        return f"{base_name}-{max_num + 1}"
+
+    def _rename_agent(self, project_path: str, workflow_path: Path, old_name: str, new_name: str, role: str) -> None:
+        """Rename an agent in agents.yml and on disk."""
+        # Update agents.yml
+        agents_file = workflow_path / "agents.yml"
+        if agents_file.exists():
+            try:
+                with open(agents_file, "r") as f:
+                    data = yaml.safe_load(f)
+
+                if data and "agents" in data and data["agents"]:
+                    for agent in data["agents"]:
+                        if agent.get("name") == old_name:
+                            agent["name"] = new_name
+                            break
+
+                    WorkflowOps._write_agents_yml(agents_file, data)
+            except Exception:
+                pass
+
+        # Rename agent directory
+        old_dir = workflow_path / "agents" / old_name
+        new_dir = workflow_path / "agents" / new_name
+        if old_dir.exists() and not new_dir.exists():
+            old_dir.rename(new_dir)
+            # Update identity.yml name field
+            identity_file = new_dir / "identity.yml"
+            if identity_file.exists():
+                content = identity_file.read_text()
+                content = content.replace(f"name: {old_name}", f"name: {new_name}")
+                identity_file.write_text(content)
+
     def create_agent(
         self,
         session: str,
@@ -360,17 +518,20 @@ class AgentManager:
         Create a new Claude agent in a tmux session.
 
         This:
-        1. Creates a new tmux window
+        1. Creates a new tmux window (if session exists)
         2. Updates agent files with window info
         3. Registers agent in agents.yml
         4. Optionally starts Claude
         5. Optionally sends briefing
 
+        If the tmux session doesn't exist, creates files and registry
+        entries only (no tmux window, no Claude, no briefing).
+
         Args:
             session: Tmux session name
             role: Agent role
             project_path: Project path (working directory)
-            name: Window name (defaults to role capitalized)
+            name: Window name (defaults to role with smart numbering)
             model: Claude model (haiku, sonnet, opus)
             pm_window: PM window this agent reports to
             start_claude: Whether to start Claude automatically
@@ -382,41 +543,45 @@ class AgentManager:
         # Normalize role
         role = role.lower()
 
-        # Set default name
-        if name is None:
-            name = role.title()
-
-        # Check session exists
-        result = subprocess.run(
-            ["tmux", "has-session", "-t", session],
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            print(f"Error: Session '{session}' does not exist")
-            print(f"Create it with: tmux new-session -d -s {session}")
-            return None
-
         # Expand project path
         if project_path:
             project_path = os.path.expanduser(project_path)
             if not os.path.isdir(project_path):
                 print(f"Warning: Path '{project_path}' does not exist")
 
-        # Create agent window
-        print(f"Creating window '{name}' in session '{session}'...")
+        # Resolve agent name with smart duplicate handling
+        agent_name = self._resolve_agent_name(role, name, project_path)
+        display_name = name if name else agent_name
 
-        cmd = ["tmux", "new-window", "-d", "-t", session, "-n", name, "-P", "-F", "#{window_index}"]
-        if project_path:
-            cmd.extend(["-c", project_path])
+        # Check session exists
+        has_session = False
+        result = subprocess.run(
+            _tmux_cmd() + ["has-session", "-t", session],
+            capture_output=True,
+        )
+        has_session = result.returncode == 0
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"Error: Failed to create window: {result.stderr}")
-            return None
+        window_index = 0
+        agent_id = f"{session}:0"
 
-        window_index = int(result.stdout.strip())
-        agent_id = f"{session}:{window_index}"
-        print(f"Created window: {agent_id}")
+        if has_session:
+            # Create agent window
+            print(f"Creating window '{display_name}' in session '{session}'...")
+
+            cmd = _tmux_cmd() + ["new-window", "-d", "-t", session, "-n", display_name, "-P", "-F", "#{window_index}"]
+            if project_path:
+                cmd.extend(["-c", project_path])
+
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"Error: Failed to create window: {result.stderr}")
+                return None
+
+            window_index = int(result.stdout.strip())
+            agent_id = f"{session}:{window_index}"
+            print(f"Created window: {agent_id}")
+        else:
+            print(f"Session '{session}' not found - creating files and registry only (no tmux window)")
 
         # Get workflow info
         workflow_name = None
@@ -428,15 +593,13 @@ class AgentManager:
 
         # Register in agents.yml
         if project_path and workflow_name:
-            agent_name_lower = name.lower()
             WorkflowOps.add_agent_to_yml(
-                project_path, agent_name_lower, role, window_index, model, session
+                project_path, agent_name, role, window_index, model, session
             )
 
         # Update agent identity file with window info
         if workflow_path:
-            agent_name_lower = name.lower()
-            agent_dir = workflow_path / "agents" / agent_name_lower
+            agent_dir = workflow_path / "agents" / agent_name
 
             # Try by name first, then by role
             if not agent_dir.exists():
@@ -444,25 +607,27 @@ class AgentManager:
 
             identity_file = agent_dir / "identity.yml"
             if identity_file.exists():
-                print("Updating existing agent files with window info...")
-                content = identity_file.read_text()
-                content = content.replace("window:", f"window: {window_index}")
-                content = content.replace("session:", f"session: {session}")
-                identity_file.write_text(content)
-                print(f"Updated identity file: {identity_file}")
-            else:
-                # Files don't exist - create them
-                self.init_agent_files(project_path, agent_name_lower, role, model, workflow_name)
-                # Update with window info
-                identity_file = agent_dir / "identity.yml"
-                if identity_file.exists():
+                if has_session:
+                    print("Updating existing agent files with window info...")
                     content = identity_file.read_text()
                     content = content.replace("window:", f"window: {window_index}")
                     content = content.replace("session:", f"session: {session}")
                     identity_file.write_text(content)
+                    print(f"Updated identity file: {identity_file}")
+            else:
+                # Files don't exist - create them
+                self.init_agent_files(project_path, agent_name, role, model, workflow_name)
+                # Update with window info if we have a session
+                if has_session:
+                    identity_file = agent_dir / "identity.yml"
+                    if identity_file.exists():
+                        content = identity_file.read_text()
+                        content = content.replace("window:", f"window: {window_index}")
+                        content = content.replace("session:", f"session: {session}")
+                        identity_file.write_text(content)
 
-        # Start Claude
-        if start_claude:
+        # Start Claude (only if session exists)
+        if start_claude and has_session:
             print("Starting Claude with bypass permissions...")
             claude_cmd = "claude --dangerously-skip-permissions"
             if model:
@@ -470,18 +635,18 @@ class AgentManager:
                 print(f"Using model: {model}")
 
             subprocess.run(
-                ["tmux", "send-keys", "-t", agent_id, claude_cmd, "Enter"],
+                _tmux_cmd() + ["send-keys", "-t", agent_id, claude_cmd, "Enter"],
                 check=True,
             )
             time.sleep(5)  # Wait for Claude to start
 
-        # Send briefing
-        if send_brief and start_claude:
+        # Send briefing (only if session exists)
+        if send_brief and start_claude and has_session:
             print("Sending briefing...")
             self._send_agent_briefing(
                 agent_id=agent_id,
                 role=role,
-                name=name,
+                name=display_name,
                 session=session,
                 window_index=window_index,
                 project_path=project_path,
@@ -490,9 +655,11 @@ class AgentManager:
             )
 
         print("\nAgent created successfully!")
-        print(f"  Agent ID: {agent_id}")
+        print(f"  Agent: {agent_name}")
         print(f"  Role: {role}")
-        print(f"  Window: {name}")
+        if has_session:
+            print(f"  Agent ID: {agent_id}")
+            print(f"  Window: {display_name}")
         if project_path:
             print(f"  Path: {project_path}")
         if pm_window:
@@ -501,7 +668,7 @@ class AgentManager:
         return {
             "agent_id": agent_id,
             "role": role,
-            "name": name,
+            "name": agent_name,
             "session": session,
             "window_index": window_index,
             "project_path": project_path,
@@ -655,7 +822,7 @@ if __name__ == "__main__":
     create_parser.add_argument("role", help="Agent role")
     create_parser.add_argument("--project", "-p", help="Project path")
     create_parser.add_argument("--name", "-n", help="Window name")
-    create_parser.add_argument("--model", "-m", default="sonnet", help="Model")
+    create_parser.add_argument("--model", "-m", default=None, help="Model (default: role-dependent)")
     create_parser.add_argument("--pm-window", help="PM window (session:window)")
     create_parser.add_argument("--no-start", action="store_true", help="Don't start Claude")
     create_parser.add_argument("--no-brief", action="store_true", help="Don't send briefing")
@@ -666,12 +833,14 @@ if __name__ == "__main__":
         init_agent_files(args.project, args.agent_name, args.role, args.model)
 
     elif args.command == "create":
+        manager = AgentManager()
+        model = args.model if args.model else manager._get_default_model(args.role)
         create_agent(
             session=args.session,
             role=args.role,
             project_path=args.project,
             name=args.name,
-            model=args.model,
+            model=model,
             pm_window=args.pm_window,
             start_claude=not args.no_start,
             send_brief=not args.no_brief,

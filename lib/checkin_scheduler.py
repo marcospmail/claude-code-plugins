@@ -635,13 +635,67 @@ def get_workflow_from_tmux() -> Optional[str]:
     return None
 
 
-def find_project_root() -> Optional[Path]:
-    """Find the project root by walking up looking for .workflow/"""
+def find_project_root(workflow_name: Optional[str] = None) -> Optional[Path]:
+    """Find the project root by walking up looking for .workflow/
+
+    If workflow_name is provided, verifies the workflow exists in .workflow/.
+    If not found, continues searching parent directories.
+    Falls back to tmux pane_start_command directory if cwd search fails.
+    """
     current = Path.cwd()
+    first_match = None
     while current != current.parent:
         if (current / ".workflow").exists():
-            return current
+            if workflow_name is None:
+                return current
+            # Verify the specific workflow exists here
+            if (current / ".workflow" / workflow_name).exists():
+                return current
+            # Remember first .workflow/ match as fallback
+            if first_match is None:
+                first_match = current
         current = current.parent
+
+    # If workflow_name given but not found in any .workflow/, try tmux session paths
+    if workflow_name:
+        for tmux_var in ["#{session_path}", "#{pane_start_path}", "#{pane_current_path}"]:
+            try:
+                result = subprocess.run(
+                    [*_tmux_cmd(), "display-message", "-p", tmux_var],
+                    capture_output=True, text=True, check=False,
+                )
+                path_str = result.stdout.strip()
+                if path_str:
+                    candidate = Path(path_str)
+                    if (candidate / ".workflow" / workflow_name).exists():
+                        return candidate
+            except Exception:
+                pass
+
+    # Return first match even if specific workflow wasn't found there
+    return first_match
+
+
+def _find_active_workflow(project_root: Path) -> Optional[str]:
+    """Find the active workflow with a running daemon in the project."""
+    workflow_dir = project_root / ".workflow"
+    if not workflow_dir.exists():
+        return None
+    for entry in sorted(workflow_dir.iterdir()):
+        if entry.is_dir() and entry.name[0].isdigit():
+            checkins_file = entry / "checkins.json"
+            if checkins_file.exists():
+                try:
+                    data = json.loads(checkins_file.read_text())
+                    pid = data.get("daemon_pid")
+                    if pid:
+                        try:
+                            os.kill(pid, 0)
+                            return entry.name
+                        except (OSError, ProcessLookupError):
+                            pass
+                except (json.JSONDecodeError, IOError):
+                    pass
     return None
 
 
@@ -659,11 +713,36 @@ def cancel_checkin(workflow_name: Optional[str] = None) -> bool:
         workflow_name = get_workflow_from_tmux()
 
     if not workflow_name:
-        print("Error: No WORKFLOW_NAME set in tmux environment.")
-        print("Run this from within a tmux session with an active workflow.")
-        return False
+        # Try to find active workflow by looking for running daemon
+        # Check both cwd project root and tmux session paths
+        candidates = []
+        project_root = find_project_root()
+        if project_root:
+            candidates.append(project_root)
+        # Also check tmux session paths
+        for tmux_var in ["#{session_path}", "#{pane_start_path}", "#{pane_current_path}"]:
+            try:
+                result = subprocess.run(
+                    [*_tmux_cmd(), "display-message", "-p", tmux_var],
+                    capture_output=True, text=True, check=False,
+                )
+                path_str = result.stdout.strip()
+                if path_str:
+                    candidate = Path(path_str)
+                    if candidate not in candidates and (candidate / ".workflow").exists():
+                        candidates.append(candidate)
+            except Exception:
+                pass
+        for root in candidates:
+            workflow_name = _find_active_workflow(root)
+            if workflow_name:
+                break
+        if not workflow_name:
+            print("Error: No WORKFLOW_NAME set in tmux environment.")
+            print("Run this from within a tmux session with an active workflow.")
+            return False
 
-    project_root = find_project_root()
+    project_root = find_project_root(workflow_name)
     if project_root is None:
         print("Error: Could not find .workflow/ directory.")
         return False
@@ -703,7 +782,7 @@ def start_checkin(
         print("Run this from within a tmux session with an active workflow.")
         return None
 
-    project_root = find_project_root()
+    project_root = find_project_root(workflow_name)
     if project_root is None:
         print("Error: Could not find .workflow/ directory.")
         return None
@@ -784,7 +863,7 @@ if __name__ == "__main__":
         if not workflow_name:
             print("Error: No workflow specified")
             sys.exit(1)
-        project_root = find_project_root()
+        project_root = find_project_root(workflow_name)
         if project_root:
             workflow_path = project_root / ".workflow" / workflow_name
             if workflow_path.exists():
@@ -806,7 +885,7 @@ if __name__ == "__main__":
         if not workflow_name:
             print("Error: No workflow specified")
             sys.exit(1)
-        project_root = find_project_root()
+        project_root = find_project_root(workflow_name)
         if project_root:
             workflow_path = project_root / ".workflow" / workflow_name
             if workflow_path.exists():

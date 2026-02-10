@@ -8,7 +8,23 @@
 # Re-checks tmux env on each loop iteration (handles workflow creation after startup).
 
 # Support isolated tmux socket (used by e2e tests)
-TMUX_FLAGS="${TMUX_SOCKET:+-L $TMUX_SOCKET}"
+# If TMUX_SOCKET is set explicitly, use -L flag.
+# Otherwise, extract socket path from $TMUX variable (format: /path/to/socket,pid,pane)
+# to ensure we connect to the correct tmux server (handles non-default sockets).
+if [[ -n "$TMUX_SOCKET" ]]; then
+    TMUX_FLAGS="-L $TMUX_SOCKET"
+elif [[ -n "$TMUX" ]]; then
+    _SOCKET_PATH="${TMUX%%,*}"
+    # Only use -S if it's not the default socket
+    _DEFAULT_SOCKET="/private/tmp/tmux-$(id -u)/default"
+    if [[ "$_SOCKET_PATH" != "$_DEFAULT_SOCKET" ]]; then
+        TMUX_FLAGS="-S $_SOCKET_PATH"
+    else
+        TMUX_FLAGS=""
+    fi
+else
+    TMUX_FLAGS=""
+fi
 
 # Get the pane ID this script is running in (must target this specific pane)
 MY_PANE=$(tmux $TMUX_FLAGS display-message -p '#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null)

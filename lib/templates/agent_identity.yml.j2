@@ -4,4 +4,5 @@ model: {{ model }}
 window: {{ window | default('') }}
 session: {{ session | default('') }}
 workflow: {{ workflow_name }}
+# Values: true (developer), test-only (qa), false (reviewer/pm)
 can_modify_code: {{ can_modify_code }}
