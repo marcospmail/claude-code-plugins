@@ -150,7 +150,7 @@ fi
 ROLE_CAPITALIZED=$(echo "$ROLE" | sed 's/\b\(.\)/\u\1/g')
 
 # Check session exists
-if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+if ! tmux $TMUX_FLAGS has-session -t "$SESSION" 2>/dev/null; then
     echo "Error: Session '$SESSION' does not exist"
     echo "Create it with: tmux new-session -d -s $SESSION"
     exit 1
@@ -168,9 +168,9 @@ fi
 echo "Creating window '$WINDOW_NAME' in session '$SESSION'..."
 
 if [[ -n "$PROJECT_PATH" ]]; then
-    WINDOW_INDEX=$(tmux new-window -t "$SESSION" -n "$WINDOW_NAME" -c "$PROJECT_PATH" -P -F "#{window_index}")
+    WINDOW_INDEX=$(tmux $TMUX_FLAGS new-window -t "$SESSION" -n "$WINDOW_NAME" -c "$PROJECT_PATH" -P -F "#{window_index}")
 else
-    WINDOW_INDEX=$(tmux new-window -t "$SESSION" -n "$WINDOW_NAME" -P -F "#{window_index}")
+    WINDOW_INDEX=$(tmux $TMUX_FLAGS new-window -t "$SESSION" -n "$WINDOW_NAME" -P -F "#{window_index}")
 fi
 
 if [[ -z "$WINDOW_INDEX" ]]; then

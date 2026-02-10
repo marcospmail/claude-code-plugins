@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "pyyaml>=6.0",
+# ]
+# ///
 """
 Workflow Operations - Utility functions for workflow management.
 
@@ -9,12 +15,21 @@ This module replaces workflow-utils.sh and provides functions for:
 - Managing agents.yml and team.yml
 """
 
+import glob as globmod
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+
+# Ensure yato venv site-packages are available when running from outside the project
+_script_dir = Path(__file__).resolve().parent
+_project_root = _script_dir.parent
+_venv_site = globmod.glob(str(_project_root / ".venv" / "lib" / "python*" / "site-packages"))
+if _venv_site and _venv_site[0] not in sys.path:
+    sys.path.insert(0, _venv_site[0])
 
 import yaml
 
@@ -139,8 +154,9 @@ class WorkflowOps:
         Get the current workflow folder name.
 
         Tries in order:
-        1. tmux WORKFLOW_NAME env var (if in tmux)
-        2. Most recent workflow folder (fallback for scripts/tests)
+        1. WORKFLOW_NAME environment variable (direct)
+        2. tmux WORKFLOW_NAME env var (if in tmux)
+        3. Most recent workflow folder (fallback for scripts/tests)
 
         Args:
             project_path: Path to the project root
@@ -148,11 +164,18 @@ class WorkflowOps:
         Returns:
             Workflow folder name or None
         """
+        # Check direct environment variable first
+        env_workflow = os.environ.get("WORKFLOW_NAME")
+        if env_workflow:
+            return env_workflow
+
         # Get from tmux environment variable (requires being in tmux)
         if os.environ.get("TMUX"):
             try:
+                socket = os.environ.get("TMUX_SOCKET")
+                tmux_cmd = ["tmux", "-L", socket] if socket else ["tmux"]
                 result = subprocess.run(
-                    ["tmux", "showenv", "WORKFLOW_NAME"],
+                    tmux_cmd + ["showenv", "WORKFLOW_NAME"],
                     capture_output=True,
                     text=True,
                     check=True,
@@ -293,10 +316,7 @@ class WorkflowOps:
             "agents": [],
         }
 
-        with open(agents_file, "w") as f:
-            f.write("# Agent Registry\n")
-            f.write("# This file tracks all agents and their tmux locations\n\n")
-            yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+        WorkflowOps._write_agents_yml(agents_file, data)
 
         print(f"Created agents.yml: {agents_file}")
         return str(agents_file)
@@ -331,8 +351,8 @@ class WorkflowOps:
 
         agents_file = workflow_path / "agents.yml"
         if not agents_file.exists():
-            print("Error: agents.yml not found")
-            return False
+            # Auto-create agents.yml
+            WorkflowOps.create_agents_yml(project_path, session, str(workflow_path))
 
         with open(agents_file, "r") as f:
             data = yaml.safe_load(f)
@@ -352,13 +372,48 @@ class WorkflowOps:
             "model": model,
         })
 
-        with open(agents_file, "w") as f:
-            f.write("# Agent Registry\n")
-            f.write("# This file tracks all agents and their tmux locations\n\n")
-            yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+        WorkflowOps._write_agents_yml(agents_file, data)
 
         print(f"Added {agent_name} to agents.yml (window {window_number})")
         return True
+
+    @staticmethod
+    def _write_agents_yml(agents_file: Path, data: dict) -> None:
+        """Write agents.yml with consistent key ordering (name first)."""
+        with open(agents_file, "w") as f:
+            f.write("# Agent Registry\n")
+            f.write("# This file tracks all agents and their tmux locations\n\n")
+
+            # Write PM section if present
+            if "pm" in data:
+                pm = data["pm"]
+                f.write("pm:\n")
+                for key in ["name", "role", "session", "window", "pane", "model"]:
+                    if key in pm:
+                        val = pm[key]
+                        if isinstance(val, str):
+                            f.write(f"  {key}: \"{val}\"\n")
+                        else:
+                            f.write(f"  {key}: {val}\n")
+                f.write("\n")
+
+            # Write agents section
+            agents = data.get("agents", [])
+            if not agents:
+                f.write("agents: []\n")
+            else:
+                f.write("agents:\n")
+                for agent in agents:
+                    first = True
+                    for key in ["name", "role", "session", "window", "model"]:
+                        if key in agent:
+                            val = agent[key]
+                            prefix = "  - " if first else "    "
+                            if isinstance(val, str):
+                                f.write(f"{prefix}{key}: {val}\n")
+                            else:
+                                f.write(f"{prefix}{key}: {val}\n")
+                            first = False
 
     @staticmethod
     def save_team_structure(

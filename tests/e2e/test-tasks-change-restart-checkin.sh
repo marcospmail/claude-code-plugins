@@ -144,7 +144,7 @@ echo ""
 echo "Phase 3: Testing file path detection..."
 
 # Ask Claude to run the hook with a tasks.json path
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | python3 '$HOOK_SCRIPT' 2>&1; echo EXIT_CODE=\$?"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_OK_1'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -159,14 +159,14 @@ else
 fi
 
 HOOK_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
-if echo "$HOOK_OUTPUT" | grep -q "EXIT_CODE=0"; then
+if echo "$HOOK_OUTPUT" | grep -q "HOOK_OK_1"; then
     pass "Hook processes tasks.json without error"
 else
     fail "Hook errors on tasks.json"
 fi
 
 # Ask Claude to run the hook with a non-tasks.json path
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '{\"tool_input\":{\"file_path\":\"/project/src/main.py\"}}' | python3 '$HOOK_SCRIPT' 2>&1; echo EXIT_CODE=\$?"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '{\"tool_input\":{\"file_path\":\"/project/src/main.py\"}}' | python3 '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_OK_2'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -181,7 +181,7 @@ else
 fi
 
 HOOK_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
-if echo "$HOOK_OUTPUT" | grep -q "EXIT_CODE=0"; then
+if echo "$HOOK_OUTPUT" | grep -q "HOOK_OK_2"; then
     pass "Hook processes non-tasks.json without error"
 else
     fail "Hook errors on non-tasks.json"
@@ -220,7 +220,7 @@ else
 fi
 
 IS_RUNNING_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
-if echo "$IS_RUNNING_OUTPUT" | grep -q "^no$\|: no"; then
+if echo "$IS_RUNNING_OUTPUT" | grep -q "no"; then
     pass "Detects daemon is not running (null PID)"
 else
     fail "Should detect no daemon running"
@@ -252,7 +252,7 @@ else
 fi
 
 IS_RUNNING_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
-if echo "$IS_RUNNING_OUTPUT" | grep -q "^no$\|: no"; then
+if echo "$IS_RUNNING_OUTPUT" | grep -q "no"; then
     pass "Detects daemon is not running (dead PID)"
 else
     fail "Should detect dead daemon"

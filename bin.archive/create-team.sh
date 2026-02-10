@@ -49,8 +49,13 @@ fi
 # Expand project path
 PROJECT_PATH=$(eval echo "$PROJECT_PATH")
 
-# AUTO-DETECT current session - this is the key fix!
-SESSION=$(tmux display-message -p '#S')
+# AUTO-DETECT current session
+# Try tmux display-message first (works when running inside tmux)
+SESSION=$(tmux $TMUX_FLAGS display-message -p '#S' 2>/dev/null || echo "")
+if [[ -z "$SESSION" ]]; then
+    # Fallback: find the session whose pane has PROJECT_PATH as current directory
+    SESSION=$(tmux $TMUX_FLAGS list-panes -a -F "#{session_name} #{pane_current_path}" 2>/dev/null | grep "$PROJECT_PATH" | head -1 | awk '{print $1}')
+fi
 if [[ -z "$SESSION" ]]; then
     echo "ERROR: Could not detect tmux session. Are you running inside tmux?"
     exit 1

@@ -303,8 +303,10 @@ class TaskManager:
 def get_workflow_from_tmux() -> Optional[str]:
     """Get the workflow name from tmux environment variable."""
     try:
+        socket = os.environ.get("TMUX_SOCKET")
+        tmux_cmd = ["tmux", "-L", socket] if socket else ["tmux"]
         result = subprocess.run(
-            ["tmux", "showenv", "WORKFLOW_NAME"],
+            tmux_cmd + ["showenv", "WORKFLOW_NAME"],
             capture_output=True,
             text=True,
             check=True,

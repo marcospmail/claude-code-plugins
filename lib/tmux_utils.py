@@ -67,7 +67,7 @@ class TmuxOrchestrator:
     def get_tmux_sessions(self) -> List[TmuxSession]:
         """Get all tmux sessions and their windows."""
         try:
-            sessions_cmd = ["tmux", "list-sessions", "-F", "#{session_name}:#{session_attached}"]
+            sessions_cmd = _tmux_cmd() + ["list-sessions", "-F", "#{session_name}:#{session_attached}"]
             sessions_result = subprocess.run(sessions_cmd, capture_output=True, text=True, check=True)
 
             sessions = []
@@ -77,7 +77,7 @@ class TmuxOrchestrator:
                 session_name, attached = line.split(':')
 
                 # Get windows for this session
-                windows_cmd = ["tmux", "list-windows", "-t", session_name, "-F", "#{window_index}:#{window_name}:#{window_active}"]
+                windows_cmd = _tmux_cmd() + ["list-windows", "-t", session_name, "-F", "#{window_index}:#{window_name}:#{window_active}"]
                 windows_result = subprocess.run(windows_cmd, capture_output=True, text=True, check=True)
 
                 windows = []
@@ -106,14 +106,14 @@ class TmuxOrchestrator:
     def session_exists(self, session_name: str) -> bool:
         """Check if a tmux session exists."""
         result = subprocess.run(
-            ["tmux", "has-session", "-t", session_name],
+            _tmux_cmd() + ["has-session", "-t", session_name],
             capture_output=True
         )
         return result.returncode == 0
 
     def create_session(self, name: str, path: Optional[str] = None) -> bool:
         """Create a new tmux session."""
-        cmd = ["tmux", "new-session", "-d", "-s", name]
+        cmd = _tmux_cmd() + ["new-session", "-d", "-s", name]
         if path:
             cmd.extend(["-c", path])
 
@@ -122,7 +122,7 @@ class TmuxOrchestrator:
 
     def create_window(self, session: str, name: str, path: Optional[str] = None) -> Optional[int]:
         """Create a new window in a session, returning the window index."""
-        cmd = ["tmux", "new-window", "-d", "-t", session, "-n", name, "-P", "-F", "#{window_index}"]
+        cmd = _tmux_cmd() + ["new-window", "-d", "-t", session, "-n", name, "-P", "-F", "#{window_index}"]
         if path:
             cmd.extend(["-c", path])
 
@@ -148,7 +148,7 @@ class TmuxOrchestrator:
             The new pane ID (e.g., "session:0.1") or None on failure
         """
         split_flag = "-v" if vertical else "-h"
-        cmd = ["tmux", "split-window", split_flag, "-t", target, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"]
+        cmd = _tmux_cmd() + ["split-window", split_flag, "-t", target, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"]
         if path:
             cmd.extend(["-c", path])
 
@@ -161,7 +161,7 @@ class TmuxOrchestrator:
     def set_pane_title(self, target: str, title: str) -> bool:
         """Set a title for a pane (requires pane-border-format to show)."""
         # Select the pane and set its title
-        cmd = ["tmux", "select-pane", "-t", target, "-T", title]
+        cmd = _tmux_cmd() + ["select-pane", "-t", target, "-T", title]
         result = subprocess.run(cmd, capture_output=True, text=True)
         return result.returncode == 0
 
@@ -169,7 +169,7 @@ class TmuxOrchestrator:
         """Arrange all panes in a window in a tiled layout."""
         # Get the window part of target (session:window)
         window_target = target.rsplit(".", 1)[0] if "." in target else target
-        cmd = ["tmux", "select-layout", "-t", window_target, "tiled"]
+        cmd = _tmux_cmd() + ["select-layout", "-t", window_target, "tiled"]
         result = subprocess.run(cmd, capture_output=True, text=True)
         return result.returncode == 0
 
@@ -181,7 +181,7 @@ class TmuxOrchestrator:
             num_lines = self.max_lines_capture
 
         try:
-            cmd = ["tmux", "capture-pane", "-t", f"{session_name}:{window_index}", "-p", "-S", f"-{num_lines}"]
+            cmd = _tmux_cmd() + ["capture-pane", "-t", f"{session_name}:{window_index}", "-p", "-S", f"-{num_lines}"]
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             return result.stdout
         except subprocess.CalledProcessError as e:
@@ -212,7 +212,7 @@ class TmuxOrchestrator:
             num_lines = self.max_lines_capture
 
         try:
-            cmd = ["tmux", "capture-pane", "-t", target, "-p", "-S", f"-{num_lines}"]
+            cmd = _tmux_cmd() + ["capture-pane", "-t", target, "-p", "-S", f"-{num_lines}"]
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             return result.stdout
         except subprocess.CalledProcessError as e:
@@ -221,7 +221,7 @@ class TmuxOrchestrator:
     def get_window_info(self, session_name: str, window_index: int) -> Dict:
         """Get detailed information about a specific window."""
         try:
-            cmd = ["tmux", "display-message", "-t", f"{session_name}:{window_index}", "-p",
+            cmd = _tmux_cmd() + ["display-message", "-t", f"{session_name}:{window_index}", "-p",
                    "#{window_name}:#{window_active}:#{window_panes}:#{pane_current_path}"]
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
@@ -245,12 +245,12 @@ class TmuxOrchestrator:
         Send a message to a tmux target (session:window or session:window.pane).
 
         This is the primary message sending function, matching send-message.sh behavior:
-        1. Select the target pane to ensure it's active
-        2. Exit copy mode if active (prevents search mode trigger from / in paths)
-        3. Wait briefly for UI
-        4. Send the message text
-        5. Wait for UI to process
-        6. Optionally send Enter to submit
+        1. Default to pane 0 if no pane specified
+        2. Select the target pane to ensure it's active
+        3. Exit copy mode if active (prevents search mode trigger from / in paths)
+        4. Wait briefly for UI
+        5. Send the message text as literal (-l flag)
+        6. Send Enter immediately to submit (no delay to avoid TUI state changes)
 
         Args:
             target: Target in format "session:window" or "session:window.pane"
@@ -263,41 +263,52 @@ class TmuxOrchestrator:
         try:
             tmux = _tmux_cmd()
 
-            # Step 1: Select the target pane to ensure it's active
+            # Step 1: Default to pane 0 if no pane specified
+            if "." not in target:
+                target = f"{target}.0"
+
+            # Step 2: Select the target pane to ensure it's active
             subprocess.run(
                 tmux + ["select-pane", "-t", target],
                 capture_output=True,
                 check=False  # Don't fail if pane can't be selected
             )
 
-            # Step 2: Exit copy mode if active (prevents / triggering search)
+            # Step 3: Exit copy mode if active (prevents / triggering search)
             subprocess.run(
                 tmux + ["send-keys", "-t", target, "-X", "cancel"],
                 capture_output=True,
                 check=False  # Don't fail if not in copy mode
             )
 
-            # Step 3: Brief wait for UI
+            # Step 4: Brief wait for UI
             time.sleep(0.5)
 
-            # Step 3.5: Append MESSAGE_SUFFIX from config if set
-            from lib.config import get as get_config
+            # Step 4.5: Append MESSAGE_SUFFIX from config if set
+            try:
+                from lib.config import get as get_config
+            except ImportError:
+                import importlib.util
+                _cfg_path = os.path.join(os.path.dirname(__file__), "config.py")
+                _spec = importlib.util.spec_from_file_location("config", _cfg_path)
+                _cfg = importlib.util.module_from_spec(_spec)
+                _spec.loader.exec_module(_cfg)
+                get_config = _cfg.get
             suffix = get_config("MESSAGE_SUFFIX")
             if suffix:
                 message = message + suffix
 
-            # Step 4: Send the message text
-            cmd = tmux + ["send-keys", "-t", target, message]
+            # Step 5: Send the message text as literal (-l prevents key name interpretation)
+            cmd = tmux + ["send-keys", "-l", "-t", target, message]
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 print(f"Error sending message: {result.stderr}")
                 return False
 
             if enter:
-                # Step 5: Wait for UI to process the text
-                time.sleep(1.0)
-
-                # Step 6: Send Enter to submit
+                # Step 6: Send Enter immediately to submit
+                # No delay between text and Enter - avoids TUI state changes that can
+                # prevent submission (the 1-second sleep was causing Enter to be lost)
                 cmd = tmux + ["send-keys", "-t", target, "Enter"]
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode != 0:
@@ -320,7 +331,7 @@ class TmuxOrchestrator:
                 return False
 
         try:
-            cmd = ["tmux", "send-keys", "-t", f"{session_name}:{window_index}", keys]
+            cmd = _tmux_cmd() + ["send-keys", "-t", f"{session_name}:{window_index}", keys]
             subprocess.run(cmd, check=True)
             return True
         except subprocess.CalledProcessError as e:
@@ -338,7 +349,7 @@ class TmuxOrchestrator:
 
         # Then send the actual Enter key
         try:
-            cmd = ["tmux", "send-keys", "-t", f"{session_name}:{window_index}", "Enter"]
+            cmd = _tmux_cmd() + ["send-keys", "-t", f"{session_name}:{window_index}", "Enter"]
             subprocess.run(cmd, check=True)
             return True
         except subprocess.CalledProcessError as e:
@@ -380,14 +391,14 @@ class TmuxOrchestrator:
 
         try:
             # Send the message text
-            cmd = ["tmux", "send-keys", "-t", target, message]
+            cmd = _tmux_cmd() + ["send-keys", "-t", target, message]
             subprocess.run(cmd, check=True)
 
             # Wait before sending Enter
             time.sleep(self.message_delay)
 
             # Send Enter
-            cmd = ["tmux", "send-keys", "-t", target, "Enter"]
+            cmd = _tmux_cmd() + ["send-keys", "-t", target, "Enter"]
             subprocess.run(cmd, check=True)
             return True
         except subprocess.CalledProcessError as e:
@@ -511,7 +522,7 @@ def get_current_session() -> Optional[str]:
     """
     try:
         result = subprocess.run(
-            ["tmux", "display-message", "-p", "#S"],
+            _tmux_cmd() + ["display-message", "-p", "#S"],
             capture_output=True,
             text=True,
             check=True
@@ -558,17 +569,17 @@ def restart_checkin_display(target: Optional[str] = None, yato_path: Optional[st
 
     try:
         # Kill any existing process in the pane (Ctrl-C)
-        subprocess.run(["tmux", "send-keys", "-t", target, "C-c"], check=False)
+        subprocess.run(_tmux_cmd() + ["send-keys", "-t", target, "C-c"], check=False)
         time.sleep(0.3)
 
         # Clear the pane
-        subprocess.run(["tmux", "send-keys", "-t", target, "clear", "Enter"], check=True)
+        subprocess.run(_tmux_cmd() + ["send-keys", "-t", target, "clear", "Enter"], check=True)
         time.sleep(0.2)
 
         # Start the display script
         # For now, call the bash script. This will be replaced with Python later.
         display_script = f"{yato_path}/bin/checkin-display.sh"
-        subprocess.run(["tmux", "send-keys", "-t", target, f"bash {display_script}", "Enter"], check=True)
+        subprocess.run(_tmux_cmd() + ["send-keys", "-t", target, f"bash {display_script}", "Enter"], check=True)
 
         print(f"Check-in display restarted in {target}")
         return True

@@ -118,8 +118,10 @@ get_current_workflow() {
     local session_name="${2:-}"
 
     # If session name provided, query that session directly
+    # Note: TMUX_FLAGS is set by calling scripts (create-team.sh, create-agent.sh, etc.)
+    local _tmux_flags="${TMUX_SOCKET:+-L $TMUX_SOCKET}"
     if [[ -n "$session_name" ]]; then
-        local tmux_workflow=$(tmux showenv -t "$session_name" WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
+        local tmux_workflow=$(tmux $_tmux_flags showenv -t "$session_name" WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
         if [[ -n "$tmux_workflow" && "$tmux_workflow" != "-WORKFLOW_NAME" ]]; then
             echo "$tmux_workflow"
             return
@@ -128,7 +130,7 @@ get_current_workflow() {
 
     # Try current tmux environment (requires being in tmux)
     if [[ -n "$TMUX" ]]; then
-        local tmux_workflow=$(tmux showenv WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
+        local tmux_workflow=$(tmux $_tmux_flags showenv WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
         if [[ -n "$tmux_workflow" && "$tmux_workflow" != "-WORKFLOW_NAME" ]]; then
             echo "$tmux_workflow"
             return
