@@ -20,13 +20,13 @@ from typing import Optional, List, Dict
 # Handle imports for both `uv run` and direct `python3 lib/orchestrator.py` execution
 try:
     from lib.session_registry import Agent
-    from lib.tmux_utils import TmuxOrchestrator as TmuxUtils
+    from lib.tmux_utils import TmuxOrchestrator as TmuxUtils, _tmux_cmd
     from lib.workflow_registry import WorkflowRegistry
 except ModuleNotFoundError:
     # Running as script, add parent directory to path
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from lib.session_registry import Agent
-    from lib.tmux_utils import TmuxOrchestrator as TmuxUtils
+    from lib.tmux_utils import TmuxOrchestrator as TmuxUtils, _tmux_cmd
     from lib.workflow_registry import WorkflowRegistry
 
 
@@ -268,17 +268,17 @@ class Orchestrator:
         # Set WORKFLOW_NAME environment variable in the tmux session
         # This allows check-in scripts to know which workflow to use
         if workflow_name:
-            subprocess.run([
-                "tmux", "setenv", "-t", session_name,
+            subprocess.run(
+                _tmux_cmd() + ["setenv", "-t", session_name,
                 "WORKFLOW_NAME", workflow_name
             ], capture_output=True)
 
         # Rename window 0 to "Orchestrator"
-        subprocess.run(["tmux", "rename-window", "-t", f"{session_name}:0", "Orchestrator"], capture_output=True)
+        subprocess.run(_tmux_cmd() + ["rename-window", "-t", f"{session_name}:0", "Orchestrator"], capture_output=True)
 
         # Enable pane titles for future team members
-        subprocess.run(["tmux", "set-option", "-t", session_name, "pane-border-status", "top"], capture_output=True)
-        subprocess.run(["tmux", "set-option", "-t", session_name, "pane-border-format", " #{pane_title} "], capture_output=True)
+        subprocess.run(_tmux_cmd() + ["set-option", "-t", session_name, "pane-border-status", "top"], capture_output=True)
+        subprocess.run(_tmux_cmd() + ["set-option", "-t", session_name, "pane-border-format", " #{pane_title} "], capture_output=True)
 
         # Note: Check-ins are now stored per-workflow in .workflow/<workflow>/checkins.json
         # No global clearing needed - each workflow has its own checkins.json
@@ -290,8 +290,8 @@ class Orchestrator:
         # Split vertically for Check-ins on top (small pane)
         # -c ensures the new pane starts in project directory (needed for relative paths)
         # -l 10 gives 8-9 usable lines after accounting for pane border
-        subprocess.run([
-            "tmux", "split-window", "-t", f"{session_name}:0.0",
+        subprocess.run(_tmux_cmd() + [
+            "split-window", "-t", f"{session_name}:0.0",
             "-v", "-b", "-l", "10",
             "-c", str(project_dir),
             "-P", "-F", "#{pane_index}"
@@ -302,19 +302,19 @@ class Orchestrator:
         pm_target = f"{session_name}:0.1"
 
         # Set up check-in status pane (uses relative paths from project directory)
-        subprocess.run(["tmux", "select-pane", "-t", checkin_pane, "-T", "Check-ins"], capture_output=True)
-        subprocess.run(["tmux", "set-option", "-p", "-t", checkin_pane, "allow-set-title", "off"], capture_output=True)
+        subprocess.run(_tmux_cmd() + ["select-pane", "-t", checkin_pane, "-T", "Check-ins"], capture_output=True)
+        subprocess.run(_tmux_cmd() + ["set-option", "-p", "-t", checkin_pane, "allow-set-title", "off"], capture_output=True)
 
         # Wait for shell to be ready before sending commands
         import time
         time.sleep(0.5)
 
         # Start checkin-display.sh with explicit bash and absolute path for reliability
-        subprocess.run(["tmux", "send-keys", "-t", checkin_pane, f"bash {checkin_display_script}", "Enter"], capture_output=True)
+        subprocess.run(_tmux_cmd() + ["send-keys", "-t", checkin_pane, f"bash {checkin_display_script}", "Enter"], capture_output=True)
 
         # Set PM pane title and prevent programs from changing it
-        subprocess.run(["tmux", "select-pane", "-t", pm_target, "-T", "PM"], capture_output=True)
-        subprocess.run(["tmux", "set-option", "-p", "-t", pm_target, "allow-set-title", "off"], capture_output=True)
+        subprocess.run(_tmux_cmd() + ["select-pane", "-t", pm_target, "-T", "PM"], capture_output=True)
+        subprocess.run(_tmux_cmd() + ["set-option", "-p", "-t", pm_target, "allow-set-title", "off"], capture_output=True)
 
         # Register PM agent - PM always uses Opus (pane 1, since pane 0 is check-in display)
         agent = self._register_agent_to_workflow(
@@ -340,7 +340,7 @@ class Orchestrator:
         # Start Claude with bypass permissions - PM always uses Opus
         model_flag = "--model opus"
         cmd = f"claude --dangerously-skip-permissions {model_flag}"
-        subprocess.run(["tmux", "send-keys", "-t", pm_target, cmd, "Enter"], check=True)
+        subprocess.run(_tmux_cmd() + ["send-keys", "-t", pm_target, cmd, "Enter"], check=True)
 
         # Wait for Claude to start fully
         time.sleep(6)
@@ -598,11 +598,11 @@ class Orchestrator:
         import subprocess
 
         # Rename window 0 to "Agents"
-        subprocess.run(["tmux", "rename-window", "-t", f"{session_name}:0", "Agents"], capture_output=True)
+        subprocess.run(_tmux_cmd() + ["rename-window", "-t", f"{session_name}:0", "Agents"], capture_output=True)
 
         # Enable pane titles first
-        subprocess.run(["tmux", "set-option", "-t", session_name, "pane-border-status", "top"], capture_output=True)
-        subprocess.run(["tmux", "set-option", "-t", session_name, "pane-border-format", " #{pane_title} "], capture_output=True)
+        subprocess.run(_tmux_cmd() + ["set-option", "-t", session_name, "pane-border-status", "top"], capture_output=True)
+        subprocess.run(_tmux_cmd() + ["set-option", "-t", session_name, "pane-border-format", " #{pane_title} "], capture_output=True)
 
         # First pane is window 0, pane 0 - this will be the PM (left side)
         pm_pane = f"{session_name}:0.0"
@@ -614,7 +614,7 @@ class Orchestrator:
         if other_agents:
             # Create right side by splitting horizontally from PM pane
             # -h = horizontal split (creates pane to the right)
-            cmd = ["tmux", "split-window", "-h", "-t", pm_pane, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"]
+            cmd = _tmux_cmd() + ["split-window", "-h", "-t", pm_pane, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"]
             if project_path:
                 cmd.extend(["-c", project_path])
             result_split = subprocess.run(cmd, capture_output=True, text=True)
@@ -626,7 +626,7 @@ class Orchestrator:
                 # Stack additional agents vertically on the right side
                 for i in range(1, len(other_agents)):
                     # -v = vertical split (creates pane below)
-                    cmd = ["tmux", "split-window", "-v", "-t", right_pane, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"]
+                    cmd = _tmux_cmd() + ["split-window", "-v", "-t", right_pane, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"]
                     if project_path:
                         cmd.extend(["-c", project_path])
                     result_split = subprocess.run(cmd, capture_output=True, text=True)

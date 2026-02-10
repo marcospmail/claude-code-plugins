@@ -34,7 +34,8 @@ class TmuxController:
     @staticmethod
     def run_tmux(args: List[str], capture_output: bool = True) -> subprocess.CompletedProcess:
         """Run a tmux command."""
-        cmd = ["tmux"] + args
+        socket = os.environ.get("TMUX_SOCKET")
+        cmd = (["tmux", "-L", socket] if socket else ["tmux"]) + args
         return subprocess.run(cmd, capture_output=capture_output, text=True)
 
     @staticmethod

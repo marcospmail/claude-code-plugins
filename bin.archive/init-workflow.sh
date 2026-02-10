@@ -133,47 +133,8 @@ cat > "$WORKFLOW_PATH/agents/pm/constraints.md" <<'EOF'
 - Respond to agent check-ins promptly
 EOF
 
-# Create project-level hooks for orchestrator workflow
+# Create project-level hooks directory (hook scripts used by yato plugin)
 mkdir -p "$PROJECT_PATH/.claude/hooks"
-
-# Create settings.json with SessionStart and PreToolUse hooks
-cat > "$PROJECT_PATH/.claude/settings.json" <<'EOF'
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/capture-session-id.sh"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/block-task-tool.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/block-cancel-checkin.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-EOF
 
 # Create SessionStart hook to capture session_id for all agents
 cat > "$PROJECT_PATH/.claude/hooks/capture-session-id.sh" <<'EOF'
@@ -376,6 +337,10 @@ fi
 
 # Get session if in tmux and update status.yml directly
 SESSION=$(tmux $TMUX_FLAGS display-message -p '#S' 2>/dev/null || echo "")
+if [[ -z "$SESSION" ]]; then
+    # Fallback: find session whose pane has PROJECT_PATH as current directory
+    SESSION=$(tmux $TMUX_FLAGS list-panes -a -F "#{session_name} #{pane_current_path}" 2>/dev/null | grep "$PROJECT_PATH" | head -1 | awk '{print $1}')
+fi
 if [[ -n "$SESSION" ]]; then
     sed -i '' "s/^session: .*/session: \"$SESSION\"/" "$WORKFLOW_PATH/status.yml"
 fi

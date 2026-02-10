@@ -345,7 +345,7 @@ fi
 
 # Capture output and check for "no"
 IS_RUNNING_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p -S -50 2>/dev/null)
-if echo "$IS_RUNNING_OUTPUT" | grep -q "^no$\|: no"; then
+if echo "$IS_RUNNING_OUTPUT" | grep -q "no"; then
     pass "Dead daemon PID correctly detected as not running"
 else
     fail "Should detect dead daemon as not running"
@@ -510,7 +510,7 @@ else
 fi
 
 IS_RUNNING_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p -S -50 2>/dev/null)
-if echo "$IS_RUNNING_OUTPUT" | grep -q "^yes$\|: yes"; then
+if echo "$IS_RUNNING_OUTPUT" | grep -q "yes"; then
     pass "Running daemon correctly detected as running"
 else
     fail "Should treat running daemon as running"

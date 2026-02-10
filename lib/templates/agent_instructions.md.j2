@@ -39,6 +39,21 @@
 - Notify PM using: `/notify-pm [STATUS] message`
 - PM is always at window 0, pane 1 - the skill handles this automatically
 - Check agent-tasks.md for your assigned tasks
+{% if role == "pm" %}
+
+## Agent Lookup (IMPORTANT)
+
+When delegating tasks, look up agents by their **agent name** (not role) in agents.yml.
+Agent names may differ from roles (e.g., "discoverer" with role "qa", "impl" with role "developer").
+
+To find an agent's window for sending messages:
+```bash
+grep -A 4 "name: discoverer" .workflow/*/agents.yml | grep "window:" | awk '{print $2}'
+```
+
+Always check agents.yml for the correct agent name and window number before sending messages.
+The agents.yml file is the source of truth for all agent locations and sessions.
+{% endif %}
 
 ## Waiting for Dependencies (IMPORTANT)
 
