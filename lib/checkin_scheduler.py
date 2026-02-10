@@ -539,7 +539,15 @@ def run_daemon(
     def send_message(message: str):
         """Send a message to the target pane."""
         try:
-            subprocess.run([str(send_message_script), target, message], check=False)
+            msg = message
+            if status_file.exists():
+                with open(status_file) as f:
+                    data = yaml.safe_load(f)
+                if data and isinstance(data, dict):
+                    suffix = data.get("checkin_message_suffix", "")
+                    if suffix:
+                        msg = msg + suffix
+            subprocess.run([str(send_message_script), target, msg], check=False)
         except:
             pass
 

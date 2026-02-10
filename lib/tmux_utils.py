@@ -240,7 +240,7 @@ class TmuxOrchestrator:
 
     # ==================== Message Sending ====================
 
-    def send_message(self, target: str, message: str, enter: bool = True) -> bool:
+    def send_message(self, target: str, message: str, enter: bool = True, workflow_status_file: str = None) -> bool:
         """
         Send a message to a tmux target (session:window or session:window.pane).
 
@@ -256,6 +256,7 @@ class TmuxOrchestrator:
             target: Target in format "session:window" or "session:window.pane"
             message: The message text to send
             enter: Whether to send Enter after the message (default True)
+            workflow_status_file: Path to workflow status.yml for per-project agent_message_suffix
 
         Returns:
             True if successful, False otherwise
@@ -284,17 +285,28 @@ class TmuxOrchestrator:
             # Step 4: Brief wait for UI
             time.sleep(0.5)
 
-            # Step 4.5: Append MESSAGE_SUFFIX from config if set
-            try:
-                from lib.config import get as get_config
-            except ImportError:
-                import importlib.util
-                _cfg_path = os.path.join(os.path.dirname(__file__), "config.py")
-                _spec = importlib.util.spec_from_file_location("config", _cfg_path)
-                _cfg = importlib.util.module_from_spec(_spec)
-                _spec.loader.exec_module(_cfg)
-                get_config = _cfg.get
-            suffix = get_config("MESSAGE_SUFFIX")
+            # Step 4.5: Append message suffix (per-project or global fallback)
+            suffix = ""
+            if workflow_status_file:
+                from pathlib import Path
+                import yaml
+                _wf_path = Path(workflow_status_file)
+                if _wf_path.exists():
+                    with open(_wf_path) as f:
+                        data = yaml.safe_load(f)
+                    if data and isinstance(data, dict):
+                        suffix = data.get("agent_message_suffix", "")
+            if not suffix:
+                try:
+                    from lib.config import get as get_config
+                except ImportError:
+                    import importlib.util
+                    _cfg_path = os.path.join(os.path.dirname(__file__), "config.py")
+                    _spec = importlib.util.spec_from_file_location("config", _cfg_path)
+                    _cfg = importlib.util.module_from_spec(_spec)
+                    _spec.loader.exec_module(_cfg)
+                    get_config = _cfg.get
+                suffix = get_config("MESSAGE_SUFFIX")
             if suffix:
                 message = message + suffix
 
@@ -496,7 +508,7 @@ def _get_orchestrator() -> TmuxOrchestrator:
     return _default_orchestrator
 
 
-def send_message(target: str, message: str, enter: bool = True) -> bool:
+def send_message(target: str, message: str, enter: bool = True, workflow_status_file: str = None) -> bool:
     """
     Send a message to a tmux target.
 
@@ -506,11 +518,12 @@ def send_message(target: str, message: str, enter: bool = True) -> bool:
         target: Target in format "session:window" or "session:window.pane"
         message: The message text to send
         enter: Whether to send Enter after the message (default True)
+        workflow_status_file: Path to workflow status.yml for per-project agent_message_suffix
 
     Returns:
         True if successful, False otherwise
     """
-    return _get_orchestrator().send_message(target, message, enter)
+    return _get_orchestrator().send_message(target, message, enter, workflow_status_file)
 
 
 def get_current_session() -> Optional[str]:

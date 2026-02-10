@@ -738,7 +738,14 @@ notify-pm.sh auto-detects PM location - just run it
 
 Wait for PM to assign your first tasks via agent-tasks.md."""
 
-        send_message(agent_id, briefing)
+        # Pass workflow status file for per-project agent_message_suffix
+        status_file = None
+        if project_path and workflow_name:
+            _sf = Path(project_path) / ".workflow" / workflow_name / "status.yml"
+            if _sf.exists():
+                status_file = str(_sf)
+
+        send_message(agent_id, briefing, workflow_status_file=status_file)
 
     def create_team(
         self,

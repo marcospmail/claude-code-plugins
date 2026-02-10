@@ -139,6 +139,8 @@ class WorkflowOps:
             "checkin_interval_minutes": checkin_interval,
             "created_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "session": session,
+            "agent_message_suffix": "",
+            "checkin_message_suffix": "",
         }
 
         status_file = full_path / "status.yml"
