@@ -528,6 +528,21 @@ class Orchestrator:
             f"Start now: Check for .workflow/prd.md first, then begin discovery questions!"
         )
 
+        # Append agent_message_suffix from workflow status.yml if set
+        if self._project_path and self._workflow_name:
+            import yaml
+            _sf = self._project_path / ".workflow" / self._workflow_name / "status.yml"
+            if _sf.exists():
+                try:
+                    with open(_sf) as f:
+                        _data = yaml.safe_load(f)
+                    if _data and isinstance(_data, dict):
+                        _suffix = _data.get("agent_message_suffix", "")
+                        if _suffix:
+                            briefing = briefing + _suffix
+                except Exception:
+                    pass
+
         # Use the send-message.sh script which handles tmux messaging reliably
         send_script = self.bin_dir / "send-message.sh"
         subprocess.run([str(send_script), pm_target, briefing], check=True)
