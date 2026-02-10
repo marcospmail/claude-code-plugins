@@ -1,12 +1,12 @@
 {
-  "name": "yato-marketplace",
+  "name": "claude-code-plugins",
   "owner": {
     "name": "Personal"
   },
   "plugins": [
     {
       "name": "yato",
-      "source": "./",
+      "source": "./plugins/yato",
       "description": "Yato (Yet Another Tmux Orchestrator) - Multi-agent orchestration with parallel Claude instances in tmux",
       "category": "automation",
       "tags": ["tmux", "agents", "orchestration", "parallel", "team", "yato"]
