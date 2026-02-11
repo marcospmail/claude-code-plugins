@@ -1,5 +1,6 @@
 # Agent registry and logs (local state)
 .yato/
+.loop/
 
 # Python cache
 __pycache__/
