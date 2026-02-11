@@ -10,6 +10,13 @@
       "description": "Yato (Yet Another Tmux Orchestrator) - Multi-agent orchestration with parallel Claude instances in tmux",
       "category": "automation",
       "tags": ["tmux", "agents", "orchestration", "parallel", "team", "yato"]
+    },
+    {
+      "name": "loop",
+      "source": "./plugins/loop",
+      "description": "Repeating prompt loops for Claude Code - execute any prompt at intervals with configurable stop conditions",
+      "category": "automation",
+      "tags": ["loop", "repeat", "interval", "automation"]
     }
   ]
 }
