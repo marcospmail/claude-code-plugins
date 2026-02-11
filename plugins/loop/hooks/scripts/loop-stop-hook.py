@@ -24,21 +24,20 @@ import time
 from pathlib import Path
 import os
 
-# Add lib to path for imports - use parent.parent to get to yato root
-YATO_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(YATO_ROOT))
+# Add lib to path for imports - use parent.parent to get to loop plugin root
+PLUGIN_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PLUGIN_ROOT))
 
-# Import directly from loop_manager module (not via lib/__init__.py)
-# to avoid transitive imports that require jinja2
+# Import directly from loop_manager module
 import importlib.util
-spec = importlib.util.spec_from_file_location("loop_manager", YATO_ROOT / "lib" / "loop_manager.py")
+spec = importlib.util.spec_from_file_location("loop_manager", PLUGIN_ROOT / "lib" / "loop_manager.py")
 loop_manager = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(loop_manager)
 LoopManager = loop_manager.LoopManager
 format_duration = loop_manager.format_duration
 
 # Always-on logging for debugging
-LOG_FILE = Path.home() / ".yato" / "loop-stop-hook.log"
+LOG_FILE = Path.home() / ".loop" / "loop-stop-hook.log"
 
 def debug_log(message):
     """Always log to file for debugging."""
