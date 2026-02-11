@@ -54,7 +54,6 @@ lib/
 ├── tmux_utils.py         # Tmux operations + send_message, notify_pm
 ├── workflow_ops.py       # Workflow folder/slug utilities
 ├── checkin_scheduler.py  # Check-in scheduling and management
-├── loop_manager.py       # Generic repeating loops (workflow-independent)
 ├── task_manager.py       # Task assignment and display
 ├── agent_manager.py      # Agent creation and file generation
 └── templates/            # Jinja2 templates for agent files
@@ -233,59 +232,6 @@ uv run python lib/checkin_scheduler.py cancel --workflow "001-name"
 # Check status
 uv run python lib/checkin_scheduler.py status --workflow "001-name"
 ```
-
-### Loop System (Generic Repeating Prompts)
-
-Loops are independent of workflows and allow repeating any prompt at intervals.
-Stored in `.workflow/loops/<NNN-name>/meta.json`:
-
-```json
-{
-  "should_continue": true,
-  "prompt": "check the logs for errors",
-  "interval_seconds": 300,
-  "execution_count": 2,
-  "stop_after_times": 5,
-  "stop_after_seconds": null,
-  "session_id": "abc123",
-  "started_at": "2026-02-02T15:00:00",
-  "last_executed_at": "2026-02-02T15:10:00",
-  "total_elapsed_seconds": 600
-}
-```
-
-**CLI Commands:**
-```bash
-# Start a loop (--times, --for, or neither for forever mode)
-uv run python lib/loop_manager.py start "check logs" --session $SESSION --times 3
-uv run python lib/loop_manager.py start "run tests" --session $SESSION --for 30m --every 5m
-uv run python lib/loop_manager.py start "monitor" --session $SESSION --every 10m  # forever
-
-# Cancel loops
-uv run python lib/loop_manager.py cancel --all
-uv run python lib/loop_manager.py cancel --session $SESSION
-
-# List loops
-uv run python lib/loop_manager.py list
-uv run python lib/loop_manager.py list --status running
-```
-
-**Skill Usage:**
-```
-/loop check the logs --times 3
-/loop run tests --every 5m --for 1h
-/loop monitor builds --forever --every 10m
-/loop --cancel
-```
-
-**How it works:**
-1. `/loop` skill creates `meta.json` with `should_continue: true`
-2. Claude Code's Stop hook checks the meta file when agent finishes
-3. If `should_continue` is true and conditions not met: sleep for interval, inject prompt
-4. If conditions met (times/duration): set `should_continue: false`, allow stop
-5. Cancel sets `should_continue: false` in meta file
-
-**Time format:** `30s` (seconds), `5m` (minutes), `2h` (hours), `1h30m` (compound)
 
 ## Agent Communication
 
