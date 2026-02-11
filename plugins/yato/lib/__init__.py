@@ -28,14 +28,6 @@ from lib.workflow_ops import (
     list_workflows,
 )
 from lib.agent_manager import AgentManager, init_agent_files, create_agent
-from lib.loop_manager import (
-    LoopManager,
-    start_loop,
-    cancel_loop,
-    list_loops,
-    parse_time_string,
-    format_duration,
-)
 
 __all__ = [
     "Agent",
@@ -60,11 +52,5 @@ __all__ = [
     "list_workflows",
     "init_agent_files",
     "create_agent",
-    "LoopManager",
-    "start_loop",
-    "cancel_loop",
-    "list_loops",
-    "parse_time_string",
-    "format_duration",
     "__version__",
 ]
