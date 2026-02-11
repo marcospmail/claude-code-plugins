@@ -358,6 +358,13 @@ class AgentManager:
 - ALWAYS update tasks.json when tasks change status
 - ALWAYS provide specific, actionable feedback
 
+## Task Management (CRITICAL)
+- tasks.json is the SINGLE SOURCE OF TRUTH for all tasks
+- You MUST update tasks.json BEFORE modifying any agent-tasks.md file
+- NEVER write to agent-tasks.md without a corresponding entry in tasks.json
+- When adding new tasks: first add to tasks.json, then update agent-tasks.md
+- When modifying tasks: first update tasks.json, then update agent-tasks.md
+
 ## Communication Rules
 - Keep messages concise and actionable
 - Include acceptance criteria in task assignments

@@ -41,6 +41,13 @@
 - Check agent-tasks.md for your assigned tasks
 {% if role == "pm" %}
 
+## Task Management (CRITICAL)
+
+tasks.json is the SINGLE SOURCE OF TRUTH. When adding or modifying tasks:
+1. **FIRST** update tasks.json with the new/changed task
+2. **THEN** update the agent's agent-tasks.md file
+3. NEVER skip step 1 — agent-tasks.md must always reflect what's in tasks.json
+
 ## Agent Lookup (IMPORTANT)
 
 When delegating tasks, look up agents by their **agent name** (not role) in agents.yml.
