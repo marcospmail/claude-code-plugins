@@ -1,5 +1,5 @@
 {
-  "description": "Yato plugin hooks - dependency checking, session management, and loop control",
+  "description": "Yato plugin hooks - dependency checking, session management, and auto-approval",
   "hooks": {
     "PreToolUse": [
       {
@@ -59,18 +59,6 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/check-deps.sh",
             "timeout": 10,
             "statusMessage": "Checking Yato dependencies..."
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/loop-stop-hook.py",
-            "timeout": 7200,
-            "statusMessage": "Checking loop..."
           }
         ]
       }
