@@ -250,7 +250,7 @@ uv run python lib/tmux_utils.py send session:window "Your message"
 Agents report up using notification types:
 ```bash
 # From agent's terminal
-${CLAUDE_PLUGIN_ROOT}/bin.archive/notify-pm.sh "[DONE] Completed task"
+${CLAUDE_PLUGIN_ROOT}/bin/notify-pm.sh "[DONE] Completed task"
 ```
 
 Or via Python:
@@ -302,9 +302,5 @@ The project uses `pyproject.toml` with uv for dependency management:
 - `pyyaml>=6.0` - YAML parsing
 - `jinja2>=3.1` - Template rendering
 
-### Archived Bash Scripts
-Legacy bash scripts are preserved in `bin.archive/` for reference. See `bin.archive/README.md` for the migration mapping.
-
-Symlinks in `bin/` point to `bin.archive/` for backward compatibility with:
-- E2E tests that call `bin/*.sh` scripts
-- PM/agent briefings that reference `bin/*.sh` commands
+### Shell Scripts
+The `bin/` directory contains shell scripts used by skills, templates, and some Python modules.
