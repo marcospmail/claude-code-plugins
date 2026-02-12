@@ -11,7 +11,8 @@
 # 5. Hook allows non-PM agents to edit any files
 # 6. Block message content is correct
 #
-# IMPORTANT: All execution goes through Claude Code in a tmux session.
+# Phases 3-6 run the Python hook script directly for reliable output parsing.
+# Phase 7 verifies hook works in a real Claude session.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -80,63 +81,16 @@ echo 'status: in-progress' > "$TEST_DIR/.workflow/001-test-workflow/status.yml"
 echo 'print("Hello")' > "$TEST_DIR/src/main.py"
 echo '{}' > "$TEST_DIR/package.json"
 
-# Create agent identity
-mkdir -p "$TEST_DIR/.workflow/001-test-workflow/agents/dev"
-echo "role: developer" > "$TEST_DIR/.workflow/001-test-workflow/agents/dev/identity.yml"
-
-# Create tmux session with larger size for Claude TUI
-# IMPORTANT: Use -x 120 -y 40 for Claude's TUI to work properly
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" AGENT_ROLE "pm"
-
-if tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
-    pass "Tmux session created with AGENT_ROLE=pm"
-else
-    fail "Failed to create tmux session"
-    exit 1
-fi
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-echo "  Waiting for Claude to start..."
-sleep 8
-
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  No trust prompt found, continuing..."
-    sleep 5
-fi
-
-echo "  Test directory: $TEST_DIR"
-echo "  Test environment ready"
+pass "Test directory created at $TEST_DIR"
 echo ""
 
 # ============================================================
-# Phase 3: Test PM - allowed workflow files
+# Phase 3: Test PM - allowed workflow files (direct script execution)
 # ============================================================
 echo "Phase 3: Testing PM access to allowed workflow files..."
 
 # Test tasks.json (should be allowed)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle any prompts
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-TASKS_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+TASKS_OUTPUT=$(cd "$TEST_DIR" && echo '{"tool_input":{"file_path":"'"$TEST_DIR"'/.workflow/001-test-workflow/tasks.json"}}' | AGENT_ROLE=pm uv run --directory "$PROJECT_ROOT" python "$HOOK_SCRIPT" 2>&1)
 if echo "$TASKS_OUTPUT" | grep -q '"continue": true\|"continue":true'; then
     pass "PM allowed to edit tasks.json"
 else
@@ -144,20 +98,7 @@ else
 fi
 
 # Test prd.md (should be allowed)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/prd.md\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-PRD_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+PRD_OUTPUT=$(cd "$TEST_DIR" && echo '{"tool_input":{"file_path":"'"$TEST_DIR"'/.workflow/001-test-workflow/prd.md"}}' | AGENT_ROLE=pm uv run --directory "$PROJECT_ROOT" python "$HOOK_SCRIPT" 2>&1)
 if echo "$PRD_OUTPUT" | grep -q '"continue": true\|"continue":true'; then
     pass "PM allowed to edit prd.md"
 else
@@ -165,20 +106,7 @@ else
 fi
 
 # Test status.yml (should be allowed)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/status.yml\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-STATUS_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+STATUS_OUTPUT=$(cd "$TEST_DIR" && echo '{"tool_input":{"file_path":"'"$TEST_DIR"'/.workflow/001-test-workflow/status.yml"}}' | AGENT_ROLE=pm uv run --directory "$PROJECT_ROOT" python "$HOOK_SCRIPT" 2>&1)
 if echo "$STATUS_OUTPUT" | grep -q '"continue": true\|"continue":true'; then
     pass "PM allowed to edit status.yml"
 else
@@ -188,25 +116,12 @@ fi
 echo ""
 
 # ============================================================
-# Phase 4: Test PM - blocked files
+# Phase 4: Test PM - blocked files (direct script execution)
 # ============================================================
 echo "Phase 4: Testing PM blocked from source code files..."
 
 # Test .py file (should be blocked)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-PY_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+PY_OUTPUT=$(cd "$TEST_DIR" && echo '{"tool_input":{"file_path":"'"$TEST_DIR"'/src/main.py"}}' | AGENT_ROLE=pm uv run --directory "$PROJECT_ROOT" python "$HOOK_SCRIPT" 2>&1)
 if echo "$PY_OUTPUT" | grep -q '"block"'; then
     pass "PM blocked from editing src/main.py"
 else
@@ -214,20 +129,7 @@ else
 fi
 
 # Test file outside project (should be blocked)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"/tmp/random-file.txt\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-TMP_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+TMP_OUTPUT=$(cd "$TEST_DIR" && echo '{"tool_input":{"file_path":"/tmp/random-file.txt"}}' | AGENT_ROLE=pm uv run --directory "$PROJECT_ROOT" python "$HOOK_SCRIPT" 2>&1)
 if echo "$TMP_OUTPUT" | grep -q '"block"'; then
     pass "PM blocked from editing /tmp/random-file.txt"
 else
@@ -235,20 +137,7 @@ else
 fi
 
 # Test config file in project root (should be blocked)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/package.json\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-PKG_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+PKG_OUTPUT=$(cd "$TEST_DIR" && echo '{"tool_input":{"file_path":"'"$TEST_DIR"'/package.json"}}' | AGENT_ROLE=pm uv run --directory "$PROJECT_ROOT" python "$HOOK_SCRIPT" 2>&1)
 if echo "$PKG_OUTPUT" | grep -q '"block"'; then
     pass "PM blocked from editing package.json"
 else
@@ -258,25 +147,12 @@ fi
 echo ""
 
 # ============================================================
-# Phase 5: Test non-PM agent - should have full access
+# Phase 5: Test non-PM agent - should have full access (direct script execution)
 # ============================================================
 echo "Phase 5: Testing non-PM agent (developer) has full access..."
 
 # Test .py file as developer (should be allowed)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE=developer uv run python '$HOOK_SCRIPT' 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-DEV_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+DEV_OUTPUT=$(cd "$TEST_DIR" && echo '{"tool_input":{"file_path":"'"$TEST_DIR"'/src/main.py"}}' | AGENT_ROLE=developer uv run --directory "$PROJECT_ROOT" python "$HOOK_SCRIPT" 2>&1)
 if echo "$DEV_OUTPUT" | grep -q '"continue": true\|"continue":true'; then
     pass "Developer allowed to edit src/main.py"
 else
@@ -284,20 +160,7 @@ else
 fi
 
 # Test with no role set (should be allowed)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE='' TMUX='' uv run python '$HOOK_SCRIPT' 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-NOROLE_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
+NOROLE_OUTPUT=$(cd "$TEST_DIR" && echo '{"tool_input":{"file_path":"'"$TEST_DIR"'/src/main.py"}}' | AGENT_ROLE='' TMUX='' uv run --directory "$PROJECT_ROOT" python "$HOOK_SCRIPT" 2>&1)
 if echo "$NOROLE_OUTPUT" | grep -q '"continue": true\|"continue":true'; then
     pass "No role set - allowed to edit src/main.py"
 else
@@ -307,24 +170,11 @@ fi
 echo ""
 
 # ============================================================
-# Phase 6: Test block message content
+# Phase 6: Test block message content (direct script execution)
 # ============================================================
 echo "Phase 6: Testing block message content..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-BLOCK_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
+BLOCK_OUTPUT=$(cd "$TEST_DIR" && echo '{"tool_input":{"file_path":"'"$TEST_DIR"'/src/main.py"}}' | AGENT_ROLE=pm uv run --directory "$PROJECT_ROOT" python "$HOOK_SCRIPT" 2>&1)
 
 if echo "$BLOCK_OUTPUT" | grep -qi "PM FILE ACCESS DENIED"; then
     pass "Block reason contains 'PM FILE ACCESS DENIED'"
