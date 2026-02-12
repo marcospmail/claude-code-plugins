@@ -94,8 +94,8 @@ if [[ -n "$LOOP_FOLDER" ]] && [[ -f "$LOOP_FOLDER/meta.json" ]]; then
     pass "Loop folder created in correct project directory"
 
     # Verify the loop is running (or has run)
-    SHOULD_CONTINUE=$(python3 -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('should_continue', False))" 2>/dev/null)
-    EXEC_COUNT=$(python3 -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('execution_count', 0))" 2>/dev/null)
+    SHOULD_CONTINUE=$(uv run python -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('should_continue', False))" 2>/dev/null)
+    EXEC_COUNT=$(uv run python -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('execution_count', 0))" 2>/dev/null)
     if [[ "$SHOULD_CONTINUE" == "True" ]] || [[ "$EXEC_COUNT" -ge 1 ]]; then
         pass "Loop is active (should_continue=$SHOULD_CONTINUE, execution_count=$EXEC_COUNT)"
     else
@@ -197,7 +197,7 @@ echo
 echo "Test 3: Verifying loop was cancelled..."
 
 if [[ -n "$LOOP_FOLDER" ]] && [[ -f "$LOOP_FOLDER/meta.json" ]]; then
-    SHOULD_CONTINUE=$(python3 -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('should_continue', True))" 2>/dev/null)
+    SHOULD_CONTINUE=$(uv run python -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('should_continue', True))" 2>/dev/null)
     if [[ "$SHOULD_CONTINUE" == "False" ]]; then
         pass "Loop cancelled successfully (should_continue=False in meta.json)"
     else

@@ -82,7 +82,7 @@ if [[ -n "$LOOP_FOLDER" ]] && [[ -f "$LOOP_FOLDER/meta.json" ]]; then
     pass "Loop folder and meta.json created"
 
     # Verify stop_after_times
-    STOP_TIMES=$(python3 -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('stop_after_times', ''))" 2>/dev/null)
+    STOP_TIMES=$(uv run python -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('stop_after_times', ''))" 2>/dev/null)
     if [[ "$STOP_TIMES" == "2" ]]; then
         pass "stop_after_times is 2"
     else
@@ -90,7 +90,7 @@ if [[ -n "$LOOP_FOLDER" ]] && [[ -f "$LOOP_FOLDER/meta.json" ]]; then
     fi
 
     # Check execution count - if loop ran, it's working
-    EXEC_COUNT=$(python3 -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('execution_count', 0))" 2>/dev/null)
+    EXEC_COUNT=$(uv run python -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('execution_count', 0))" 2>/dev/null)
     if [[ "$EXEC_COUNT" -ge 1 ]]; then
         pass "Loop executed at least once (count: $EXEC_COUNT)"
     else
@@ -104,12 +104,12 @@ else
 fi
 
 # Check completion via meta.json (no global registry)
-EXEC_COUNT=$(python3 -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('execution_count', 0))" 2>/dev/null)
+EXEC_COUNT=$(uv run python -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('execution_count', 0))" 2>/dev/null)
 if [[ "$EXEC_COUNT" == "2" ]]; then
     pass "Loop completed all 2 executions"
 else
     # If loop is still running, check should_continue in meta.json
-    SHOULD_CONTINUE=$(python3 -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('should_continue', False))" 2>/dev/null)
+    SHOULD_CONTINUE=$(uv run python -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('should_continue', False))" 2>/dev/null)
     if [[ "$SHOULD_CONTINUE" == "True" ]]; then
         pass "Loop is still running (should_continue=True, exec_count: $EXEC_COUNT)"
     else
@@ -155,7 +155,7 @@ if [[ -n "$LOOP_FOLDER" ]] && [[ -f "$LOOP_FOLDER/meta.json" ]]; then
     pass "Loop folder created for --times 10 test"
 
     # Verify stop_after_times is 10
-    STOP_TIMES=$(python3 -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('stop_after_times', 0))" 2>/dev/null)
+    STOP_TIMES=$(uv run python -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('stop_after_times', 0))" 2>/dev/null)
     if [[ "$STOP_TIMES" == "10" ]]; then
         pass "stop_after_times is 10"
     else
@@ -163,7 +163,7 @@ if [[ -n "$LOOP_FOLDER" ]] && [[ -f "$LOOP_FOLDER/meta.json" ]]; then
     fi
 
     # Verify it's running (should_continue true or execution_count > 0)
-    EXEC_COUNT=$(python3 -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('execution_count', 0))" 2>/dev/null)
+    EXEC_COUNT=$(uv run python -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('execution_count', 0))" 2>/dev/null)
     if [[ "$EXEC_COUNT" -ge 1 ]]; then
         pass "Loop is running (execution_count: $EXEC_COUNT)"
     else
@@ -226,7 +226,7 @@ echo ""
 
 # Verify loop was cancelled by checking meta.json
 if [[ -n "$LOOP_FOLDER" ]] && [[ -f "$LOOP_FOLDER/meta.json" ]]; then
-    SHOULD_CONTINUE=$(python3 -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('should_continue', True))" 2>/dev/null)
+    SHOULD_CONTINUE=$(uv run python -c "import json; print(json.load(open('$LOOP_FOLDER/meta.json')).get('should_continue', True))" 2>/dev/null)
     if [[ "$SHOULD_CONTINUE" == "False" ]]; then
         pass "Loop cancelled via /loop --cancel skill (should_continue=False)"
     else

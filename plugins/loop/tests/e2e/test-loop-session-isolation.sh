@@ -135,7 +135,7 @@ echo "  Test 2a: Agent A (matching session_id) should continue loop..."
 
 INPUT_A='{"cwd": "'"$TEST_DIR_2"'", "session_id": "session-agent-A"}'
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_A' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_A' | uv run python '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30
@@ -160,7 +160,7 @@ echo "  Test 2b: Agent B (different session_id) should NOT continue loop..."
 
 INPUT_B='{"cwd": "'"$TEST_DIR_2"'", "session_id": "session-agent-B"}'
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_B' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_B' | uv run python '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30
@@ -203,7 +203,7 @@ EOF
 
 INPUT_NO_SESSION='{"cwd": "'"$TEST_DIR_3"'"}'
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_NO_SESSION' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_NO_SESSION' | uv run python '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30
@@ -269,7 +269,7 @@ echo "  Test 4a: Multiple loops with no session_id should be ignored..."
 
 INPUT_MULTI_NO_SESSION='{"cwd": "'"$TEST_DIR_4"'"}'
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_NO_SESSION' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_NO_SESSION' | uv run python '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30
@@ -290,7 +290,7 @@ echo "  Test 4b: Matching session_id should get correct loop from multiple..."
 
 INPUT_MULTI_SESSION_1='{"cwd": "'"$TEST_DIR_4"'", "session_id": "session-loop-1"}'
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_SESSION_1' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_SESSION_1' | uv run python '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30
@@ -315,7 +315,7 @@ echo "  Test 4c: Different session_id should get different loop..."
 
 INPUT_MULTI_SESSION_2='{"cwd": "'"$TEST_DIR_4"'", "session_id": "session-loop-2"}'
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_SESSION_2' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_SESSION_2' | uv run python '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30
@@ -340,7 +340,7 @@ echo "  Test 4d: Unknown session_id should be ignored..."
 
 INPUT_MULTI_UNKNOWN='{"cwd": "'"$TEST_DIR_4"'", "session_id": "session-unknown-xyz"}'
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_UNKNOWN' | python3 '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '$INPUT_MULTI_UNKNOWN' | uv run python '$HOOK_SCRIPT' > /tmp/e2e-hook-result-$$.txt 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30
