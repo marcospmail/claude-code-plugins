@@ -1,1 +1,0 @@
-../bin.archive/restart-checkin-display.sh

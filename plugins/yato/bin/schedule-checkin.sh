@@ -1,1 +1,0 @@
-../bin.archive/schedule-checkin.sh
