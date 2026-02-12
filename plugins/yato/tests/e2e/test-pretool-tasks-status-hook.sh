@@ -76,7 +76,7 @@ echo ""
 echo "Phase 2: Testing hook script with tasks.json input..."
 
 TASKS_INPUT='{"toolInput":{"file_path":"/project/.workflow/001-test/tasks.json","old_string":"blocked","new_string":"completed"}}'
-OUTPUT=$(echo "$TASKS_INPUT" | python3 "$HOOK_SCRIPT" 2>&1)
+OUTPUT=$(echo "$TASKS_INPUT" | uv run python "$HOOK_SCRIPT" 2>&1)
 
 if echo "$OUTPUT" | jq -e '.continue == true' >/dev/null 2>&1; then
     pass "Hook returns continue:true for tasks.json"
@@ -119,7 +119,7 @@ echo ""
 echo "Phase 3: Testing hook script with non-tasks.json input..."
 
 OTHER_INPUT='{"toolInput":{"file_path":"/project/src/main.py","old_string":"hello","new_string":"world"}}'
-OUTPUT=$(echo "$OTHER_INPUT" | python3 "$HOOK_SCRIPT" 2>&1)
+OUTPUT=$(echo "$OTHER_INPUT" | uv run python "$HOOK_SCRIPT" 2>&1)
 
 if echo "$OUTPUT" | jq -e '.continue == true' >/dev/null 2>&1; then
     pass "Hook returns continue:true for non-tasks.json"
@@ -149,7 +149,7 @@ TRIGGER_PATHS=(
 
 for path in "${TRIGGER_PATHS[@]}"; do
     INPUT="{\"toolInput\":{\"file_path\":\"$path\"}}"
-    OUTPUT=$(echo "$INPUT" | python3 "$HOOK_SCRIPT" 2>&1)
+    OUTPUT=$(echo "$INPUT" | uv run python "$HOOK_SCRIPT" 2>&1)
     if echo "$OUTPUT" | jq -e '.systemMessage' >/dev/null 2>&1; then
         pass "Hook triggers for: $path"
     else
@@ -166,7 +166,7 @@ NO_TRIGGER_PATHS=(
 
 for path in "${NO_TRIGGER_PATHS[@]}"; do
     INPUT="{\"toolInput\":{\"file_path\":\"$path\"}}"
-    OUTPUT=$(echo "$INPUT" | python3 "$HOOK_SCRIPT" 2>&1)
+    OUTPUT=$(echo "$INPUT" | uv run python "$HOOK_SCRIPT" 2>&1)
     if echo "$OUTPUT" | jq -e '.systemMessage' >/dev/null 2>&1; then
         fail "Hook should NOT trigger for: $path"
     else
@@ -254,7 +254,7 @@ else
 fi
 
 # Check the file status
-FINAL_STATUS=$(python3 -c "
+FINAL_STATUS=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test/tasks.json', 'r') as f:

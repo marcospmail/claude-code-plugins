@@ -138,7 +138,7 @@ echo ""
 echo "Phase 3: Testing PM is blocked from Task tool..."
 
 # Ask Claude to run the hook script with PM role
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Review the code\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE=pm WORKFLOW_NAME=001-test-workflow python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Review the code\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE=pm WORKFLOW_NAME=001-test-workflow uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -186,7 +186,7 @@ echo ""
 echo "Phase 4: Testing developer is blocked from Task tool..."
 
 # Ask Claude to run the hook with developer role
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Write tests\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE=developer WORKFLOW_NAME=001-test-workflow python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Write tests\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE=developer WORKFLOW_NAME=001-test-workflow uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -228,7 +228,7 @@ echo ""
 echo "Phase 5: Testing QA is blocked from Task tool..."
 
 # Ask Claude to run the hook with QA role
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Run tests\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE=qa WORKFLOW_NAME=001-test-workflow python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Run tests\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE=qa WORKFLOW_NAME=001-test-workflow uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -264,7 +264,7 @@ echo ""
 echo "Phase 6: Testing user/orchestrator is allowed..."
 
 # Ask Claude to run the hook with no role
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Create sub-agent\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE='' TMUX='' python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Create sub-agent\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE='' TMUX='' uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -294,7 +294,7 @@ echo ""
 echo "Phase 7: Testing send_message syntax in block message..."
 
 # Ask Claude to run the hook and capture full reason
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Task\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE=developer WORKFLOW_NAME=001-test-workflow python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Task\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE=developer WORKFLOW_NAME=001-test-workflow uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -333,7 +333,7 @@ echo "Phase 8: Testing graceful degradation without agents.yml..."
 mkdir -p "/tmp/e2e-test-no-agents-$TEST_ID/.workflow/001-test"
 
 # Ask Claude to run the hook without agents.yml for PM
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd /tmp/e2e-test-no-agents-$TEST_ID && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Task\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE=pm WORKFLOW_NAME=001-test python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd /tmp/e2e-test-no-agents-$TEST_ID && echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"Task\",\"subagent_type\":\"general-purpose\"}}' | AGENT_ROLE=pm WORKFLOW_NAME=001-test uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -371,7 +371,7 @@ echo ""
 echo "Phase 9: Testing invalid JSON stdin returns safe fallback..."
 
 # Ask Claude to send invalid JSON to the hook
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo 'not valid json' | AGENT_ROLE=pm python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo 'not valid json' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10

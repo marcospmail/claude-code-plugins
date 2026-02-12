@@ -122,7 +122,7 @@ echo ""
 echo "Phase 3: Testing PM access to allowed workflow files..."
 
 # Test tasks.json (should be allowed)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | AGENT_ROLE=pm python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -144,7 +144,7 @@ else
 fi
 
 # Test prd.md (should be allowed)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/prd.md\"}}' | AGENT_ROLE=pm python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/prd.md\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -165,7 +165,7 @@ else
 fi
 
 # Test status.yml (should be allowed)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/status.yml\"}}' | AGENT_ROLE=pm python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/status.yml\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -193,7 +193,7 @@ echo ""
 echo "Phase 4: Testing PM blocked from source code files..."
 
 # Test .py file (should be blocked)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE=pm python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -214,7 +214,7 @@ else
 fi
 
 # Test file outside project (should be blocked)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"/tmp/random-file.txt\"}}' | AGENT_ROLE=pm python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"/tmp/random-file.txt\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -235,7 +235,7 @@ else
 fi
 
 # Test config file in project root (should be blocked)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/package.json\"}}' | AGENT_ROLE=pm python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/package.json\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -263,7 +263,7 @@ echo ""
 echo "Phase 5: Testing non-PM agent (developer) has full access..."
 
 # Test .py file as developer (should be allowed)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE=developer python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE=developer uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -284,7 +284,7 @@ else
 fi
 
 # Test with no role set (should be allowed)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE='' TMUX='' python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE='' TMUX='' uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -311,7 +311,7 @@ echo ""
 # ============================================================
 echo "Phase 6: Testing block message content..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE=pm python3 '$HOOK_SCRIPT' 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | AGENT_ROLE=pm uv run python '$HOOK_SCRIPT' 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10

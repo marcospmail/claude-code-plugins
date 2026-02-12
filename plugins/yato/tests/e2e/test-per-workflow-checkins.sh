@@ -37,7 +37,7 @@ cleanup() {
     # Kill any daemon processes
     for DIR in "$TEST_DIR_A/.workflow/001-workflow-a" "$TEST_DIR_B/.workflow/001-workflow-b"; do
         if [[ -f "$DIR/checkins.json" ]]; then
-            PID=$(python3 -c "
+            PID=$(uv run python -c "
 import json
 try:
     with open('$DIR/checkins.json', 'r') as f:
@@ -178,7 +178,7 @@ fi
 echo ""
 echo "Phase 3: Testing check-in content..."
 
-COUNT_A=$(python3 -c "
+COUNT_A=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR_A/.workflow/001-workflow-a/checkins.json') as f:
@@ -188,7 +188,7 @@ except:
     print(0)
 " 2>/dev/null)
 
-COUNT_B=$(python3 -c "
+COUNT_B=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR_B/.workflow/001-workflow-b/checkins.json') as f:
@@ -232,7 +232,7 @@ else
 fi
 
 # Check Project A has daemon_pid cleared (cancelled)
-A_PID=$(python3 -c "
+A_PID=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR_A/.workflow/001-workflow-a/checkins.json') as f:
@@ -250,7 +250,7 @@ else
 fi
 
 # Check Project B still has active daemon
-B_PID=$(python3 -c "
+B_PID=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR_B/.workflow/001-workflow-b/checkins.json') as f:
@@ -268,7 +268,7 @@ else
 fi
 
 # Check Project B still has pending check-ins
-PENDING_B=$(python3 -c "
+PENDING_B=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR_B/.workflow/001-workflow-b/checkins.json') as f:

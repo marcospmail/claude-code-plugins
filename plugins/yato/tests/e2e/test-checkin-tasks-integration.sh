@@ -35,7 +35,7 @@ cleanup() {
     echo ""; echo "Cleaning up..."
     # Kill any daemon processes for this test
     if [[ -f "$TEST_DIR/.workflow/001-test-workflow/checkins.json" ]]; then
-        PID=$(python3 -c "
+        PID=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
@@ -114,7 +114,7 @@ echo ""
 echo "Phase 2: Testing incomplete task count detection..."
 
 # Ask Claude to count incomplete tasks using Python
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: python3 -c \"import json; f=open('$TEST_DIR/.workflow/001-test-workflow/tasks.json'); d=json.load(f); inc=[t for t in d['tasks'] if t['status'] in ('pending','in_progress','blocked')]; print(len(inc))\""
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"import json; f=open('$TEST_DIR/.workflow/001-test-workflow/tasks.json'); d=json.load(f); inc=[t for t in d['tasks'] if t['status'] in ('pending','in_progress','blocked')]; print(len(inc))\""
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -130,7 +130,7 @@ else
 fi
 
 # Verify directly from test runner
-INCOMPLETE=$(python3 -c "
+INCOMPLETE=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/tasks.json', 'r') as f:
@@ -169,7 +169,7 @@ else
 fi
 
 # Check that checkin was scheduled
-PENDING_COUNT=$(python3 -c "
+PENDING_COUNT=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
@@ -219,7 +219,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 EOF
 
 # Ask Claude to count incomplete tasks
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: python3 -c \"import json; f=open('$TEST_DIR/.workflow/001-test-workflow/tasks.json'); d=json.load(f); inc=[t for t in d['tasks'] if t['status'] in ('pending','in_progress','blocked')]; print(len(inc))\""
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"import json; f=open('$TEST_DIR/.workflow/001-test-workflow/tasks.json'); d=json.load(f); inc=[t for t in d['tasks'] if t['status'] in ('pending','in_progress','blocked')]; print(len(inc))\""
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -234,7 +234,7 @@ else
 fi
 
 # Verify directly
-INCOMPLETE=$(python3 -c "
+INCOMPLETE=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/tasks.json', 'r') as f:
@@ -265,7 +265,7 @@ session: e2e-checkin-int
 EOF
 
 # Ask Claude to read the interval
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: python3 -c \"import yaml; f=open('$TEST_DIR/.workflow/001-test-workflow/status.yml'); d=yaml.safe_load(f); print(d.get('checkin_interval_minutes', 'MISSING'))\""
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"import yaml; f=open('$TEST_DIR/.workflow/001-test-workflow/status.yml'); d=yaml.safe_load(f); print(d.get('checkin_interval_minutes', 'MISSING'))\""
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -299,7 +299,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-INCOMPLETE=$(python3 -c "
+INCOMPLETE=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/tasks.json', 'r') as f:
@@ -324,7 +324,7 @@ echo "Phase 7: Testing with missing tasks.json..."
 
 rm -f "$TEST_DIR/.workflow/001-test-workflow/tasks.json"
 
-INCOMPLETE=$(python3 -c "
+INCOMPLETE=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/tasks.json', 'r') as f:
@@ -368,7 +368,7 @@ EOF
 echo '{"checkins": [], "daemon_pid": null}' > "$TEST_DIR/.workflow/001-test-workflow/checkins.json"
 
 # Ask Claude to simulate the auto-stop logic (same logic as checkin_scheduler.py)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: python3 -c \"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"
 import re, json
 from pathlib import Path
 from datetime import datetime

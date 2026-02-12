@@ -35,7 +35,7 @@ cleanup() {
     echo ""; echo "Cleaning up..."
     # Kill any daemon processes for this test
     if [[ -f "$TEST_DIR/.workflow/001-test-workflow/checkins.json" ]]; then
-        PID=$(python3 -c "
+        PID=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
@@ -126,7 +126,7 @@ else
 fi
 
 # Verify daemon_pid is stored in checkins.json
-DAEMON_PID=$(python3 -c "
+DAEMON_PID=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
@@ -151,7 +151,7 @@ else
 fi
 
 # Verify checkins.json has pending entry
-PENDING_COUNT=$(python3 -c "
+PENDING_COUNT=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
@@ -190,7 +190,7 @@ else
 fi
 
 # Verify still same PID (no new process started)
-NEW_PID=$(python3 -c "
+NEW_PID=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
@@ -244,7 +244,7 @@ else
 fi
 
 # Verify daemon_pid is cleared
-CLEARED_PID=$(python3 -c "
+CLEARED_PID=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:
@@ -281,7 +281,7 @@ else
 fi
 
 # Verify new daemon started
-NEW_DAEMON_PID=$(python3 -c "
+NEW_DAEMON_PID=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json', 'r') as f:

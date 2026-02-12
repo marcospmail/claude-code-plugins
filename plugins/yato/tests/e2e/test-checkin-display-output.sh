@@ -34,7 +34,7 @@ cleanup() {
     echo ""; echo "Cleaning up..."
     # Kill any daemon processes
     if [[ -f "$TEST_DIR/.workflow/001-test/checkins.json" ]]; then
-        PID=$(python3 -c "
+        PID=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test/checkins.json', 'r') as f:
@@ -98,7 +98,7 @@ echo ""
 echo "Test 1: Testing display without workflow..."
 
 # Ask Claude to start checkin-display.sh in window 0
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: tmux -L $TMUX_SOCKET send-keys -t $SESSION_NAME:0 '$PROJECT_ROOT/bin.archive/checkin-display.sh' Enter"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: tmux -L $TMUX_SOCKET send-keys -t $SESSION_NAME:0 '$PROJECT_ROOT/bin/checkin-display.sh' Enter"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10
@@ -189,7 +189,7 @@ echo ""
 echo "Test 3: Testing display with pending check-in and daemon..."
 
 # Ask Claude to start the daemon
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py start 5 --note 'Test check-in note' --target '$SESSION_NAME:0' --workflow '001-test'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py start 5 --note 'Test check-in note' --target '$SESSION_NAME:0' --workflow '001-test'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10
@@ -249,7 +249,7 @@ echo ""
 echo "Test 4: Testing display clears properly..."
 
 # Ask Claude to cancel the daemon
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10

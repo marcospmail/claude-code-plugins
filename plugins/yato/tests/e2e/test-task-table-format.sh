@@ -125,7 +125,7 @@ generate_table() {
     local output_file="/tmp/e2e-table-output-$$.txt"
 
     # Ask Claude to run the table generator
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: python3 /tmp/e2e-table-script-$$.py '$tasks_file' > '$output_file' 2>&1"
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python /tmp/e2e-table-script-$$.py '$tasks_file' > '$output_file' 2>&1"
     sleep 1
     tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
     sleep 30

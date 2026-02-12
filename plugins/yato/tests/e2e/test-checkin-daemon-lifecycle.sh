@@ -33,7 +33,7 @@ pass() { echo "  PASS: $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
 fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 get_daemon_pid() {
-    python3 -c "
+    uv run python -c "
 import json
 import os
 try:
@@ -123,7 +123,7 @@ echo ""
 echo "Test 1: Starting daemon with incomplete tasks..."
 
 # Ask Claude to run the checkin_scheduler start command
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py start 1 --note 'Test checkin' --target '$SESSION_NAME:0' --workflow '001-test'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py start 1 --note 'Test checkin' --target '$SESSION_NAME:0' --workflow '001-test'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -152,7 +152,7 @@ echo ""
 echo "Test 2: Cancelling daemon..."
 
 # Ask Claude to cancel the daemon
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -180,7 +180,7 @@ echo ""
 echo "Test 3: Restarting daemon after stop..."
 
 # Ask Claude to restart the daemon
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py start 1 --note 'Restart test' --target '$SESSION_NAME:0' --workflow '001-test'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py start 1 --note 'Restart test' --target '$SESSION_NAME:0' --workflow '001-test'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -202,7 +202,7 @@ else
 fi
 
 # Check for resumed entry
-RESUMED_COUNT=$(python3 -c "
+RESUMED_COUNT=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test/checkins.json', 'r') as f:
@@ -226,7 +226,7 @@ echo ""
 echo "Test 4: Checking status command output..."
 
 # Ask Claude to run the status command
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && python3 $PROJECT_ROOT/lib/checkin_scheduler.py status --workflow '001-test'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py status --workflow '001-test'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -267,7 +267,7 @@ fi
 echo ""
 echo "Test 5: Checking pending entry has scheduled_for..."
 
-SCHEDULED_FOR=$(python3 -c "
+SCHEDULED_FOR=$(uv run python -c "
 import json
 try:
     with open('$TEST_DIR/.workflow/001-test/checkins.json', 'r') as f:

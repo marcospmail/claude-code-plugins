@@ -82,7 +82,7 @@ count_incomplete() {
     local tasks_file="$1"
     local output_file="/tmp/e2e-taskjson-count-$$.txt"
 
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: python3 -c \"import json; data=json.load(open('$tasks_file')); print(len([t for t in data.get('tasks',[]) if t.get('status') in ('pending','in_progress','blocked')]))\" > '$output_file' 2>&1"
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"import json; data=json.load(open('$tasks_file')); print(len([t for t in data.get('tasks',[]) if t.get('status') in ('pending','in_progress','blocked')]))\" > '$output_file' 2>&1"
     sleep 1
     tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
     sleep 30
@@ -97,7 +97,7 @@ display_tasks() {
     local tasks_file="$1"
     local output_file="/tmp/e2e-taskjson-display-$$.txt"
 
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: python3 -c \"
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"
 import json
 data=json.load(open('$tasks_file'))
 tasks=data.get('tasks',[])
