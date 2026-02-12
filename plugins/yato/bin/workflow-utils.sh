@@ -5,12 +5,28 @@
 #   source "$(dirname "$0")/workflow-utils.sh"
 
 # Capture the directory where this file lives (when sourced)
-# Handle both direct execution and sourcing from different contexts
-if [[ -n "${BASH_SOURCE[0]}" ]] && [[ "${BASH_SOURCE[0]}" == *"workflow-utils.sh"* ]]; then
+# Must work in both bash and zsh since Claude's bash tool uses zsh
+if [[ -n "${BASH_SOURCE[0]:-}" ]] && [[ "${BASH_SOURCE[0]}" == *"workflow-utils.sh"* ]]; then
+    # bash: BASH_SOURCE tracks sourced file paths
     WORKFLOW_UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+elif [[ -n "${CLAUDE_PLUGIN_ROOT:-}" ]]; then
+    # zsh fallback: CLAUDE_PLUGIN_ROOT is always set by Claude Code plugin system
+    WORKFLOW_UTILS_DIR="${CLAUDE_PLUGIN_ROOT}/bin"
+elif [[ -n "${0}" ]] && [[ -f "${0}" ]] && [[ "${0}" == *"workflow-utils.sh"* ]]; then
+    # zsh: $0 contains the sourced file when using 'source' command
+    WORKFLOW_UTILS_DIR="$(cd "$(dirname "$0")" && pwd)"
 else
-    # Fallback: assume we're in the yato project and find bin/ directory
-    WORKFLOW_UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bin"
+    # Last resort: search common locations
+    for _candidate in "$(dirname "$0")" "$(dirname "$0")/.." "$(pwd)"; do
+        if [[ -f "$_candidate/bin/workflow-utils.sh" ]]; then
+            WORKFLOW_UTILS_DIR="$_candidate/bin"
+            break
+        elif [[ -f "$_candidate/workflow-utils.sh" ]]; then
+            WORKFLOW_UTILS_DIR="$_candidate"
+            break
+        fi
+    done
+    unset _candidate
 fi
 
 # Get the next workflow number (001, 002, etc.)
