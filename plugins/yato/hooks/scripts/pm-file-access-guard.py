@@ -49,9 +49,18 @@ PM_ALLOWED_PATTERNS = [
 ]
 
 
-def find_project_root() -> Optional[Path]:
-    """Find the project root by looking for .workflow/ directory."""
-    current = Path.cwd()
+def find_project_root(file_path: str) -> Optional[Path]:
+    """Find the project root by looking for .workflow/ directory.
+
+    Searches upward from the file's directory (not CWD) because
+    uv run --directory changes CWD to the plugin directory.
+    """
+    # Start from the file's directory, not CWD
+    path = Path(file_path)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    current = path.parent
+
     while current != current.parent:
         if (current / ".workflow").exists():
             return current
@@ -176,12 +185,26 @@ def main():
         print(json.dumps({"continue": True}))
         return 0
 
-    # Find project root
-    project_root = find_project_root()
+    # Find project root (search from file's directory, not CWD)
+    project_root = find_project_root(file_path)
 
     if not project_root:
-        # No project root found - allow (might be outside workflow context)
-        print(json.dumps({"continue": True}))
+        # No project root found from file path - PM shouldn't be editing
+        # files outside any workflow project
+        output = {
+            "decision": "block",
+            "reason": f"""🚫 PM FILE ACCESS DENIED
+
+You are the Project Manager (PM). You are NOT allowed to edit this file:
+  {file_path}
+
+This file is outside any workflow project. PM can only edit files within
+a project that has a .workflow/ directory.
+
+ACTION REQUIRED:
+DELEGATE the work to an appropriate agent."""
+        }
+        print(json.dumps(output))
         return 0
 
     # Check if file is in allowed list
@@ -207,7 +230,7 @@ PM can ONLY edit workflow files:
 ACTION REQUIRED:
 Instead of editing this file yourself, DELEGATE the work to an appropriate agent:
 
-  ${CLAUDE_PLUGIN_ROOT}/bin/send-message.sh <session>:<window> "Please [describe the change needed]"
+  ${{CLAUDE_PLUGIN_ROOT}}/bin/send-message.sh <session>:<window> "Please [describe the change needed]"
 
 Remember: PM coordinates and delegates. Agents implement."""
     }

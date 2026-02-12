@@ -141,8 +141,17 @@ def find_workflow_path() -> Optional[Path]:
 
 
 def find_project_root() -> Optional[Path]:
-    """Find the project root by looking for .workflow/ directory."""
-    current = Path.cwd()
+    """Find the project root by looking for .workflow/ directory.
+
+    Uses HOOK_CWD env var (set by hooks.json) to get the original working
+    directory before uv run --directory changes CWD to the plugin directory.
+    Falls back to Path.cwd() if HOOK_CWD is not set.
+    """
+    hook_cwd = os.environ.get("HOOK_CWD")
+    if hook_cwd:
+        current = Path(hook_cwd)
+    else:
+        current = Path.cwd()
     while current != current.parent:
         if (current / ".workflow").exists():
             return current
@@ -235,7 +244,7 @@ def build_block_message(role: str, agents: List[Dict[str, Any]], current_name: O
             if first_target:
                 lines.append("")
                 lines.append("Example:")
-                lines.append(f"  cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/tmux_utils.py send {first_target} \"Please implement the login feature\"")
+                lines.append(f"  cd ${{CLAUDE_PLUGIN_ROOT}} && uv run python lib/tmux_utils.py send {first_target} \"Please implement the login feature\"")
         else:
             lines.append("")
             lines.append("No team agents found in agents.yml. Deploy agents first with the orchestrator.")
@@ -250,10 +259,10 @@ def build_block_message(role: str, agents: List[Dict[str, Any]], current_name: O
             lines.append(f"Your PM: pm at {pm_target}")
             lines.append("")
             lines.append("Send a message with:")
-            lines.append(f"  cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/tmux_utils.py send {pm_target} \"message\"")
+            lines.append(f"  cd ${{CLAUDE_PLUGIN_ROOT}} && uv run python lib/tmux_utils.py send {pm_target} \"message\"")
             lines.append("")
             lines.append("Example:")
-            lines.append(f"  cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/tmux_utils.py send {pm_target} \"I need help with this task, can you assign another agent?\"")
+            lines.append(f"  cd ${{CLAUDE_PLUGIN_ROOT}} && uv run python lib/tmux_utils.py send {pm_target} \"I need help with this task, can you assign another agent?\"")
         else:
             lines.append("")
             lines.append("No PM found in agents.yml. Contact the orchestrator for guidance.")
