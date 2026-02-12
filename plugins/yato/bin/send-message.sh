@@ -33,7 +33,10 @@ sleep 0.5
 # Send the message as literal text (-l prevents key name interpretation)
 tmux $TMUX_FLAGS send-keys -l -t "$WINDOW" "$MESSAGE"
 
-# Send Enter immediately to submit (no delay - avoids TUI state changes between text and Enter)
+# Brief delay to let TUI process the text before submitting
+sleep 0.5
+
+# Send Enter to submit
 tmux $TMUX_FLAGS send-keys -t "$WINDOW" Enter
 
 echo "Message sent to $WINDOW: $MESSAGE"

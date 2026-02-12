@@ -318,9 +318,9 @@ class TmuxOrchestrator:
                 return False
 
             if enter:
-                # Step 6: Send Enter immediately to submit
-                # No delay between text and Enter - avoids TUI state changes that can
-                # prevent submission (the 1-second sleep was causing Enter to be lost)
+                # Step 6: Brief delay to let TUI process text before submitting
+                time.sleep(0.5)
+
                 cmd = tmux + ["send-keys", "-t", target, "Enter"]
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode != 0:
