@@ -13,7 +13,7 @@
 INPUT=$(cat)
 
 # Extract the command from tool_input
-COMMAND=$(echo "$INPUT" | python3 -c "
+COMMAND=$(echo "$INPUT" | uv run python -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -52,7 +52,7 @@ fi
 
 # Check for identity.yml in current directory
 if [[ -f "identity.yml" ]]; then
-    ROLE=$(python3 -c "
+    ROLE=$(uv run python -c "
 import yaml, sys
 try:
     with open('identity.yml') as f:

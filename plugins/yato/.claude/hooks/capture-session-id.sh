@@ -4,7 +4,7 @@
 
 # Read session_id from JSON stdin
 SESSION_DATA=$(cat)
-SESSION_ID=$(echo "$SESSION_DATA" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null)
+SESSION_ID=$(echo "$SESSION_DATA" | uv run python -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null)
 
 if [ -z "$SESSION_ID" ]; then
     exit 0  # No session_id, nothing to do

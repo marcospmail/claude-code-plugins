@@ -4,7 +4,7 @@
 
 # Read JSON input to get current session_id
 INPUT=$(cat)
-CURRENT_SESSION_ID=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null)
+CURRENT_SESSION_ID=$(echo "$INPUT" | uv run python -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null)
 
 if [ -z "$CURRENT_SESSION_ID" ]; then
     exit 0  # No session_id available, allow

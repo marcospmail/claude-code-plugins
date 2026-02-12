@@ -7,7 +7,7 @@
 INPUT=$(cat)
 
 # Check if command contains cancel-checkin.sh
-COMMAND=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('command',''))" 2>/dev/null)
+COMMAND=$(echo "$INPUT" | uv run python -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('command',''))" 2>/dev/null)
 
 # If not a cancel-checkin command, allow it
 if [[ "$COMMAND" != *"cancel-checkin"* ]]; then
@@ -15,7 +15,7 @@ if [[ "$COMMAND" != *"cancel-checkin"* ]]; then
 fi
 
 # Get current session_id
-CURRENT_SESSION_ID=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null)
+CURRENT_SESSION_ID=$(echo "$INPUT" | uv run python -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null)
 
 if [ -z "$CURRENT_SESSION_ID" ]; then
     exit 0  # No session_id available, allow (likely user)
