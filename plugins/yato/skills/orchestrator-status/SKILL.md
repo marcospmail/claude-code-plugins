@@ -19,15 +19,15 @@ YATO_PATH="${CLAUDE_PLUGIN_ROOT}"
 2. **Show registered agents for current workflow:**
 ```bash
 # From project directory (auto-detects workflow)
-python3 $YATO_PATH/lib/claude_control.py status
+uv run --directory $YATO_PATH python $YATO_PATH/lib/claude_control.py status
 
 # Or specify project path explicitly
-python3 $YATO_PATH/lib/claude_control.py -p /path/to/project status
+uv run --directory $YATO_PATH python $YATO_PATH/lib/claude_control.py -p /path/to/project status
 ```
 
 3. **List all tmux sessions and windows:**
 ```bash
-python3 $YATO_PATH/lib/claude_control.py list -v
+uv run --directory $YATO_PATH python $YATO_PATH/lib/claude_control.py list -v
 ```
 
 4. **Present the results** in a clear table format showing:

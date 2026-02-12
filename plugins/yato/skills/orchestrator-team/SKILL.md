@@ -19,10 +19,10 @@ YATO_PATH="${CLAUDE_PLUGIN_ROOT}"
 2. **Get the team (from project directory):**
 ```bash
 # From project directory (auto-detects workflow)
-python3 $YATO_PATH/lib/claude_control.py team
+uv run --directory $YATO_PATH python $YATO_PATH/lib/claude_control.py team
 
 # Or specify project path explicitly
-python3 $YATO_PATH/lib/claude_control.py -p /path/to/project team
+uv run --directory $YATO_PATH python $YATO_PATH/lib/claude_control.py -p /path/to/project team
 ```
 
 3. **Present the team hierarchy** showing:

@@ -87,8 +87,8 @@ YATO_PATH="${CLAUDE_PLUGIN_ROOT}"
 SESSION_NAME=$(basename $ARGUMENTS)
 
 # Deploy the team with the config
-python3 $YATO_PATH/lib/orchestrator.py deploy $SESSION_NAME -p $ARGUMENTS -c $ARGUMENTS/team-config.json
+uv run --directory $YATO_PATH python $YATO_PATH/lib/orchestrator.py deploy $SESSION_NAME -p $ARGUMENTS -c $ARGUMENTS/team-config.json
 
 # Start Claude and brief all agents
-python3 $YATO_PATH/lib/orchestrator.py start
+uv run --directory $YATO_PATH python $YATO_PATH/lib/orchestrator.py start
 ```

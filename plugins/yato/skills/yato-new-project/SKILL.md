@@ -63,7 +63,7 @@ fi
 ## Step 4: Save Request to status.yml
 
 ```bash
-python3 -c "
+uv run --directory ${CLAUDE_PLUGIN_ROOT} python -c "
 content = '''$REQUEST'''
 indented = '\n'.join('  ' + line if line else '' for line in content.split('\n'))
 with open('$PROJECT_PATH/.workflow/$WORKFLOW_NAME/status.yml', 'r') as f:
@@ -78,7 +78,7 @@ with open('$PROJECT_PATH/.workflow/$WORKFLOW_NAME/status.yml', 'w') as f:
 
 ```bash
 SESSION_NAME="${PROJECT_SLUG}_${WORKFLOW_NAME}"
-python3 ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
+uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
 ```
 
 ## Step 6: Connect or Give Attach Command

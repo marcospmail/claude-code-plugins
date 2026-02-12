@@ -34,7 +34,7 @@ mkdir -p "$TEST_DIR"
 echo "test project" > "$TEST_DIR/README.md"
 
 # Deploy PM
-python3 lib/orchestrator.py deploy-pm test-session -p "$TEST_DIR"
+uv run python lib/orchestrator.py deploy-pm test-session -p "$TEST_DIR"
 
 # Attach to see PM in action
 tmux attach -t test-session
@@ -140,7 +140,7 @@ save_team_structure "$TEST_DIR" "developer:developer:sonnet"
 
 ```bash
 # Deploy PM
-python3 lib/orchestrator.py deploy-pm test-session -p "$TEST_DIR"
+uv run python lib/orchestrator.py deploy-pm test-session -p "$TEST_DIR"
 
 # Simulate user input
 tmux send-keys -t test-session:0.1 "add auth feature" Enter
@@ -230,7 +230,7 @@ grep -q "What would you like to accomplish" lib/orchestrator.py && echo "✅ Exi
 
 ```bash
 # Full workflow: deploy → interact → verify
-python3 lib/orchestrator.py deploy-pm test -p /tmp/test
+uv run python lib/orchestrator.py deploy-pm test -p /tmp/test
 tmux send-keys -t test:0.1 "Add feature X" Enter
 sleep 5
 WORKFLOW=$(tmux showenv -t test WORKFLOW_NAME | cut -d= -f2)

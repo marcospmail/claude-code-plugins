@@ -85,7 +85,7 @@ fi
 
 ```bash
 if [[ -n "$ARGUMENTS" ]]; then
-    python3 -c "
+    uv run --directory ${CLAUDE_PLUGIN_ROOT} python -c "
 import sys
 content = '''$ARGUMENTS'''
 indented = '\n'.join('  ' + line if line else '' for line in content.split('\n'))
@@ -104,7 +104,7 @@ Session name format: `{project}_{workflow}` (e.g., `my-project_001-add-feature`)
 
 ```bash
 SESSION_NAME="${PROJECT_SLUG}_${WORKFLOW_NAME}"
-python3 ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
+uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
 ```
 
 ## A5: Give User the Attach Command
@@ -282,7 +282,7 @@ Session name format: `{project}_{workflow}` (e.g., `my-project_001-add-oauth`)
 
 ```bash
 SESSION_NAME="${PROJECT_SLUG}_${WORKFLOW_NAME}"
-python3 ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
+uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
 ```
 
 ## B7: Switch to PM Session (Seamless)

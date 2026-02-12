@@ -35,12 +35,12 @@ YATO_PATH="${CLAUDE_PLUGIN_ROOT}"
 
 2. **Deploy the team:**
 ```bash
-python3 $YATO_PATH/lib/orchestrator.py deploy $ARGUMENTS -p <path> -c <config>
+uv run --directory $YATO_PATH python $YATO_PATH/lib/orchestrator.py deploy $ARGUMENTS -p <path> -c <config>
 ```
 
 3. **Start Claude in all windows:**
 ```bash
-python3 $YATO_PATH/lib/orchestrator.py start
+uv run --directory $YATO_PATH python $YATO_PATH/lib/orchestrator.py start
 ```
 
 4. **Show the deployed team structure** to the user with agent IDs and roles.

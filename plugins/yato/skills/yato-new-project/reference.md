@@ -5,7 +5,7 @@
 ### deploy-pm Command
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm SESSION_NAME -p PROJECT_PATH
+uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm SESSION_NAME -p PROJECT_PATH
 ```
 
 **Parameters:**
@@ -98,7 +98,7 @@ tmux attach-session -t SESSION_NAME
 mkdir -p /path/to/project
 
 # Then run deploy-pm
-python3 ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm SESSION_NAME -p /path/to/project
+uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm SESSION_NAME -p /path/to/project
 ```
 
 ### Orchestrator Not Found
@@ -112,7 +112,7 @@ ls -la ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py
 
 # Update path if different
 export YATO_PATH="/path/to/yato"
-python3 $YATO_PATH/lib/orchestrator.py deploy-pm SESSION_NAME -p PROJECT_PATH
+uv run --directory $YATO_PATH python $YATO_PATH/lib/orchestrator.py deploy-pm SESSION_NAME -p PROJECT_PATH
 ```
 
 ## Integration with Other Tools

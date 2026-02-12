@@ -219,7 +219,7 @@ When deploying the PM, you can pass the analysis and objectives:
 
 ```bash
 # Deploy PM
-python3 ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH"
+uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH"
 
 # Send analysis context
 sleep 5

@@ -22,7 +22,7 @@ YATO_PATH="${CLAUDE_PLUGIN_ROOT}"
 
 2. **Capture the agent output:**
 ```bash
-python3 $YATO_PATH/lib/claude_control.py read <target> -n <lines>
+uv run --directory $YATO_PATH python $YATO_PATH/lib/claude_control.py read <target> -n <lines>
 ```
 
 3. **Analyze the output** and summarize for the user:
