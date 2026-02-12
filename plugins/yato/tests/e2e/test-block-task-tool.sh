@@ -265,45 +265,81 @@ fi
 
 echo ""
 
+# Helper: wait for Claude to start, handle trust prompt, return when ready
+wait_for_claude() {
+    local max_wait=30
+    local waited=0
+    while [[ $waited -lt $max_wait ]]; do
+        local output
+        output=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+        if echo "$output" | grep -qi "trust"; then
+            echo "  Trust prompt found, accepting..."
+            tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter 2>/dev/null
+            sleep 15
+            return 0
+        fi
+        if echo "$output" | grep -q "^❯"; then
+            return 0
+        fi
+        sleep 3
+        waited=$((waited + 3))
+    done
+    # Fallback: assume ready after max wait
+    return 0
+}
+
+# Helper: send prompt, poll for expected pattern in pane output
+wait_for_pattern() {
+    local pattern="$1"
+    local max_wait=90
+    local waited=0
+    while [[ $waited -lt $max_wait ]]; do
+        local output
+        output=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
+        # Handle "Use skill" prompts by selecting the second option
+        if echo "$output" | grep -qi "Use skill"; then
+            tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter 2>/dev/null
+        fi
+        if echo "$output" | grep -qi "$pattern"; then
+            echo "$output"
+            return 0
+        fi
+        sleep 5
+        waited=$((waited + 5))
+    done
+    # Return whatever we have after timeout
+    tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null
+    return 1
+}
+
+# Helper: kill session and wait for tmux server cleanup before creating new one
+recreate_session() {
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    sleep 3  # Wait for tmux server to fully shut down (prevents "no server running" race)
+    tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
+}
+
 # ============================================================
 # Phase 10: E2E - PM blocked via real Claude session
 # ============================================================
 echo "Phase 10: Testing PM blocked via real Claude session..."
 
 # Create tmux session with larger size for Claude TUI
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
 
 # Start Claude with AGENT_ROLE=pm
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "export AGENT_ROLE=pm AGENT_NAME=pm WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "export AGENT_ROLE=pm AGENT_NAME=pm WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter 2>/dev/null
 
 echo "  Waiting for Claude to initialize..."
-sleep 12
-
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-fi
+wait_for_claude
 
 # Send prompt that would trigger Task tool usage
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool." 2>/dev/null
 sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter 2>/dev/null
 
 echo "  Waiting for Claude to process..."
-sleep 30
-
-# Handle any prompts
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-PM_E2E_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
+PM_E2E_OUTPUT=$(wait_for_pattern "delegate work to your team agents\|team agents\|TASK SUB-AGENT BLOCKED\|sub-agent.*blocked")
 
 if echo "$PM_E2E_OUTPUT" | grep -qi "delegate work to your team agents\|team agents\|TASK SUB-AGENT BLOCKED\|sub-agent.*blocked"; then
     pass "PM received block message mentioning team agents"
@@ -318,39 +354,19 @@ echo ""
 # ============================================================
 echo "Phase 11: Testing developer blocked via real Claude session..."
 
-# Kill current session and create new one with AGENT_ROLE=developer
-tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
+recreate_session
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "export AGENT_ROLE=developer AGENT_NAME=developer WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "export AGENT_ROLE=developer AGENT_NAME=developer WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter 2>/dev/null
 
 echo "  Waiting for Claude to initialize..."
-sleep 12
+wait_for_claude
 
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-fi
-
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool." 2>/dev/null
 sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter 2>/dev/null
 
 echo "  Waiting for Claude to process..."
-sleep 30
-
-# Handle any prompts
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-DEV_E2E_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
+DEV_E2E_OUTPUT=$(wait_for_pattern "contact your PM\|Your PM:\|TASK SUB-AGENT BLOCKED\|sub-agent.*blocked")
 
 if echo "$DEV_E2E_OUTPUT" | grep -qi "contact your PM\|Your PM:\|TASK SUB-AGENT BLOCKED\|sub-agent.*blocked"; then
     pass "Developer received block message mentioning PM contact"
@@ -365,36 +381,19 @@ echo ""
 # ============================================================
 echo "Phase 12: Testing orchestrator allowed via real Claude session..."
 
-# Kill current session and create new one without AGENT_ROLE
-tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+recreate_session
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "export WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "export WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter 2>/dev/null
 
 echo "  Waiting for Claude to initialize..."
-sleep 12
+wait_for_claude
 
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-fi
-
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool."
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Right now, immediately invoke the Task tool with subagent_type=Explore to explore this codebase. Do not ask for clarification, just invoke the tool." 2>/dev/null
 sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter 2>/dev/null
 
 echo "  Waiting for Claude to process..."
-sleep 30
-
-# Handle any prompts
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
+sleep 60
 
 ORCH_E2E_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
 
