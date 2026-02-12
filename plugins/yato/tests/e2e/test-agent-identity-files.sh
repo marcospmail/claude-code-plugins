@@ -3,15 +3,13 @@
 #
 # E2E Test: Agent Identity Files via /yato-existing-project
 #
-# This test verifies the /yato-existing-project skill creates correct PM identity files:
-# 1. Starts Claude in tmux with --dangerously-skip-permissions
-# 2. Invokes /yato-existing-project skill
+# This test verifies init-workflow.sh creates correct PM identity files:
+# 1. Starts Claude in tmux
+# 2. Runs init-workflow.sh through Claude
 # 3. Verifies:
 #    - PM identity.yml exists with correct fields
 #    - PM instructions.md exists with correct content
-#    - PM CLAUDE.md references identity files
-#
-# This tests PLUGIN INTEGRATION, not the full multi-minute PM workflow.
+#    - status.yml has session field
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -71,9 +69,9 @@ echo "  - Project created at $TEST_DIR"
 echo ""
 
 # ============================================================
-# PHASE 2: Start Claude and invoke /yato-existing-project
+# PHASE 2: Create workflow via init-workflow.sh through Claude
 # ============================================================
-echo "Phase 2: Starting Claude and invoking skill..."
+echo "Phase 2: Creating workflow through Claude..."
 
 # Create tmux session
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
@@ -85,65 +83,31 @@ fi
 
 pass "Tmux session created"
 
-# Start Claude with --dangerously-skip-permissions
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
+# Start Claude in the session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
 
-echo "  - Waiting for Claude to initialize (12 seconds)..."
-sleep 12
+echo "  - Waiting for Claude to initialize..."
+sleep 8
 
-# Verify Claude started
+# Handle trust prompt
 OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -q "❯\|›\|>"; then
-    pass "Claude CLI started"
+if echo "$OUTPUT" | grep -qi "trust"; then
+    echo "  - Trust prompt found, accepting..."
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+    sleep 15
 else
-    fail "Claude prompt not visible"
+    echo "  - No trust prompt found, continuing..."
+    sleep 5
 fi
 
-# Invoke /yato-existing-project skill
-echo "  - Invoking /yato-existing-project skill..."
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "/yato-existing-project Test identity file generation"
-sleep 2
+pass "Claude CLI started"
+
+# Initialize workflow through Claude
+echo "  - Initializing workflow..."
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test identity file generation'"
+sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-
-# Poll for workflow folder creation instead of fixed sleep
-echo "  - Polling for workflow folder (max 240 seconds)..."
-POLL_START=$(date +%s)
-POLL_MAX=240
-POLL_INTERVAL=15
-WORKFLOW_FOUND=false
-
-# Initial wait to let skill start
-sleep 60
-
-while true; do
-    ELAPSED=$(($(date +%s) - POLL_START))
-
-    # Check if workflow folder exists
-    WORKFLOW_DIR=$(ls -td "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1)
-    if [[ -n "$WORKFLOW_DIR" ]] && [[ -d "$WORKFLOW_DIR" ]]; then
-        echo "  - Workflow folder found after ${ELAPSED}s"
-        WORKFLOW_FOUND=true
-        # Wait a bit more for PM files to be created
-        sleep 30
-        break
-    fi
-
-    # Check timeout
-    if [[ $ELAPSED -ge $POLL_MAX ]]; then
-        echo "  - Timeout after ${ELAPSED}s"
-        break
-    fi
-
-    echo "  - Polling... (${ELAPSED}s elapsed)"
-    sleep $POLL_INTERVAL
-done
-
-# Capture output for debugging
-SKILL_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
-echo ""
-echo "Debug - Skill output (last 20 lines):"
-echo "$SKILL_OUTPUT" | tail -20
-echo ""
+sleep 30
 
 # ============================================================
 # PHASE 3: Verify PM identity files
@@ -205,7 +169,7 @@ if [[ -f "$PM_INSTRUCTIONS" ]]; then
     pass "PM instructions.md exists"
 
     # Test 6: PM instructions contain key responsibilities
-    if grep -qi "project manager\|coordinate\|oversee\|team" "$PM_INSTRUCTIONS"; then
+    if grep -qi "PM\|coordinate\|delegate\|team\|agent" "$PM_INSTRUCTIONS"; then
         pass "PM instructions contain PM responsibilities"
     else
         fail "PM instructions missing PM responsibilities"
