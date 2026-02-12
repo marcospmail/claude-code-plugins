@@ -414,8 +414,8 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-# Run the actual tasks-table.sh script through Claude
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1"
+# Run the task_manager.py table command through Claude (replaced tasks-table.sh)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/task_manager.py table --project '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30
@@ -450,7 +450,7 @@ echo "Test 9: Testing tasks-table.sh with missing tasks file..."
 
 rm -f "$TEST_DIR/.workflow/001-test-workflow/tasks.json"
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/task_manager.py table --project '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30
@@ -458,9 +458,9 @@ sleep 30
 SCRIPT_OUTPUT=$(cat /tmp/e2e-tasktable-$$.txt 2>/dev/null)
 
 if echo "$SCRIPT_OUTPUT" | grep -q "no tasks file found"; then
-    pass "tasks-table.sh handles missing file gracefully"
+    pass "task_manager.py table handles missing file gracefully"
 else
-    fail "tasks-table.sh should report missing file: $SCRIPT_OUTPUT"
+    fail "task_manager.py table should report missing file: $SCRIPT_OUTPUT"
 fi
 
 # ============================================================
@@ -475,7 +475,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/tasks-table.sh '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/task_manager.py table --project '$TEST_DIR' > /tmp/e2e-tasktable-$$.txt 2>&1"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 30
@@ -483,9 +483,9 @@ sleep 30
 SCRIPT_OUTPUT=$(cat /tmp/e2e-tasktable-$$.txt 2>/dev/null)
 
 if echo "$SCRIPT_OUTPUT" | grep -q "(no tasks)"; then
-    pass "tasks-table.sh shows '(no tasks)' for empty array"
+    pass "task_manager.py table shows '(no tasks)' for empty array"
 else
-    fail "tasks-table.sh should show '(no tasks)': $SCRIPT_OUTPUT"
+    fail "task_manager.py table should show '(no tasks)': $SCRIPT_OUTPUT"
 fi
 
 # ============================================================
