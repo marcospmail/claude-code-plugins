@@ -168,9 +168,9 @@ fi
 echo "Creating window '$WINDOW_NAME' in session '$SESSION'..."
 
 if [[ -n "$PROJECT_PATH" ]]; then
-    WINDOW_INDEX=$(tmux $TMUX_FLAGS new-window -t "$SESSION" -n "$WINDOW_NAME" -c "$PROJECT_PATH" -P -F "#{window_index}")
+    WINDOW_INDEX=$(tmux $TMUX_FLAGS new-window -d -t "$SESSION" -n "$WINDOW_NAME" -c "$PROJECT_PATH" -P -F "#{window_index}")
 else
-    WINDOW_INDEX=$(tmux $TMUX_FLAGS new-window -t "$SESSION" -n "$WINDOW_NAME" -P -F "#{window_index}")
+    WINDOW_INDEX=$(tmux $TMUX_FLAGS new-window -d -t "$SESSION" -n "$WINDOW_NAME" -P -F "#{window_index}")
 fi
 
 if [[ -z "$WINDOW_INDEX" ]]; then
