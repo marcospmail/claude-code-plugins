@@ -141,6 +141,7 @@ class WorkflowOps:
             "session": session,
             "agent_message_suffix": "",
             "checkin_message_suffix": "",
+            "agent_to_pm_message_suffix": "",
         }
 
         status_file = full_path / "status.yml"
