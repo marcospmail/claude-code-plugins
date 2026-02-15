@@ -19,7 +19,7 @@ As the project manager you can see the other session windows like the convex ser
 
 Always check the server logs and feed back any potential issues.
 
-Keep your plan centered and very simple around how you're going to check in regularly and ensure that the engineer sees this to completion. Make sure to schedule regular check-ins for yourself. Use the schedule_with_note.sh script in the orchestrator directory (./schedule_with_note.sh <minutes> "check message") or bash sleep commands, and keep working with the engineer until completion of the project.
+Keep your plan centered and very simple around how you're going to check in regularly and ensure that the engineer sees this to completion. Make sure to schedule regular check-ins for yourself. Use schedule-checkin.sh (${CLAUDE_PLUGIN_ROOT}/bin/schedule-checkin.sh <minutes> "check message" "<session:window>") to start the check-in daemon, and keep working with the engineer until completion of the project.
 
 Stay calm and don't lose track. If you ever need guidance, go back to the original spec sheet and stay on track with it and stay on track with the lock as well. We only want to work on the specific projects mentioned in the LOCK.
 
