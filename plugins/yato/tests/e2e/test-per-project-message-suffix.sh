@@ -61,9 +61,9 @@ send_to_claude() {
 echo "Setting up test environment..."
 mkdir -p "$TEST_DIR/config"
 
-# Create config/defaults.conf with empty MESSAGE_SUFFIX so global fallback does not interfere
+# Create config/defaults.conf with empty PM_TO_AGENTS_SUFFIX so global fallback does not interfere
 cat > "$TEST_DIR/config/defaults.conf" <<'EOF'
-MESSAGE_SUFFIX=""
+PM_TO_AGENTS_SUFFIX=""
 DEFAULT_SESSION="test"
 DEFAULT_ORCHESTRATOR_WINDOW="0"
 LOG_DIR=".yato/logs"
@@ -385,7 +385,7 @@ echo ""
 TEST_DIR_B="/tmp/e2e-test-$TEST_NAME-b-$$"
 mkdir -p "$TEST_DIR_B/config"
 cat > "$TEST_DIR_B/config/defaults.conf" <<'EOF'
-MESSAGE_SUFFIX=""
+PM_TO_AGENTS_SUFFIX=""
 DEFAULT_SESSION="test"
 EOF
 

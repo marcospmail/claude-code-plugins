@@ -119,6 +119,9 @@ folder: "$full_path"
 checkin_interval_minutes: _
 created_at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 session: ""
+agent_message_suffix: ""
+checkin_message_suffix: ""
+agent_to_pm_message_suffix: ""
 EOF
 
     echo "$folder_name"
@@ -363,7 +366,7 @@ EOF
 EOF
 
         # Create agent files (identity.yml, instructions.md, agent-tasks.md, etc.)
-        "$WORKFLOW_UTILS_DIR/init-agent-files.sh" "$project_path" "$agent_name" "$agent_role" "$agent_model"
+        cd "$WORKFLOW_UTILS_DIR/.." && uv run python lib/agent_manager.py init-files "$agent_name" "$agent_role" -p "$project_path" -m "$agent_model"
     done
 
     echo "Saved team structure to: $team_file"

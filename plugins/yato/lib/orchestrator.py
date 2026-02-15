@@ -365,7 +365,7 @@ class Orchestrator:
             f"  - Use send-message.sh to communicate with agents\n"
             f"  - Use schedule-checkin.sh for oversight\n"
             f"  - Use Read/Glob/Grep to understand codebase\n"
-            f"  - Use coordination scripts (init-workflow.sh, create-team.sh, assign-task.sh)\n"
+            f"  - Use coordination scripts (init-workflow.sh, create-team.sh)\n"
             f"\n"
             f"⛔ YOU CANNOT (NEVER DO THESE):\n"
             f"  - Write, edit, or modify ANY code files (.js, .ts, .py, .java, etc.)\n"
@@ -531,7 +531,18 @@ class Orchestrator:
             f"Start now: Check for .workflow/prd.md first, then begin discovery questions!"
         )
 
-        # Append agent_message_suffix from workflow status.yml if set
+        # Append stacked suffixes (yato-level PM_TO_AGENTS_SUFFIX + workflow agent_message_suffix)
+        try:
+            from lib.config import get as get_config
+        except ImportError:
+            import importlib.util
+            _cfg_path = os.path.join(os.path.dirname(__file__), "config.py")
+            _spec = importlib.util.spec_from_file_location("config", _cfg_path)
+            _cfg = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_cfg)
+            get_config = _cfg.get
+        _yato_suffix = get_config("PM_TO_AGENTS_SUFFIX")
+        _workflow_suffix = ""
         if self._project_path and self._workflow_name:
             import yaml
             _sf = self._project_path / ".workflow" / self._workflow_name / "status.yml"
@@ -540,11 +551,14 @@ class Orchestrator:
                     with open(_sf) as f:
                         _data = yaml.safe_load(f)
                     if _data and isinstance(_data, dict):
-                        _suffix = _data.get("agent_message_suffix", "")
-                        if _suffix:
-                            briefing = briefing + _suffix
+                        _workflow_suffix = _data.get("agent_message_suffix", "")
                 except Exception:
                     pass
+        # Stack both suffixes
+        if _yato_suffix:
+            briefing = briefing + "\n\n" + _yato_suffix
+        if _workflow_suffix:
+            briefing = briefing + "\n\n" + _workflow_suffix
 
         # Use the send-message.sh script which handles tmux messaging reliably
         send_script = self.bin_dir / "send-message.sh"

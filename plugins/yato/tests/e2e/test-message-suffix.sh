@@ -1,7 +1,7 @@
 #!/bin/bash
 # test-message-suffix.sh
 #
-# E2E Test: MESSAGE_SUFFIX Configuration Feature
+# E2E Test: PM_TO_AGENTS_SUFFIX Configuration Feature
 #
 # Verifies that messages sent via the Python send_message() function append a
 # configurable suffix from config/defaults.conf to every message delivered to agents.
@@ -15,7 +15,7 @@ SESSION_NAME="e2e-test-suffix-$$"
 export TMUX_SOCKET="yato-e2e-test"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: MESSAGE_SUFFIX Configuration Feature              ║"
+echo "║  E2E Test: PM_TO_AGENTS_SUFFIX Configuration Feature              ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -49,11 +49,11 @@ send_to_claude() {
 echo "Setting up test environment..."
 mkdir -p "$TEST_DIR/config"
 
-# Create config with MESSAGE_SUFFIX (use a plain text marker without special regex/glob chars)
+# Create config with PM_TO_AGENTS_SUFFIX (use a plain text marker without special regex/glob chars)
 EXPECTED_SUFFIX=" --YATO_SUFFIX_MARKER--"
 cat > "$TEST_DIR/config/defaults.conf" <<EOF
-# Test configuration for MESSAGE_SUFFIX feature
-MESSAGE_SUFFIX="$EXPECTED_SUFFIX"
+# Test configuration for PM_TO_AGENTS_SUFFIX feature
+PM_TO_AGENTS_SUFFIX="$EXPECTED_SUFFIX"
 DEFAULT_SESSION="test"
 DEFAULT_ORCHESTRATOR_WINDOW="0"
 LOG_DIR=".yato/logs"
@@ -93,7 +93,7 @@ else
 fi
 
 echo ""
-echo "Testing MESSAGE_SUFFIX feature..."
+echo "Testing PM_TO_AGENTS_SUFFIX feature..."
 echo ""
 
 # ============================================================
@@ -127,9 +127,9 @@ fi
 
 # Verify suffix is appended
 if echo "$OUTPUT1" | grep -Fq "$EXPECTED_SUFFIX"; then
-    pass "MESSAGE_SUFFIX appended to message"
+    pass "PM_TO_AGENTS_SUFFIX appended to message"
 else
-    fail "MESSAGE_SUFFIX not found in receiver output"
+    fail "PM_TO_AGENTS_SUFFIX not found in receiver output"
     echo "     Expected suffix: $EXPECTED_SUFFIX"
 fi
 
@@ -167,7 +167,7 @@ echo "Test 3: Verify empty suffix configuration works"
 
 # Update config to empty suffix
 cat > "$TEST_DIR/config/defaults.conf" <<'EOF'
-MESSAGE_SUFFIX=""
+PM_TO_AGENTS_SUFFIX=""
 DEFAULT_SESSION="test"
 EOF
 

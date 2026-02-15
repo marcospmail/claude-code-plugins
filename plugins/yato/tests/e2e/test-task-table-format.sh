@@ -399,10 +399,10 @@ else
 fi
 
 # ============================================================
-# Test 8: tasks-table.sh script produces correct format
+# Test 8: task_manager.py table produces correct format
 # ============================================================
 echo ""
-echo "Test 8: Testing tasks-table.sh script through Claude..."
+echo "Test 8: Testing task_manager.py table through Claude..."
 
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {
@@ -424,29 +424,29 @@ SCRIPT_OUTPUT=$(cat /tmp/e2e-tasktable-$$.txt 2>/dev/null)
 
 # Verify header
 if echo "$SCRIPT_OUTPUT" | grep -q "| ID | Task | Agent | Status |"; then
-    pass "tasks-table.sh produces correct header"
+    pass "task_manager.py table produces correct header"
 else
-    fail "tasks-table.sh missing header: $SCRIPT_OUTPUT"
+    fail "task_manager.py table missing header: $SCRIPT_OUTPUT"
 fi
 
 # Verify data rows
 if echo "$SCRIPT_OUTPUT" | grep -q "| T1 | Setup project | developer | completed |"; then
-    pass "tasks-table.sh shows completed task correctly"
+    pass "task_manager.py table shows completed task correctly"
 else
-    fail "tasks-table.sh completed task incorrect"
+    fail "task_manager.py table completed task incorrect"
 fi
 
 if echo "$SCRIPT_OUTPUT" | grep -q "blocked by T2"; then
-    pass "tasks-table.sh shows blocked by format"
+    pass "task_manager.py table shows blocked by format"
 else
-    fail "tasks-table.sh blocked by format incorrect"
+    fail "task_manager.py table blocked by format incorrect"
 fi
 
 # ============================================================
-# Test 9: tasks-table.sh with missing file
+# Test 9: task_manager.py table with missing file
 # ============================================================
 echo ""
-echo "Test 9: Testing tasks-table.sh with missing tasks file..."
+echo "Test 9: Testing task_manager.py table with missing tasks file..."
 
 rm -f "$TEST_DIR/.workflow/001-test-workflow/tasks.json"
 
@@ -464,10 +464,10 @@ else
 fi
 
 # ============================================================
-# Test 10: tasks-table.sh with empty tasks array
+# Test 10: task_manager.py table with empty tasks array
 # ============================================================
 echo ""
-echo "Test 10: Testing tasks-table.sh with empty tasks array..."
+echo "Test 10: Testing task_manager.py table with empty tasks array..."
 
 cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 {

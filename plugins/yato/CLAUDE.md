@@ -37,8 +37,12 @@ Yato (Yet Another Tmux Orchestrator) is a Claude Code plugin that enables multip
 |-----------|---------|
 | `lib/` | Python modules - core orchestration logic |
 | `lib/templates/` | Jinja2 templates for agent files |
+| `bin/` | Shell scripts for agent creation, workflow init, messaging |
 | `skills/` | Claude Code skills for orchestration |
-| `agents/` | Agent role definitions (pm.md, developer.md, qa.md) |
+| `hooks/` | Event hooks (file access guard, task reminders, checkin control) |
+| `config/` | Default configuration (`defaults.conf`) |
+| `templates/` | Message templates (engineer-briefing, planning-questions) |
+| `agents/` | Agent role definitions (pm.md) |
 | `.workflow/` | Per-workflow state (status.yml, tasks.json, agents.yml) |
 
 ### Python Module Hierarchy
@@ -46,9 +50,9 @@ Yato (Yet Another Tmux Orchestrator) is a Claude Code plugin that enables multip
 ```
 lib/
 ├── __init__.py           # Package exports
-├── cli.py                # Unified CLI entry point (yato command)
 ├── orchestrator.py       # High-level API: init, deploy, status
 ├── claude_control.py     # CLI interface: status, list, send, read, team
+├── config.py             # Config loader for defaults.conf
 ├── session_registry.py   # Agent class definition
 ├── workflow_registry.py  # Workflow-scoped agent management
 ├── tmux_utils.py         # Tmux operations + send_message, notify_pm
@@ -68,9 +72,9 @@ lib/
 
 ### Data Flow
 
-1. **Skills** (`skills/*.md`) invoke Python CLI
-2. **Python CLI** (`lib/cli.py`) routes to appropriate modules
-3. **Modules** handle tmux operations, file management, scheduling
+1. **Skills** (`skills/*/SKILL.md`) invoke Python modules directly
+2. **Modules** (each with `__main__` CLI) handle tmux operations, file management, scheduling
+3. **Bin scripts** (`bin/*.sh`) provide shell-level entry points for agent creation and messaging
 4. **Workflow state** (`.workflow/<name>/`) tracks agents, tasks, check-ins
 
 ## Running Commands
@@ -149,9 +153,32 @@ initial_request: |
 folder: "/path/to/project/.workflow/001-add-hourly-cron"  # Absolute path
 checkin_interval_minutes: _  # Placeholder until user selects interval (e.g., 3, 5, 10)
 session: "myproject"
-agent_message_suffix: ""      # Appended to orchestrator/PM → agent messages (read fresh each send)
-checkin_message_suffix: ""     # Appended to check-in daemon → PM messages (read fresh each send)
+agent_message_suffix: ""              # Workflow-level: PM → agent messages (read fresh each send)
+checkin_message_suffix: ""             # Workflow-level: check-in daemon → PM messages (read fresh each send)
+agent_to_pm_message_suffix: ""         # Workflow-level: agent → PM messages via notify_pm (read fresh each send)
 ```
+
+### Dual-Level Message Suffix System
+
+Suffixes use a **stacking** system: both yato-level (global) and workflow-level suffixes are appended if set. No fallback -- they stack.
+
+**Ordering:** `<original message>` → `<yato-level suffix>` → `<workflow-level suffix>` (separated by blank lines).
+
+**Yato-level** (in `config/defaults.conf`):
+- `PM_TO_AGENTS_SUFFIX=""` — appended to PM/orchestrator → agent messages
+- `AGENTS_TO_PM_SUFFIX=""` — appended to agent → PM messages (notify_pm, check-in daemon)
+
+**Workflow-level** (in `status.yml`):
+- `agent_message_suffix` — PM → agent messages (workflow-specific)
+- `checkin_message_suffix` — check-in daemon → PM messages (workflow-specific)
+- `agent_to_pm_message_suffix` — agent → PM via notify_pm (workflow-specific)
+
+**Direction mapping:**
+| Direction | Yato-level (defaults.conf) | Workflow-level (status.yml) |
+|-----------|---------------------------|----------------------------|
+| PM → Agent | `PM_TO_AGENTS_SUFFIX` | `agent_message_suffix` |
+| Agent → PM | `AGENTS_TO_PM_SUFFIX` | `agent_to_pm_message_suffix` |
+| Check-in → PM | `AGENTS_TO_PM_SUFFIX` | `checkin_message_suffix` |
 
 **team.yml** defines the proposed team structure:
 ```yaml

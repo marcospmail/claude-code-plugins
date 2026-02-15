@@ -2,7 +2,7 @@
 
 This file tracks all end-to-end tests for the yato workflow.
 
-## Current Coverage: 12 Tests | 88+ Assertions
+## Current Coverage: 13 Tests | 116+ Assertions
 
 ### Agent Creation & Registry
 - [x] **test-agent-creation.sh** - Basic agent creation (developer + qa) - 13 assertions
@@ -14,6 +14,9 @@ This file tracks all end-to-end tests for the yato workflow.
 ### Workflow Initialization
 - [x] **test-workflow-init.sh** - Workflow folder structure, status.yml, agents.yml - 14 assertions
 - [x] **test-workflow-numbering.sh** - Multiple workflows get sequential numbers (001, 002, 003) - 5 assertions
+
+### Workflow Resume
+- [x] **test-workflow-resume.sh** - Resume paused workflow (session, panes, agents, checkins, layout) - 28 assertions
 
 ### Communication
 - [x] **test-notify-pm.sh** - Agent can notify PM using notify-pm.sh - 7 assertions
@@ -32,10 +35,11 @@ This file tracks all end-to-end tests for the yato workflow.
 |----------|-------|--------|
 | Agent Creation | 5 | ✅ All Pass |
 | Workflow Init | 2 | ✅ All Pass |
+| Workflow Resume | 1 | ✅ All Pass |
 | Communication | 2 | ✅ All Pass |
 | PM Behavior | 2 | ✅ All Pass |
 | Error Handling | 1 | ✅ Pass |
-| **TOTAL** | **12** | **✅ 100%** |
+| **TOTAL** | **13** | **✅ 100%** |
 
 ## Run All Tests
 
@@ -53,7 +57,6 @@ This file tracks all end-to-end tests for the yato workflow.
 ## Future Tests to Consider
 
 - [ ] **test-checkin-schedule.sh** - Check-in scheduling and cancellation
-- [ ] **test-workflow-resume.sh** - Resume paused workflow
 - [ ] **test-pm-briefing-content.sh** - Full PM briefing content validation
-- [ ] **test-agent-task-assignment.sh** - assign-task.sh functionality
+- [ ] **test-agent-task-assignment.sh** - task_manager.py assign functionality
 - [ ] **test-ralph-loop.sh** - Ralph oversight loop setup
