@@ -58,9 +58,9 @@ echo "Setting up test environment..."
 mkdir -p "$TEST_DIR/config"
 mkdir -p "$TEST_DIR/.workflow/001-test-suffix"
 
-# Create config/defaults.conf with empty MESSAGE_SUFFIX so global fallback does not interfere
+# Create config/defaults.conf with empty PM_TO_AGENTS_SUFFIX so global fallback does not interfere
 cat > "$TEST_DIR/config/defaults.conf" <<'EOF'
-MESSAGE_SUFFIX=""
+PM_TO_AGENTS_SUFFIX=""
 DEFAULT_SESSION="test"
 DEFAULT_ORCHESTRATOR_WINDOW="0"
 LOG_DIR=".yato/logs"
