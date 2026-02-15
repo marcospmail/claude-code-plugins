@@ -537,16 +537,41 @@ def run_daemon(
             pass
 
     def send_message(message: str):
-        """Send a message to the target pane."""
+        """Send a message to the target pane with stacked suffixes."""
         try:
             msg = message
+
+            # Yato-level suffix (AGENTS_TO_PM_SUFFIX from defaults.conf)
+            yato_suffix = ""
+            try:
+                config_file = Path(yato_path) / "config" / "defaults.conf"
+                if config_file.exists():
+                    import re as _re
+                    for line in config_file.read_text().splitlines():
+                        line = line.strip()
+                        if line.startswith("AGENTS_TO_PM_SUFFIX="):
+                            raw = line.split("=", 1)[1].strip()
+                            if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'"):
+                                raw = raw[1:-1]
+                            yato_suffix = raw
+                            break
+            except Exception:
+                pass
+
+            # Workflow-level suffix (checkin_message_suffix from status.yml)
+            workflow_suffix = ""
             if status_file.exists():
                 with open(status_file) as f:
                     data = yaml.safe_load(f)
                 if data and isinstance(data, dict):
-                    suffix = data.get("checkin_message_suffix", "")
-                    if suffix:
-                        msg = msg + suffix
+                    workflow_suffix = data.get("checkin_message_suffix", "")
+
+            # Stack both suffixes
+            if yato_suffix:
+                msg = msg + "\n\n" + yato_suffix
+            if workflow_suffix:
+                msg = msg + "\n\n" + workflow_suffix
+
             subprocess.run([str(send_message_script), target, msg], check=False)
         except:
             pass
