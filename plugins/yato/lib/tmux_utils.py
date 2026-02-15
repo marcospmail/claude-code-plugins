@@ -20,6 +20,30 @@ from dataclasses import dataclass
 from datetime import datetime
 
 
+def _build_message_with_suffixes(message: str, yato_suffix: str, workflow_suffix: str) -> str:
+    """
+    Build a message with yato-level and workflow-level suffixes stacked.
+
+    Both suffixes are appended if set (no fallback, they stack).
+    Ordering: original message, then yato-level suffix, then workflow-level suffix.
+    Each suffix is separated by a blank line.
+
+    Args:
+        message: The original message
+        yato_suffix: Yato-level suffix from defaults.conf
+        workflow_suffix: Workflow-level suffix from status.yml
+
+    Returns:
+        Message with suffixes appended
+    """
+    result = message
+    if yato_suffix:
+        result = result + "\n\n" + yato_suffix
+    if workflow_suffix:
+        result = result + "\n\n" + workflow_suffix
+    return result
+
+
 def _tmux_cmd() -> list:
     """Return tmux command with optional -L socket flag from TMUX_SOCKET env var."""
     socket = os.environ.get("TMUX_SOCKET")
@@ -240,7 +264,7 @@ class TmuxOrchestrator:
 
     # ==================== Message Sending ====================
 
-    def send_message(self, target: str, message: str, enter: bool = True, workflow_status_file: str = None) -> bool:
+    def send_message(self, target: str, message: str, enter: bool = True, workflow_status_file: str = None, _skip_suffix: bool = False) -> bool:
         """
         Send a message to a tmux target (session:window or session:window.pane).
 
@@ -257,6 +281,7 @@ class TmuxOrchestrator:
             message: The message text to send
             enter: Whether to send Enter after the message (default True)
             workflow_status_file: Path to workflow status.yml for per-project agent_message_suffix
+            _skip_suffix: Internal flag to skip suffix handling (used by notify_pm)
 
         Returns:
             True if successful, False otherwise
@@ -285,18 +310,8 @@ class TmuxOrchestrator:
             # Step 4: Brief wait for UI
             time.sleep(0.5)
 
-            # Step 4.5: Append message suffix (per-project or global fallback)
-            suffix = ""
-            if workflow_status_file:
-                from pathlib import Path
-                import yaml
-                _wf_path = Path(workflow_status_file)
-                if _wf_path.exists():
-                    with open(_wf_path) as f:
-                        data = yaml.safe_load(f)
-                    if data and isinstance(data, dict):
-                        suffix = data.get("agent_message_suffix", "")
-            if not suffix:
+            # Step 4.5: Append stacked suffixes (yato-level + workflow-level)
+            if not _skip_suffix:
                 try:
                     from lib.config import get as get_config
                 except ImportError:
@@ -306,9 +321,20 @@ class TmuxOrchestrator:
                     _cfg = importlib.util.module_from_spec(_spec)
                     _spec.loader.exec_module(_cfg)
                     get_config = _cfg.get
-                suffix = get_config("MESSAGE_SUFFIX")
-            if suffix:
-                message = message + suffix
+                yato_suffix = get_config("PM_TO_AGENTS_SUFFIX")
+
+                workflow_suffix = ""
+                if workflow_status_file:
+                    from pathlib import Path
+                    import yaml
+                    _wf_path = Path(workflow_status_file)
+                    if _wf_path.exists():
+                        with open(_wf_path) as f:
+                            data = yaml.safe_load(f)
+                        if data and isinstance(data, dict):
+                            workflow_suffix = data.get("agent_message_suffix", "")
+
+                message = _build_message_with_suffixes(message, yato_suffix, workflow_suffix)
 
             # Step 5: Send the message text as literal (-l prevents key name interpretation)
             cmd = tmux + ["send-keys", "-l", "-t", target, message]
@@ -508,7 +534,7 @@ def _get_orchestrator() -> TmuxOrchestrator:
     return _default_orchestrator
 
 
-def send_message(target: str, message: str, enter: bool = True, workflow_status_file: str = None) -> bool:
+def send_message(target: str, message: str, enter: bool = True, workflow_status_file: str = None, _skip_suffix: bool = False) -> bool:
     """
     Send a message to a tmux target.
 
@@ -519,11 +545,12 @@ def send_message(target: str, message: str, enter: bool = True, workflow_status_
         message: The message text to send
         enter: Whether to send Enter after the message (default True)
         workflow_status_file: Path to workflow status.yml for per-project agent_message_suffix
+        _skip_suffix: Internal flag to skip suffix handling (used by notify_pm)
 
     Returns:
         True if successful, False otherwise
     """
-    return _get_orchestrator().send_message(target, message, enter, workflow_status_file)
+    return _get_orchestrator().send_message(target, message, enter, workflow_status_file, _skip_suffix)
 
 
 def get_current_session() -> Optional[str]:
@@ -602,11 +629,14 @@ def restart_checkin_display(target: Optional[str] = None, yato_path: Optional[st
         return False
 
 
-def notify_pm(message: str, session: Optional[str] = None) -> bool:
+def notify_pm(message: str, session: Optional[str] = None, workflow_status_file: Optional[str] = None) -> bool:
     """
     Send a notification message to the Project Manager.
 
     PM is always at window 0, pane 1 (pane 0 is the check-ins display).
+
+    Appends stacked suffixes (yato-level AGENTS_TO_PM_SUFFIX + workflow-level
+    agent_to_pm_message_suffix) before sending.
 
     Message format conventions:
     - [DONE] - Task completed
@@ -618,6 +648,7 @@ def notify_pm(message: str, session: Optional[str] = None) -> bool:
     Args:
         message: The notification message (can include prefix like [DONE])
         session: Session name (auto-detected if not provided)
+        workflow_status_file: Path to workflow status.yml for workflow-level suffix
 
     Returns:
         True if successful, False otherwise
@@ -628,9 +659,35 @@ def notify_pm(message: str, session: Optional[str] = None) -> bool:
             print("Error: Not running in a tmux session and no session specified")
             return False
 
+    # Build message with agent→PM suffixes
+    try:
+        from lib.config import get as get_config
+    except ImportError:
+        import importlib.util
+        _cfg_path = os.path.join(os.path.dirname(__file__), "config.py")
+        _spec = importlib.util.spec_from_file_location("config", _cfg_path)
+        _cfg = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_cfg)
+        get_config = _cfg.get
+    yato_suffix = get_config("AGENTS_TO_PM_SUFFIX")
+
+    workflow_suffix = ""
+    if workflow_status_file:
+        from pathlib import Path
+        import yaml
+        _wf_path = Path(workflow_status_file)
+        if _wf_path.exists():
+            with open(_wf_path) as f:
+                data = yaml.safe_load(f)
+            if data and isinstance(data, dict):
+                workflow_suffix = data.get("agent_to_pm_message_suffix", "")
+
+    message = _build_message_with_suffixes(message, yato_suffix, workflow_suffix)
+
     # PM is always at window 0, pane 1
+    # Use _skip_suffix=True since we already handled suffixes above
     pm_target = f"{session}:0.1"
-    return send_message(pm_target, message)
+    return send_message(pm_target, message, _skip_suffix=True)
 
 
 if __name__ == "__main__":
@@ -650,6 +707,7 @@ if __name__ == "__main__":
     notify_parser = subparsers.add_parser("notify", help="Notify PM")
     notify_parser.add_argument("message", nargs="+", help="Message to send to PM")
     notify_parser.add_argument("--session", "-s", help="Session name (auto-detected if not provided)")
+    notify_parser.add_argument("--workflow-status-file", help="Path to workflow status.yml for suffix")
 
     # restart-checkin-display command
     restart_parser = subparsers.add_parser("restart-checkin-display", help="Restart check-in display")
@@ -671,7 +729,7 @@ if __name__ == "__main__":
             sys.exit(1)
     elif args.command == "notify":
         message = " ".join(args.message)
-        success = notify_pm(message, session=args.session)
+        success = notify_pm(message, session=args.session, workflow_status_file=args.workflow_status_file)
         if success:
             session = args.session or get_current_session()
             print(f"Notification sent to PM ({session}:0.1): {message}")
