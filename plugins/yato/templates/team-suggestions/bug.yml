@@ -1,0 +1,16 @@
+# Team Suggestion: Bug Fix
+# Use this template when the task involves fixing a bug or resolving an issue.
+
+name: bug
+description: Team for diagnosing and fixing bugs
+use_cases:
+  - Fixing a reported bug or regression
+  - Resolving an error or crash
+  - Debugging unexpected behavior
+  - Patching a security vulnerability
+
+agents:
+  - name: developer
+    role: developer
+    model: opus
+    description: Investigates the root cause and implements the fix
