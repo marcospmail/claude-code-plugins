@@ -21,6 +21,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
+from croniter import croniter
+
 # ==================== Time Parser ====================
 
 
@@ -108,6 +110,37 @@ def format_duration(seconds: int) -> str:
         return f"{hours}h"
 
 
+# ==================== Cron Validator ====================
+
+
+def validate_cron_expression(expr: str) -> bool:
+    """
+    Validate a cron expression using croniter.
+
+    Args:
+        expr: 5-field cron expression (minute hour day-of-month month day-of-week)
+
+    Returns:
+        True if valid
+
+    Raises:
+        ValueError: If the expression is invalid
+    """
+    fields = expr.strip().split()
+    if len(fields) != 5:
+        raise ValueError(
+            f'Cron expression must have exactly 5 fields '
+            f'(minute hour day-of-month month day-of-week). Got {len(fields)} fields.'
+        )
+    if not croniter.is_valid(expr):
+        raise ValueError(
+            f'Invalid cron expression: "{expr}". '
+            'Use 5-field format: minute hour day-of-month month day-of-week '
+            '(e.g., "0 12 * * *" for daily at noon)'
+        )
+    return True
+
+
 # ==================== Loop Manager ====================
 
 
@@ -180,6 +213,7 @@ class LoopManager:
         interval_seconds: int = 0,
         stop_after_times: Optional[int] = None,
         stop_after_seconds: Optional[int] = None,
+        cron_expression: Optional[str] = None,
     ) -> Tuple[str, Path]:
         """
         Create a new loop.
@@ -190,6 +224,7 @@ class LoopManager:
             interval_seconds: Interval between executions (0 = immediate)
             stop_after_times: Stop after N executions (required if stop_after_seconds not set)
             stop_after_seconds: Stop after N seconds (required if stop_after_times not set)
+            cron_expression: Optional 5-field cron expression for cron-based scheduling
 
         Returns:
             Tuple of (loop_id, loop_folder_path)
@@ -201,6 +236,10 @@ class LoopManager:
         if stop_after_times and stop_after_seconds:
             raise ValueError("Cannot use both --times and --for together. Choose one.")
         # Both can be None for "forever" mode (cancelled manually with /loop --cancel)
+
+        # Validate cron expression if provided
+        if cron_expression:
+            validate_cron_expression(cron_expression)
 
         self._ensure_loops_dir()
 
@@ -218,6 +257,7 @@ class LoopManager:
             "should_continue": True,
             "prompt": prompt,
             "interval_seconds": interval_seconds,
+            "cron_expression": cron_expression,
             "stop_after_times": stop_after_times,
             "stop_after_seconds": stop_after_seconds,
             "session_id": session_id,
@@ -395,8 +435,12 @@ class LoopManager:
         lines.append(f"Status: {'Running' if meta.get('should_continue') else 'Stopped'}")
         lines.append(f"Prompt: {meta.get('prompt', 'N/A')[:50]}...")
 
-        interval = meta.get("interval_seconds", 0)
-        lines.append(f"Interval: {format_duration(interval) if interval > 0 else 'immediate'}")
+        cron_expr = meta.get("cron_expression")
+        if cron_expr:
+            lines.append(f"Schedule: cron({cron_expr})")
+        else:
+            interval = meta.get("interval_seconds", 0)
+            lines.append(f"Interval: {format_duration(interval) if interval > 0 else 'immediate'}")
 
         lines.append(f"Executions: {meta.get('execution_count', 0)}")
 
@@ -434,6 +478,7 @@ def start_loop(
     times: Optional[int] = None,
     duration: Optional[str] = None,
     project_path: Optional[str] = None,
+    cron: Optional[str] = None,
 ) -> Tuple[str, Path]:
     """
     Start a new loop.
@@ -445,6 +490,7 @@ def start_loop(
         times: Stop after N executions (required if duration not set)
         duration: Stop after duration (e.g., '30m', '1h') (required if times not set)
         project_path: Project path (defaults to finding .workflow or cwd)
+        cron: Cron expression for cron-based scheduling (mutually exclusive with interval)
 
     Returns:
         Tuple of (loop_id, loop_folder_path)
@@ -464,6 +510,7 @@ def start_loop(
         interval_seconds=interval_seconds,
         stop_after_times=times,
         stop_after_seconds=duration_seconds,
+        cron_expression=cron,
     )
 
     return loop_id, loop_folder
@@ -560,6 +607,7 @@ if __name__ == "__main__":
     start_cmd.add_argument("--session", "-s", required=True, help="Session ID")
     start_cmd.add_argument("--project", "-p", help="Project path (defaults to cwd)")
     start_cmd.add_argument("--every", "-e", help="Interval (e.g., 5m)")
+    start_cmd.add_argument("--cron", "-c", help="Cron expression (e.g., '0 12 * * *')")
     start_cmd.add_argument("--times", "-t", type=int, help="Stop after N times")
     start_cmd.add_argument("--for", "-f", dest="duration", help="Stop after duration")
 
@@ -586,6 +634,15 @@ if __name__ == "__main__":
 
     elif args.action == "start":
         try:
+            # Enforce mutual exclusivity between --cron and --every
+            if args.cron and args.every:
+                print("Error: Cannot use --cron and --every together. --cron defines its own schedule.")
+                exit(1)
+
+            # Validate cron expression if provided
+            if args.cron:
+                validate_cron_expression(args.cron)
+
             loop_id, folder = start_loop(
                 prompt=args.prompt,
                 session_id=args.session,
@@ -593,6 +650,7 @@ if __name__ == "__main__":
                 times=args.times,
                 duration=args.duration,
                 project_path=args.project,
+                cron=args.cron,
             )
             print(f"Created loop: {loop_id}")
             print(f"Folder: {folder}")
@@ -616,6 +674,9 @@ if __name__ == "__main__":
             for loop in loops:
                 print(f"\n{loop['id']} [{loop['status']}]")
                 print(f"  Prompt: {loop.get('prompt', 'N/A')[:40]}...")
+                cron_expr = loop.get('cron_expression')
+                if cron_expr:
+                    print(f"  Schedule: cron({cron_expr})")
                 print(f"  Executions: {loop.get('execution_count', 0)}")
     else:
         parser.print_help()
