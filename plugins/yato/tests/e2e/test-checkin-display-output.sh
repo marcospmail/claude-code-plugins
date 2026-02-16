@@ -189,7 +189,7 @@ echo ""
 echo "Test 3: Testing display with pending check-in and daemon..."
 
 # Ask Claude to start the daemon
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py start 5 --note 'Test check-in note' --target '$SESSION_NAME:0' --workflow '001-test'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py start 5 --note 'Test check-in note' --target '$SESSION_NAME:0' --workflow '001-test'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10
@@ -249,7 +249,7 @@ echo ""
 echo "Test 4: Testing display clears properly..."
 
 # Ask Claude to cancel the daemon
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py cancel --workflow '001-test'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10

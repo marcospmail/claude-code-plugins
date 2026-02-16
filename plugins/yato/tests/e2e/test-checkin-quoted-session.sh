@@ -149,7 +149,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 EOF
 
 # Ask Claude to run the hook via bash (simulating real execution environment)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $PROJECT_ROOT && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10
@@ -199,7 +199,7 @@ echo ""
 echo "Phase 3: Testing with realistic session name..."
 
 # Ask Claude to cancel the daemon from phase 2
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test-workflow'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py cancel --workflow '001-test-workflow'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10
@@ -237,7 +237,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/checkins.json" << 'EOF'
 EOF
 
 # Ask Claude to run the hook
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_2'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $PROJECT_ROOT && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_2'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10
@@ -281,7 +281,7 @@ echo ""
 echo "Phase 4: Testing dead daemon PID detection..."
 
 # Ask Claude to cancel the daemon from phase 3
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test-workflow'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py cancel --workflow '001-test-workflow'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10
@@ -352,7 +352,7 @@ else
 fi
 
 # Ask Claude to run the hook - should start new daemon since the PID is dead
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_3'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $PROJECT_ROOT && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_3'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10
@@ -395,7 +395,7 @@ echo ""
 echo "Phase 5: Testing dead daemon with all tasks complete (no restart)..."
 
 # Ask Claude to cancel the daemon
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test-workflow'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py cancel --workflow '001-test-workflow'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10
@@ -437,7 +437,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 EOF
 
 # Ask Claude to run the hook
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_4'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $PROJECT_ROOT && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_4'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10
@@ -480,7 +480,7 @@ echo ""
 echo "Phase 6: Testing running daemon is not treated as stopped..."
 
 # Ask Claude to start a real daemon
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py start 5 --note 'Test' --target '$SESSION_NAME:0' --workflow '001-test-workflow'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py start 5 --note 'Test' --target '$SESSION_NAME:0' --workflow '001-test-workflow'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
 sleep 10

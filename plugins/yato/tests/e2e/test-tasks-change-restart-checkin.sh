@@ -144,7 +144,7 @@ echo ""
 echo "Phase 3: Testing file path detection..."
 
 # Ask Claude to run the hook with a tasks.json path
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_OK_1'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_OK_1'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -166,7 +166,7 @@ else
 fi
 
 # Ask Claude to run the hook with a non-tasks.json path
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: echo '{\"tool_input\":{\"file_path\":\"/project/src/main.py\"}}' | uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_OK_2'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && echo '{\"tool_input\":{\"file_path\":\"/project/src/main.py\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_OK_2'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -356,7 +356,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 EOF
 
 # Ask Claude to run the hook simulating a tasks.json edit
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -413,7 +413,7 @@ except:
 " 2>/dev/null)
 
 # Ask Claude to run the hook again
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_2'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_2'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -452,7 +452,7 @@ echo ""
 echo "Phase 8: No restart when all tasks completed..."
 
 # Ask Claude to cancel the running daemon first
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && uv run python $PROJECT_ROOT/lib/checkin_scheduler.py cancel --workflow '001-test-workflow'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py cancel --workflow '001-test-workflow'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -485,7 +485,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 EOF
 
 # Ask Claude to run the hook
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_3'"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | YATO_PATH='$PROJECT_ROOT' uv run python '$HOOK_SCRIPT' 2>&1 && echo 'HOOK_DONE_3'"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10

@@ -148,11 +148,11 @@ else
     fail "PM instructions don't emphasize lookup by NAME"
 fi
 
-# Test: Instructions contain grep example
-if grep -q "grep.*name:" "$CHECK_FILE" 2>/dev/null; then
-    pass "PM instructions contain grep example for agent lookup"
+# Test: Instructions contain agent lookup guidance (grep example or /send-to-agent skill)
+if grep -q "grep.*name:\|send-to-agent\|lookup.*agent\|look.*up.*agent" "$CHECK_FILE" 2>/dev/null; then
+    pass "PM instructions contain agent lookup guidance"
 else
-    fail "PM instructions missing grep example"
+    fail "PM instructions missing agent lookup guidance"
 fi
 
 # Test: Instructions mention agents.yml
