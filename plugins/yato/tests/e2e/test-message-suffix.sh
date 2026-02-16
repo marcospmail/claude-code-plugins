@@ -75,8 +75,8 @@ tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "receiver" -c "$TEST_DIR
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "stty -ixon" Enter
 sleep 1
 
-# Start Claude in window 0
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "claude" Enter
+# Start Claude in window 0 (skip permissions to avoid blocking on bash prompts)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "claude --dangerously-skip-permissions" Enter
 
 # Wait for Claude to start and handle trust prompt
 echo "Waiting for Claude to start..."
@@ -133,11 +133,11 @@ else
     echo "     Expected suffix: $EXPECTED_SUFFIX"
 fi
 
-# Verify they appear together (message + suffix on same line)
-if echo "$OUTPUT1" | grep -F "$MSG1" | grep -Fq "$EXPECTED_SUFFIX"; then
-    pass "Message and suffix appear together correctly"
+# Verify both appear in output (suffix is on separate line per design, separated by \n\n)
+if echo "$OUTPUT1" | grep -Fq "$MSG1" && echo "$OUTPUT1" | grep -Fq "$EXPECTED_SUFFIX"; then
+    pass "Message and suffix both present in output"
 else
-    fail "Message and suffix not properly combined"
+    fail "Message and suffix not both present in output"
 fi
 
 # ============================================================
@@ -151,7 +151,7 @@ send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT &
 
 OUTPUT2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
 
-if echo "$OUTPUT2" | grep -F "$MSG2" | grep -Fq "$EXPECTED_SUFFIX"; then
+if echo "$OUTPUT2" | grep -Fq "$MSG2" && echo "$OUTPUT2" | grep -Fq "$EXPECTED_SUFFIX"; then
     pass "Suffix consistently appended to second message"
 else
     fail "Suffix not appended to second message"

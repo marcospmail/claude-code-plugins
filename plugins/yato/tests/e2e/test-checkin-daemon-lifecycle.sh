@@ -29,8 +29,8 @@ echo ""
 TESTS_PASSED=0
 TESTS_FAILED=0
 
-pass() { echo "  PASS: $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
-fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
+pass() { echo "  ✅ $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
+fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 get_daemon_pid() {
     uv run python -c "
@@ -97,8 +97,8 @@ tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
 echo "  Test directory: $TEST_DIR"
 echo "  Session: $SESSION_NAME"
 
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+# Start Claude in the session (skip permissions to avoid blocking on bash prompts)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
 
 # Wait for Claude to start and handle trust prompt
 echo "  Waiting for Claude to start..."

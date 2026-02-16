@@ -219,32 +219,29 @@ def build_block_message(role: str, agents: List[Dict[str, Any]], current_name: O
     ]
 
     if is_pm:
-        # PM sees team agents and is told to delegate
+        # PM sees team agents and is told to use /send-to-agent skill
         team_agents = [a for a in agents if a.get("role") != "pm"]
 
         if team_agents:
-            lines.append("Instead, delegate work to your team agents via tmux messages.")
+            lines.append("Instead, delegate work to your team agents using the /send-to-agent skill.")
             lines.append("")
             lines.append("Your team agents:")
-            first_target = None
             first_name = None
             for agent in team_agents:
                 name = agent.get("name", "unknown")
                 agent_role = agent.get("role", "unknown")
-                target = format_target(agent)
-                if first_target is None:
-                    first_target = target
+                if first_name is None:
                     first_name = name
-                lines.append(f"  - {name} ({agent_role}) at {target}")
+                lines.append(f"  - {name} ({agent_role})")
 
             lines.append("")
             lines.append("Send a message with:")
-            lines.append("  cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/tmux_utils.py send <target> \"message\"")
+            lines.append("  /send-to-agent <agent-name> \"message\"")
 
-            if first_target:
+            if first_name:
                 lines.append("")
                 lines.append("Example:")
-                lines.append(f"  cd ${{CLAUDE_PLUGIN_ROOT}} && uv run python lib/tmux_utils.py send {first_target} \"Please implement the login feature\"")
+                lines.append(f"  /send-to-agent {first_name} \"Please implement the login feature\"")
         else:
             lines.append("")
             lines.append("No team agents found in agents.yml. Deploy agents first with the orchestrator.")
