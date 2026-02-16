@@ -100,12 +100,16 @@ def has_incomplete_tasks(workflow_path: Path) -> Tuple[bool, int]:
     return len(incomplete) > 0, len(incomplete)
 
 
-def get_checkin_interval(workflow_path: Path) -> int:
-    """Get the check-in interval from status.yml, default to 5 minutes."""
+def get_checkin_interval(workflow_path: Path) -> Optional[int]:
+    """Get the check-in interval from status.yml.
+
+    Returns None if the interval hasn't been configured yet (still placeholder "_").
+    This prevents the hook from starting the daemon before the user selects an interval.
+    """
     status_file = workflow_path / "status.yml"
 
     if not status_file.exists():
-        return 5
+        return None
 
     try:
         with open(status_file, "r") as f:
@@ -117,7 +121,7 @@ def get_checkin_interval(workflow_path: Path) -> int:
     except (ValueError, IOError, yaml.YAMLError):
         pass
 
-    return 5
+    return None
 
 
 def get_session_target(workflow_path: Path) -> str:
@@ -140,9 +144,14 @@ def get_session_target(workflow_path: Path) -> str:
     return "tmux-orc:0"
 
 
-def restart_checkin(workflow_path: Path, workflow_name: str, task_count: int) -> None:
-    """Restart the check-in daemon using Python API directly."""
+def restart_checkin(workflow_path: Path, workflow_name: str, task_count: int) -> bool:
+    """Restart the check-in daemon using Python API directly.
+
+    Returns False if the interval hasn't been configured yet.
+    """
     interval = get_checkin_interval(workflow_path)
+    if interval is None:
+        return False
     target = get_session_target(workflow_path)
 
     # Get yato path and add lib to path
@@ -165,6 +174,7 @@ def restart_checkin(workflow_path: Path, workflow_name: str, task_count: int) ->
         target=target,
         yato_path=yato_path,
     )
+    return True
 
 
 def main():
@@ -201,8 +211,9 @@ def main():
         # No incomplete tasks, nothing to restart
         return 0
 
-    # Restart the check-in daemon
-    restart_checkin(workflow_path, workflow_name, count)
+    # Restart the check-in daemon (skip if interval not configured yet)
+    if not restart_checkin(workflow_path, workflow_name, count):
+        return 0
 
     # Output a message to stderr (won't affect hook result)
     print(f"[tasks-change-hook] Started check-in daemon: {count} incomplete tasks detected", file=sys.stderr)
