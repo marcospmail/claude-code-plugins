@@ -17,6 +17,7 @@ This file tracks all end-to-end tests for the yato workflow.
 
 ### Workflow Resume
 - [x] **test-workflow-resume.sh** - Resume paused workflow (session, panes, agents, checkins, layout) - 28 assertions
+  - ⚠️ **MANUAL TEST ONLY** (`test-workflow-resume.sh.manual`): Complex integration test excluded from automated suite because it requires Claude Code running inside tmux with actual skill execution. Validation complete: All 14 pattern checklist items pass.
 
 ### Communication
 - [x] **test-notify-pm.sh** - Agent can notify PM using notify-pm.sh - 7 assertions

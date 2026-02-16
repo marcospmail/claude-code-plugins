@@ -12,6 +12,10 @@ if [[ "$1" == "--verbose" ]] || [[ "$1" == "-v" ]]; then
     VERBOSE=true
 fi
 
+# Unset CLAUDECODE to allow nested Claude sessions in tests
+# (tests launch Claude Code in tmux, which fails if CLAUDECODE=1 is inherited)
+unset CLAUDECODE
+
 export TMUX_SOCKET="yato-e2e-test"
 
 echo ""
