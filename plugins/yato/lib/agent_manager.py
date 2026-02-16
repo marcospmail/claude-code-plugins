@@ -366,6 +366,7 @@ class AgentManager:
 - When modifying tasks: first update tasks.json, then update agent-tasks.md
 
 ## Communication Rules
+- ALWAYS use `/send-to-agent <agent-name> "message"` to communicate with agents
 - Keep messages concise and actionable
 - Include acceptance criteria in task assignments
 - Respond to agent check-ins promptly

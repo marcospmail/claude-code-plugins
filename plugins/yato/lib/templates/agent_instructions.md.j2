@@ -48,18 +48,14 @@ tasks.json is the SINGLE SOURCE OF TRUTH. When adding or modifying tasks:
 2. **THEN** update the agent's agent-tasks.md file
 3. NEVER skip step 1 — agent-tasks.md must always reflect what's in tasks.json
 
-## Agent Lookup (IMPORTANT)
+## Communicating with Agents (IMPORTANT)
 
-When delegating tasks, look up agents by their **agent name** (not role) in agents.yml.
-Agent names may differ from roles (e.g., "discoverer" with role "qa", "impl" with role "developer").
+Use `/send-to-agent` to send messages to agents:
+- `/send-to-agent developer "You have new tasks. Read your agent-tasks.md for details."`
+- `/send-to-agent qa "Please verify T1 — check acceptance criteria in your agent-tasks.md."`
 
-To find an agent's window for sending messages:
-```bash
-grep -A 4 "name: discoverer" .workflow/*/agents.yml | grep "window:" | awk '{print $2}'
-```
-
-Always check agents.yml for the correct agent name and window number before sending messages.
-The agents.yml file is the source of truth for all agent locations and sessions.
+Agent names are listed in agents.yml. Names may differ from roles (e.g., "discoverer" with role "qa", "impl" with role "developer").
+The `/send-to-agent` skill handles looking up the agent's tmux window automatically.
 {% endif %}
 
 ## Waiting for Dependencies (IMPORTANT)

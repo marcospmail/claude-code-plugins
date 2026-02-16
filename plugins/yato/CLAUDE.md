@@ -262,31 +262,36 @@ uv run python lib/checkin_scheduler.py status --workflow "001-name"
 
 ## Agent Communication
 
-### Orchestrator → Agent
-```python
-from lib import send_message
-send_message("session:window", "Your message")
+### PM → Agent
+PM uses the `/send-to-agent` skill:
+```
+/send-to-agent developer "You have new tasks. Read your agent-tasks.md for details."
+/send-to-agent qa "Please verify the implementation of T1."
 ```
 
 Or via CLI:
 ```bash
-uv run python lib/tmux_utils.py send session:window "Your message"
+${CLAUDE_PLUGIN_ROOT}/bin/send-to-agent.sh <agent-name> "Your message"
 ```
 
 ### Agent → PM
-Agents report up using notification types:
+Agents use the `/notify-pm` skill:
+```
+/notify-pm [DONE] Completed task T1
+/notify-pm [BLOCKED] Need database credentials
+```
+
+Or via CLI:
 ```bash
-# From agent's terminal
 ${CLAUDE_PLUGIN_ROOT}/bin/notify-pm.sh "[DONE] Completed task"
 ```
 
-Or via Python:
-```python
-from lib import notify_pm
-notify_pm("[DONE] Completed task")
-```
-
 Notification types: DONE, BLOCKED, HELP, STATUS, PROGRESS
+
+### Orchestrator → Agent (low-level)
+```bash
+uv run python lib/tmux_utils.py send session:window "Your message"
+```
 
 ## Tmux Patterns
 

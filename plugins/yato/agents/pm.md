@@ -18,7 +18,7 @@ The Project Manager (PM) coordinates all agents, delegates tasks, and manages wo
 - Use window numbers from agents.yml when sending messages
 
 ## Communication
-- Send messages to agents via their tmux window
+- Send messages to agents using: `/send-to-agent <agent-name> "message"`
 - Receive status updates from agents via notify-pm
 - Report workflow status to the orchestrator
 
