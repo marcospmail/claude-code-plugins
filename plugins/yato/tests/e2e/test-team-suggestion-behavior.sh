@@ -70,21 +70,31 @@ start_claude_session() {
     sleep 1
 
     # Start Claude in the session
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" "claude" Enter
+    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" "claude --dangerously-skip-permissions" Enter
 
+    # Wait for Claude to start with retry loop for trust prompt
     echo "  - Waiting for Claude to start..."
-    sleep 8
-
-    # Handle trust prompt
+    local CLAUDE_READY=false
     local OUTPUT
-    OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION" -p 2>/dev/null)
-    if echo "$OUTPUT" | grep -qi "trust"; then
-        echo "  - Trust prompt found, accepting..."
-        tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" Enter
-        sleep 15
-    else
-        echo "  - No trust prompt found, continuing..."
-        sleep 5
+    for i in {1..10}; do
+        sleep 3
+        OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION" -p 2>/dev/null)
+        if echo "$OUTPUT" | grep -qi "trust"; then
+            echo "  - Trust prompt found, accepting..."
+            tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" Enter
+            sleep 15
+            CLAUDE_READY=true
+            break
+        elif echo "$OUTPUT" | grep -q "❯\|>\|Claude"; then
+            echo "  - Claude prompt detected"
+            CLAUDE_READY=true
+            break
+        fi
+    done
+
+    if [[ "$CLAUDE_READY" != "true" ]]; then
+        echo "  - No trust prompt found, waiting for Claude..."
+        sleep 10
     fi
 }
 
@@ -95,7 +105,7 @@ start_claude_session() {
 find_pm_session() {
     local EXCLUDE="$1"
     local PM_SESSION=""
-    for i in 1 2 3; do
+    for i in {1..6}; do
         # PM sessions contain _001- pattern (project-slug_workflow-name)
         PM_SESSION=$(tmux -L "$TMUX_SOCKET" list-sessions 2>/dev/null | cut -d: -f1 | grep -v "^${EXCLUDE}$" | grep "_[0-9][0-9][0-9]-" | head -1)
         if [[ -n "$PM_SESSION" ]]; then
@@ -133,9 +143,9 @@ sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_1" Enter
 
 # Wait for Claude to process the skill (analysis, workflow creation, PM deployment)
-# The skill runs analysis via sub-agent, creates files, then deploys PM (~90s)
+# The skill runs analysis via sub-agent, creates files, then deploys PM (~120s)
 echo "  - Waiting for skill to create workflow and deploy PM..."
-sleep 90
+sleep 120
 
 # Find the PM session that was spawned
 PM_SESSION_1=$(find_pm_session "$SESSION_1")
@@ -146,7 +156,7 @@ if [[ -n "$PM_SESSION_1" ]]; then
 
     # Wait for PM Claude to start and read workflow context
     echo "  - Waiting for PM to read context and propose team..."
-    sleep 45
+    sleep 60
 
     # Send confirmation so PM proceeds to team proposal
     echo "  - Sending confirmation to PM..."
@@ -237,7 +247,7 @@ sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_2" Enter
 
 echo "  - Waiting for skill to create workflow and deploy PM..."
-sleep 90
+sleep 120
 
 # Find PM session
 PM_SESSION_2=$(find_pm_session "$SESSION_2")
@@ -247,12 +257,12 @@ if [[ -n "$PM_SESSION_2" ]]; then
     ALL_SESSIONS+=("$PM_SESSION_2")
 
     echo "  - Waiting for PM to read context and propose team..."
-    sleep 45
+    sleep 60
 
     # Send confirmation
     echo "  - Sending confirmation to PM..."
     tmux -L "$TMUX_SOCKET" send-keys -t "$PM_SESSION_2:0.1" "Yes, that's correct. Please propose a team." Enter
-    sleep 45
+    sleep 60
 
     OUTPUT_2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$PM_SESSION_2:0.1" -p -S -200)
 
@@ -313,7 +323,7 @@ sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_3" Enter
 
 echo "  - Waiting for skill to create workflow and deploy PM..."
-sleep 90
+sleep 120
 
 # Find PM session
 PM_SESSION_3=$(find_pm_session "$SESSION_3")
@@ -323,12 +333,12 @@ if [[ -n "$PM_SESSION_3" ]]; then
     ALL_SESSIONS+=("$PM_SESSION_3")
 
     echo "  - Waiting for PM to read context and propose team..."
-    sleep 45
+    sleep 60
 
     # Send confirmation
     echo "  - Sending confirmation to PM..."
     tmux -L "$TMUX_SOCKET" send-keys -t "$PM_SESSION_3:0.1" "Yes, that's correct. Please propose a team." Enter
-    sleep 45
+    sleep 60
 
     OUTPUT_3=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$PM_SESSION_3:0.1" -p -S -200)
 
