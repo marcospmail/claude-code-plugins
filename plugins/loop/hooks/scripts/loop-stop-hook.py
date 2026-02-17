@@ -21,8 +21,11 @@ Exit codes:
 import json
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 import os
+
+from croniter import croniter
 
 # Add lib to path for imports - use parent.parent to get to loop plugin root
 PLUGIN_ROOT = Path(__file__).parent.parent.parent
@@ -41,7 +44,6 @@ LOG_FILE = Path.home() / ".loop" / "loop-stop-hook.log"
 
 def debug_log(message):
     """Always log to file for debugging."""
-    from datetime import datetime
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%H:%M:%S")
     with open(LOG_FILE, "a") as f:
@@ -156,21 +158,51 @@ def main():
         # Output nothing to allow Claude to stop
         return
 
-    # Get interval and prompt
+    # Get interval, cron, and prompt
     interval_seconds = meta.get("interval_seconds", 0)
+    cron_expression = meta.get("cron_expression")
     prompt = meta.get("prompt", "")
 
     if not prompt:
         # No prompt, allow stop
         return
 
-    # Record this execution FIRST (so we know the execution count)
-    meta = manager.record_execution(loop_folder)
-    exec_count = meta.get("execution_count", 0)
+    if cron_expression:
+        # Cron mode: always wait for next cron match (even first execution)
+        try:
+            cron = croniter(cron_expression, datetime.now())
+            next_time = cron.get_next(datetime)
+        except (ValueError, KeyError, TypeError) as e:
+            debug_log(f"[CRON] Error parsing cron expression '{cron_expression}': {e}")
+            return
 
-    # Sleep for the interval ONLY if this is NOT the first execution
-    # First execution should happen immediately, subsequent ones wait
-    if interval_seconds > 0 and exec_count > 1:
+        sleep_seconds = max(0, (next_time - datetime.now()).total_seconds())
+        debug_log(f"[CRON] Next execution at {next_time}, sleeping {sleep_seconds:.0f}s")
+        time.sleep(sleep_seconds)
+        debug_log(f"[CRON] Sleep completed, checking conditions")
+
+        # Re-check stop conditions AFTER sleeping (user might have cancelled during sleep)
+        meta = manager.load_meta(loop_folder)
+        if not meta.get("should_continue", False):
+            # Loop was cancelled during sleep, allow stop
+            return
+
+        should_stop, reason = manager.check_stop_conditions(meta)
+        if should_stop:
+            manager.stop_loop(loop_folder, reason)
+            return
+
+        # Record execution AFTER cron sleep (prevents inflated count if killed during sleep)
+        meta = manager.record_execution(loop_folder)
+        exec_count = meta.get("execution_count", 0)
+    else:
+        # Record execution for interval mode
+        meta = manager.record_execution(loop_folder)
+        exec_count = meta.get("execution_count", 0)
+
+    if not cron_expression and interval_seconds > 0 and exec_count > 1:
+        # Interval mode: Sleep ONLY if this is NOT the first execution
+        # First execution should happen immediately, subsequent ones wait
         debug_log(f"[SLEEP] Waiting {interval_seconds}s before next execution")
         time.sleep(interval_seconds)
         debug_log(f"[WAKE] Sleep completed, checking conditions")
@@ -191,7 +223,15 @@ def main():
     stop_times = meta.get("stop_after_times")
     stop_seconds = meta.get("stop_after_seconds")
 
-    if stop_times:
+    if cron_expression:
+        if stop_times:
+            status = f"[Loop {exec_count}/{stop_times}, cron: {cron_expression}]"
+        elif stop_seconds:
+            elapsed = meta.get("total_elapsed_seconds", 0)
+            status = f"[Loop {exec_count}, {format_duration(elapsed)}/{format_duration(stop_seconds)}, cron: {cron_expression}]"
+        else:
+            status = f"[Loop {exec_count}, cron: {cron_expression}]"
+    elif stop_times:
         status = f"[Loop {exec_count}/{stop_times}]"
     elif stop_seconds:
         elapsed = meta.get("total_elapsed_seconds", 0)

@@ -1,10 +1,10 @@
 ---
 name: loop
-description: Start a repeating prompt loop that executes at intervals. Use for periodic tasks like checking logs, running tests, or monitoring status. Supports --times N (stop after N executions), --for DURATION (stop after time elapsed), or forever mode. Cancel with /loop --cancel.
+description: Start a repeating prompt loop that executes at intervals or cron schedules. Use for periodic tasks like checking logs, running tests, or monitoring status. Supports --times N (stop after N executions), --for DURATION (stop after time elapsed), or forever mode. Use --cron for specific times (e.g., "0 12 * * *" for daily at noon). Cancel with /loop --cancel.
 allowed-tools: Bash, AskUserQuestion
 user-invocable: true
 context: fork
-argument-hint: "[prompt] [--times N | --for DURATION | --forever] [--every INTERVAL]"
+argument-hint: "[prompt] [--times N | --for DURATION | --forever] [--every INTERVAL | --cron CRON_EXPR]"
 ---
 
 # Loop - Repeating Prompt Execution
@@ -29,9 +29,12 @@ Parse the user's request to extract:
 - **--for DURATION**: Stop after duration like "30m", "1h" (mutually exclusive with --times)
 - **--forever**: Run indefinitely until manually cancelled
 - **--every INTERVAL**: Interval between executions like "5m", "30s" (optional, defaults to immediate)
+- **--cron EXPRESSION**: Standard 5-field cron expression (minute hour day-of-month month day-of-week). Mutually exclusive with --every.
 - **--cancel**: Cancel the current loop instead of starting one
 
-**IMPORTANT**: Cannot use both `--times` and `--for`. If none of `--times`, `--for`, or `--forever` is provided, use AskUserQuestion to let the user choose (see "Handle Missing Stop Condition" below).
+**IMPORTANT**: Cannot use both `--times` and `--for`. Cannot use both `--cron` and `--every`. If none of `--times`, `--for`, or `--forever` is provided, use AskUserQuestion to let the user choose (see "Handle Missing Stop Condition" below).
+
+**NOTE**: With `--cron`, the first execution waits for the next cron match (unlike `--every` where the first run is immediate).
 
 ## Handle Missing Stop Condition
 
@@ -121,6 +124,13 @@ PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager
   --session "$CLAUDE_CODE_SESSION_ID" \
   --project "$PROJECT_DIR" \
   --every "INTERVAL"  # Optional
+
+# With cron schedule
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "PROMPT_HERE" \
+  --session "$CLAUDE_CODE_SESSION_ID" \
+  --project "$PROJECT_DIR" \
+  --cron "CRON_EXPRESSION" \
+  --times N  # Optional stop condition
 ```
 
 ### Examples
@@ -137,11 +147,25 @@ PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager
 
 # Run forever every 10 minutes (cancel with /loop --cancel)
 PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check for new deployments" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --every "10m"
+
+# Cron: daily at noon
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "0 12 * * *"
+
+# Cron: every 5 minutes
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "*/5 * * * *"
+
+# Cron: 9am & 5pm on weekdays, run 10 times
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "0 9,17 * * 1-5" --times 10
+
+# Cron: daily at noon for 7 days
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "0 12 * * *" --for "168h"
 ```
 
 ## Execute First Iteration Immediately
 
 **CRITICAL**: After creating the loop, you MUST immediately execute the prompt yourself. Do NOT just output a confirmation message. The Stop hook will handle subsequent executions after you finish.
+
+**Exception - Cron mode**: With `--cron`, the first execution waits for the next cron match. You should still output a confirmation message showing when the next execution will happen, but do NOT execute the prompt immediately. The Stop hook will handle the first execution at the scheduled cron time.
 
 ### Step 1: Brief confirmation
 Output a SHORT confirmation (1-2 lines max):
@@ -226,6 +250,28 @@ The Stop hook will:
 2. Run: PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check logs" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --every "5m"
 3. Output: "Loop started (1/?): check logs"
 4. IMMEDIATELY check logs (execute the prompt NOW)
+</action>
+</example>
+
+<example>
+<input>/loop "check system health" --cron "0 12 * * *"</input>
+<action>
+1. Extract: prompt="check system health", cron="0 12 * * *"
+2. Missing stop condition - use AskUserQuestion to ask how long to run
+3. If user selects "Run forever":
+   PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "0 12 * * *"
+4. Output: "Loop started: check system health (cron: 0 12 * * *). First execution will run at next cron match."
+5. NOTE: With --cron, first execution waits for next cron match (not immediate)
+</action>
+</example>
+
+<example>
+<input>/loop "check system health" --cron "*/5 * * * *" --times 3</input>
+<action>
+1. Extract: prompt="check system health", cron="*/5 * * * *", times=3
+2. Run: PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "*/5 * * * *" --times 3
+3. Output: "Loop started (1/3): check system health (cron: */5 * * * *). First execution will run at next cron match."
+4. NOTE: With --cron, first execution waits for next cron match (not immediate)
 </action>
 </example>
 </examples>
