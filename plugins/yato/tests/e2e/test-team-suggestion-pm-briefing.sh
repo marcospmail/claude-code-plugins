@@ -84,9 +84,9 @@ results = {
     'has_team_suggestions_path': 'templates/team-suggestions/' in content,
     'has_yaml_mention': '.yml' in content and 'team-suggestions' in content,
     'has_template_instruction': 'starting point' in content or 'suggestion' in content.lower(),
-    'has_backward_compat': 'not mandatory' in content or 'from scratch' in content,
-    'has_development_example': 'development.yml' in content,
-    'has_bug_example': 'bug.yml' in content
+    'has_backward_compat': 'from scratch' in content,
+    'has_ask_user_question': 'Which team template would you like to use' in content,
+    'has_custom_option': 'Custom' in content
 }
 print('BRIEFING_CHECK:' + json.dumps(results))
 \""
@@ -115,10 +115,10 @@ else
     fail "PM briefing does not reference templates/team-suggestions/ directory"
 fi
 
-if grep -q "development.yml\|bug.yml" "$ORCH_FILE" 2>/dev/null; then
-    pass "PM briefing mentions template file examples (development.yml, bug.yml)"
+if grep -q "\.yml" "$ORCH_FILE" 2>/dev/null && grep -q "team-suggestions" "$ORCH_FILE" 2>/dev/null; then
+    pass "PM briefing references .yml template files in team-suggestions directory"
 else
-    fail "PM briefing does not mention template file examples"
+    fail "PM briefing does not reference .yml template files"
 fi
 
 if grep -q "starting point\|suggestion" "$ORCH_FILE" 2>/dev/null; then
@@ -134,10 +134,24 @@ else
 fi
 
 # Verify the template reference is in step 5 (team proposal section)
-if grep -q "TEAM SUGGESTION TEMPLATES" "$ORCH_FILE" 2>/dev/null; then
-    pass "PM briefing has TEAM SUGGESTION TEMPLATES section"
+if grep -q "TEAM TEMPLATE SELECTION" "$ORCH_FILE" 2>/dev/null; then
+    pass "PM briefing has TEAM TEMPLATE SELECTION section"
 else
-    fail "PM briefing missing TEAM SUGGESTION TEMPLATES section"
+    fail "PM briefing missing TEAM TEMPLATE SELECTION section"
+fi
+
+# Verify PM briefing instructs to use AskUserQuestion for template choice
+if grep -q "Which team template would you like to use" "$ORCH_FILE" 2>/dev/null; then
+    pass "PM briefing instructs AskUserQuestion for template selection"
+else
+    fail "PM briefing missing AskUserQuestion for template selection"
+fi
+
+# Verify Custom option is included
+if grep -q "Custom" "$ORCH_FILE" 2>/dev/null; then
+    pass "PM briefing includes Custom option for building from scratch"
+else
+    fail "PM briefing missing Custom option"
 fi
 
 # Verify template path uses yato_path variable

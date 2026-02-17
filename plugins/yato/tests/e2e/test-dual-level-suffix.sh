@@ -13,7 +13,7 @@
 # 4. PM -> Agent: Neither set (clean message)
 # 5. Agent -> PM: Both suffixes stacked (yato AGENTS_TO_PM_SUFFIX + workflow agent_to_pm_message_suffix)
 # 6. Agent -> PM: Only yato suffix (AGENTS_TO_PM_SUFFIX only)
-# 7. Check-in -> PM: Both suffixes stacked (AGENTS_TO_PM_SUFFIX + checkin_message_suffix)
+# 7. Check-in -> PM: Both suffixes stacked (CHECKIN_TO_PM_SUFFIX + checkin_message_suffix)
 # 8. Ordering: Yato suffix always before workflow suffix
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -58,9 +58,11 @@ send_to_claude() {
 set_config() {
     local pm_suffix="$1"
     local agent_suffix="$2"
+    local checkin_suffix="${3:-$agent_suffix}"
     cat > "$TEST_DIR/config/defaults.conf" <<EOF
 PM_TO_AGENTS_SUFFIX="$pm_suffix"
 AGENTS_TO_PM_SUFFIX="$agent_suffix"
+CHECKIN_TO_PM_SUFFIX="$checkin_suffix"
 DEFAULT_SESSION="test"
 DEFAULT_ORCHESTRATOR_WINDOW="0"
 LOG_DIR=".yato/logs"
@@ -381,7 +383,7 @@ else
 fi
 
 # ============================================================
-# Test 7: Check-in -> PM: Both suffixes stacked
+# Test 7: Check-in -> PM: Both suffixes stacked (CHECKIN_TO_PM_SUFFIX + checkin_message_suffix)
 # ============================================================
 echo ""
 echo "======================================================================"
@@ -389,7 +391,10 @@ echo "  Test 7: Check-in -> PM: Both suffixes stacked"
 echo "======================================================================"
 echo ""
 
+YATO_CHECKIN_SUFFIX="--YATO_CHECKIN_GLOBAL--"
 CHECKIN_WF_SUFFIX="--CHECKIN_WF_LOCAL--"
+
+set_config "" "" "$YATO_CHECKIN_SUFFIX"
 set_workflow_suffix "checkin_message_suffix" "$CHECKIN_WF_SUFFIX"
 
 # Clear PM pane (0.1)
@@ -398,14 +403,14 @@ sleep 1
 
 MSG7="CHECKIN_DUAL_$(date +%s)"
 
-# Simulate what the checkin daemon does: read both suffixes and stack, send to PM pane (0.1)
+# Simulate what the checkin daemon does: read CHECKIN_TO_PM_SUFFIX and stack with workflow suffix, send to PM pane (0.1)
 send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"
 import yaml
 from pathlib import Path
 from lib.config import load_config, get as get_config
 load_config(force_reload=True)
 from lib.tmux_utils import send_message
-yato_suffix = get_config('AGENTS_TO_PM_SUFFIX')
+yato_suffix = get_config('CHECKIN_TO_PM_SUFFIX')
 sf = Path('$STATUS_FILE')
 data = yaml.safe_load(sf.read_text())
 wf_suffix = data.get('checkin_message_suffix', '')
@@ -430,10 +435,10 @@ else
     fail "Check-in message not delivered"
 fi
 
-if echo "$OUTPUT7" | grep -Fq -- "$YATO_AGENT_SUFFIX"; then
-    pass "Yato-level AGENTS_TO_PM_SUFFIX in check-in message"
+if echo "$OUTPUT7" | grep -Fq -- "$YATO_CHECKIN_SUFFIX"; then
+    pass "Yato-level CHECKIN_TO_PM_SUFFIX in check-in message"
 else
-    fail "Yato-level AGENTS_TO_PM_SUFFIX missing from check-in"
+    fail "Yato-level CHECKIN_TO_PM_SUFFIX missing from check-in"
 fi
 
 if echo "$OUTPUT7" | grep -Fq -- "$CHECKIN_WF_SUFFIX"; then
