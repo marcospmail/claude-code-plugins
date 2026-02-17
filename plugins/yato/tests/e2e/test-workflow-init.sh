@@ -62,21 +62,30 @@ echo "  - Project: $TEST_DIR"
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
 
 # Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
 
-# Wait for Claude to start
+# Wait for Claude to start with retry loop for trust prompt
 echo "  - Waiting for Claude to start..."
-sleep 8
+CLAUDE_READY=false
+for i in {1..10}; do
+    sleep 3
+    OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+    if echo "$OUTPUT" | grep -qi "trust"; then
+        echo "  - Trust prompt found, accepting..."
+        tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+        sleep 15
+        CLAUDE_READY=true
+        break
+    elif echo "$OUTPUT" | grep -q "❯\|>\|Claude"; then
+        echo "  - Claude prompt detected"
+        CLAUDE_READY=true
+        break
+    fi
+done
 
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
+if [[ "$CLAUDE_READY" != "true" ]]; then
+    echo "  - No trust prompt found, waiting for Claude..."
+    sleep 10
 fi
 
 echo "  ✓ Test environment ready"
@@ -204,11 +213,11 @@ else
     fail "PM instructions.md not found"
 fi
 
-# Test PM identity has agents_registry reference
-if grep -q "agents_registry:" "$PM_DIR/identity.yml" 2>/dev/null; then
-    pass "PM identity.yml references agents_registry"
+# Test PM identity has session and window fields (for role detection)
+if grep -q "session:" "$PM_DIR/identity.yml" 2>/dev/null && grep -q "window:" "$PM_DIR/identity.yml" 2>/dev/null; then
+    pass "PM identity.yml has session and window fields"
 else
-    fail "PM identity.yml should reference agents_registry"
+    fail "PM identity.yml should have session and window fields"
 fi
 
 # ============================================================

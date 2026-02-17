@@ -4,10 +4,9 @@
 # E2E Test: PM file access guard via workflow-based role detection (agents.yml)
 #
 # This test verifies that the pm-file-access-guard hook detects the PM role
-# by matching the current tmux window/pane against agents.yml, WITHOUT
-# relying on the AGENT_ROLE environment variable.
+# by matching the current tmux window/pane against agents.yml.
 #
-# This is the primary detection path in production: Claude Code runs in a
+# This is the detection path in production: Claude Code runs in a
 # tmux pane, the hook reads agents.yml to find which agent is in that pane.
 #
 # Phases:
@@ -41,9 +40,12 @@ fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    # Restore cached hook if we replaced it
+    # Restore cached hooks if we replaced them
     if [[ -n "$CACHE_HOOK_DIR" && -f "$CACHE_HOOK_DIR/pm-file-access-guard.py.bak" ]]; then
         mv "$CACHE_HOOK_DIR/pm-file-access-guard.py.bak" "$CACHE_HOOK_DIR/pm-file-access-guard.py"
+    fi
+    if [[ -n "$CACHE_HOOK_DIR" && -f "$CACHE_HOOK_DIR/role_detection.py.bak" ]]; then
+        mv "$CACHE_HOOK_DIR/role_detection.py.bak" "$CACHE_HOOK_DIR/role_detection.py"
     fi
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
@@ -79,35 +81,41 @@ mkdir -p "$TEST_DIR/.workflow/001-test-workflow/agents/developer"
 mkdir -p "$TEST_DIR/src"
 
 # Create agents.yml: PM at window 0 pane 0, developer at window 1
-cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << 'EOF'
+cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << EOF
 pm:
   name: PM
   role: pm
-  session: test-session
+  session: $SESSION_NAME
   window: 0
   pane: 0
   model: opus
 agents:
   - name: developer
     role: developer
-    session: test-session
+    session: $SESSION_NAME
     window: 1
     model: opus
 EOF
 
-# Create PM identity.yml (for reference, not used by new detection)
-cat > "$TEST_DIR/.workflow/001-test-workflow/agents/pm/identity.yml" << 'EOF'
+# Create identity.yml files with session/window (used by role detection)
+cat > "$TEST_DIR/.workflow/001-test-workflow/agents/pm/identity.yml" << EOF
 name: PM
 role: pm
-can_modify_code: false
 model: opus
+window: 0
+session: $SESSION_NAME
+workflow: 001-test-workflow
+can_modify_code: false
 EOF
 
-# Create developer identity.yml
-cat > "$TEST_DIR/.workflow/001-test-workflow/agents/developer/identity.yml" << 'EOF'
+cat > "$TEST_DIR/.workflow/001-test-workflow/agents/developer/identity.yml" << EOF
 name: developer
 role: developer
 model: opus
+window: 1
+session: $SESSION_NAME
+workflow: 001-test-workflow
+can_modify_code: true
 EOF
 
 # Create workflow status
@@ -127,7 +135,7 @@ echo ""
 # ============================================================
 # Phase 3: PM detected via agents.yml from PM's tmux pane
 # ============================================================
-echo "Phase 3: Testing PM detected via agents.yml (no AGENT_ROLE)..."
+echo "Phase 3: Testing PM detected via agents.yml..."
 
 # Create a tmux session - default is window 0 pane 0 (matching PM in agents.yml)
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
@@ -136,9 +144,9 @@ tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-workflow
 
 # Run the hook from inside the tmux pane (window 0 pane 0 = PM)
-# Critically: unset AGENT_ROLE to ensure detection comes from agents.yml, not env var
+# Run hook from inside the tmux pane - detection comes from agents.yml pane matching
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" \
-    "unset AGENT_ROLE && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 # Wait for hook to complete
 MAX_WAIT=30
@@ -176,18 +184,18 @@ echo ""
 echo "Phase 3b: Testing PM detection at pane 1 (production layout)..."
 
 # Update agents.yml to match production: PM at window 0 pane 1
-cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << 'EOF'
+cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << EOF
 pm:
   name: PM
   role: pm
-  session: test-session
+  session: $SESSION_NAME
   window: 0
   pane: 1
   model: opus
 agents:
   - name: developer
     role: developer
-    session: test-session
+    session: $SESSION_NAME
     window: 1
     model: opus
 EOF
@@ -200,7 +208,7 @@ rm -f "$OUTPUT_FILE"
 
 # Run hook from pane 1 of window 0 (PM's actual pane in production)
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.1" \
-    "unset AGENT_ROLE && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -222,11 +230,11 @@ else
     fail "Hook did not produce output (timeout)"
 fi
 
-# Verify pane 0 of window 0 is NOT detected as PM
+# Verify pane 0 of window 0 is ALSO detected as PM (detection is window-level, not pane-level)
 rm -f "$OUTPUT_FILE"
 
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.0" \
-    "unset AGENT_ROLE && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -239,28 +247,28 @@ done
 
 if [[ -f "$OUTPUT_FILE" ]]; then
     HOOK_OUTPUT=$(cat "$OUTPUT_FILE")
-    if echo "$HOOK_OUTPUT" | grep -q '"continue": true\|"continue":true'; then
-        pass "Pane 0 of window 0 is NOT detected as PM - allowed"
+    if echo "$HOOK_OUTPUT" | grep -q '"block"'; then
+        pass "Pane 0 of window 0 also detected as PM (window-level detection)"
     else
-        fail "Pane 0 should not be PM (got: $HOOK_OUTPUT)"
+        fail "Pane 0 of window 0 should also be PM since detection is window-level (got: $HOOK_OUTPUT)"
     fi
 else
     fail "Hook did not produce output (timeout)"
 fi
 
 # Restore original agents.yml for subsequent tests (PM at pane 0 for simplicity)
-cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << 'EOF'
+cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << EOF
 pm:
   name: PM
   role: pm
-  session: test-session
+  session: $SESSION_NAME
   window: 0
   pane: 0
   model: opus
 agents:
   - name: developer
     role: developer
-    session: test-session
+    session: $SESSION_NAME
     window: 1
     model: opus
 EOF
@@ -281,7 +289,7 @@ echo "Phase 4: Testing PM allowed to edit workflow files via agents.yml..."
 rm -f "$OUTPUT_FILE"
 
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" \
-    "unset AGENT_ROLE && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -307,7 +315,7 @@ fi
 rm -f "$OUTPUT_FILE"
 
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" \
-    "unset AGENT_ROLE && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/prd.md\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/prd.md\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -345,7 +353,7 @@ rm -f "$OUTPUT_FILE"
 # Run hook from window 1 (which maps to developer in agents.yml)
 # Developer should be allowed to edit any file
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" \
-    "unset AGENT_ROLE && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -381,7 +389,7 @@ sleep 3
 rm -f "$OUTPUT_FILE"
 
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:2" \
-    "unset AGENT_ROLE && echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -429,6 +437,14 @@ CACHE_HOOK_DIR="${CACHE_INSTALL_PATH:+$CACHE_INSTALL_PATH/hooks/scripts}"
 if [[ -n "$CACHE_HOOK_DIR" && -f "$CACHE_HOOK_DIR/pm-file-access-guard.py" ]]; then
     cp "$CACHE_HOOK_DIR/pm-file-access-guard.py" "$CACHE_HOOK_DIR/pm-file-access-guard.py.bak"
     cp "$HOOK_SCRIPT" "$CACHE_HOOK_DIR/pm-file-access-guard.py"
+    # Also copy the shared role_detection module
+    ROLE_DETECTION_SRC="$PROJECT_ROOT/hooks/scripts/role_detection.py"
+    if [[ -f "$ROLE_DETECTION_SRC" ]]; then
+        if [[ -f "$CACHE_HOOK_DIR/role_detection.py" ]]; then
+            cp "$CACHE_HOOK_DIR/role_detection.py" "$CACHE_HOOK_DIR/role_detection.py.bak"
+        fi
+        cp "$ROLE_DETECTION_SRC" "$CACHE_HOOK_DIR/role_detection.py"
+    fi
     RESTORE_CACHE=true
     pass "Installed dev hook into plugin cache"
 else
@@ -447,7 +463,6 @@ if [[ "$RESTORE_CACHE" == true ]]; then
     # Set WORKFLOW_NAME in tmux env (standard in yato sessions)
     tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-workflow
 
-    # Start Claude WITHOUT AGENT_ROLE - detection must come from agents.yml
     # Unset CLAUDECODE to allow nested Claude launch (when test runs from within Claude Code)
     tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "unset CLAUDECODE && export WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter 2>/dev/null
 
@@ -506,12 +521,15 @@ if [[ "$RESTORE_CACHE" == true ]]; then
     if [[ "$FOUND" == true ]] || echo "$CLAUDE_OUTPUT" | grep -qi "PM FILE ACCESS DENIED\|delegate.*agent\|PM.*NOT allowed"; then
         pass "Real Claude session: PM blocked from writing source file via workflow detection"
     else
-        fail "Real Claude session: PM should be blocked (no AGENT_ROLE set, detection via agents.yml)"
+        fail "Real Claude session: PM should be blocked (detection via agents.yml)"
     fi
 
-    # Restore the original cached hook
+    # Restore the original cached hooks
     if [[ -f "$CACHE_HOOK_DIR/pm-file-access-guard.py.bak" ]]; then
         mv "$CACHE_HOOK_DIR/pm-file-access-guard.py.bak" "$CACHE_HOOK_DIR/pm-file-access-guard.py"
+    fi
+    if [[ -f "$CACHE_HOOK_DIR/role_detection.py.bak" ]]; then
+        mv "$CACHE_HOOK_DIR/role_detection.py.bak" "$CACHE_HOOK_DIR/role_detection.py"
     fi
 fi
 

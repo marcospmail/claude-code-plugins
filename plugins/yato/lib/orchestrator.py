@@ -330,6 +330,14 @@ class Orchestrator:
             result["agents"].append(agent.to_dict())
         result["pm_target"] = pm_target
 
+        # Update PM identity.yml with session/window info (same as agent_manager does for agents)
+        pm_identity = project_dir / ".workflow" / (workflow_name or "") / "agents" / "pm" / "identity.yml"
+        if pm_identity.exists():
+            content = pm_identity.read_text()
+            content = content.replace("window:", f"window: 0")
+            content = content.replace("session:", f"session: {session_name}")
+            pm_identity.write_text(content)
+
         return result
 
     def start_pm_with_planning_briefing(self, pm_target: str, project_path: str) -> bool:

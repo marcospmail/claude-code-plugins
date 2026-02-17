@@ -601,6 +601,16 @@ def run_daemon(
         if should_stop():
             break
 
+        # Check if all tasks are complete (every polling cycle)
+        incomplete = get_incomplete_tasks()
+        if incomplete == 0:
+            send_message(
+                "All tasks complete! Workflow marked as completed. Check-in loop stopped."
+            )
+            update_status_completed()
+            stop_loop("All tasks complete")
+            break
+
         # Check if it's time for a check-in
         if time_until_next_checkin <= 0:
             # Mark current check-in as done

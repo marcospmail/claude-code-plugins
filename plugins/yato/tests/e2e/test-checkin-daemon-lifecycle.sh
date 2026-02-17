@@ -98,7 +98,8 @@ echo "  Test directory: $TEST_DIR"
 echo "  Session: $SESSION_NAME"
 
 # Start Claude in the session (skip permissions to avoid blocking on bash prompts)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
+# Unset CLAUDECODE to allow nested Claude launch (when test runs from within Claude Code)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "unset CLAUDECODE && claude --dangerously-skip-permissions" Enter
 
 # Wait for Claude to start and handle trust prompt
 echo "  Waiting for Claude to start..."

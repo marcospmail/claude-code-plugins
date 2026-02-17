@@ -84,7 +84,8 @@ EOF
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
 
 # Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+# Unset CLAUDECODE to allow nested Claude launch (when test runs from within Claude Code)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "unset CLAUDECODE && claude --dangerously-skip-permissions" Enter
 
 # Wait for Claude to start and handle trust prompt
 echo "  - Waiting for Claude to start..."

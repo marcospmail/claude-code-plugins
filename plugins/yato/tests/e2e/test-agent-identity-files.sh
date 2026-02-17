@@ -84,20 +84,30 @@ fi
 pass "Tmux session created"
 
 # Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
 
+# Wait for Claude to start with retry loop for trust prompt
 echo "  - Waiting for Claude to initialize..."
-sleep 8
+CLAUDE_READY=false
+for i in {1..10}; do
+    sleep 3
+    OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+    if echo "$OUTPUT" | grep -qi "trust"; then
+        echo "  - Trust prompt found, accepting..."
+        tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+        sleep 15
+        CLAUDE_READY=true
+        break
+    elif echo "$OUTPUT" | grep -q "❯\|>\|Claude"; then
+        echo "  - Claude prompt detected"
+        CLAUDE_READY=true
+        break
+    fi
+done
 
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
+if [[ "$CLAUDE_READY" != "true" ]]; then
+    echo "  - No trust prompt found, waiting for Claude..."
+    sleep 10
 fi
 
 pass "Claude CLI started"
@@ -150,11 +160,11 @@ if [[ -f "$PM_IDENTITY" ]]; then
         fail "PM identity missing model field"
     fi
 
-    # Test 4: PM has agents_registry reference
-    if grep -q "agents_registry:" "$PM_IDENTITY" || grep -q "agents:" "$PM_IDENTITY"; then
-        pass "PM identity references agents"
+    # Test 4: PM has session and window fields (for role detection)
+    if grep -q "session:" "$PM_IDENTITY" && grep -q "window:" "$PM_IDENTITY"; then
+        pass "PM identity has session and window fields"
     else
-        fail "PM identity should reference agents/registry"
+        fail "PM identity should have session and window fields"
     fi
 else
     fail "PM identity.yml not found at $PM_IDENTITY"
