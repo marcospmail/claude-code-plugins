@@ -449,14 +449,11 @@ def run_daemon(
                 break
         return False
 
-    last_known_incomplete = [None]  # mutable container for closure
-
     def get_incomplete_tasks():
         """Get count of incomplete tasks, with retry to avoid race conditions.
 
         On file read/parse errors (e.g. another process writing tasks.json),
-        retries up to 3 times. Returns last known good count if all retries fail,
-        preventing false 'all tasks complete' stops.
+        retries up to 3 times. Returns -1 if all retries fail (ERROR state).
         """
         if not tasks_file.exists():
             return 0
@@ -466,15 +463,17 @@ def run_daemon(
                     data = json.load(f)
                 count = len([t for t in data.get("tasks", [])
                              if t.get("status") in ("pending", "in_progress", "blocked")])
-                last_known_incomplete[0] = count
                 return count
             except (json.JSONDecodeError, IOError):
                 if attempt < 2:
                     time.sleep(0.1)
-        # All retries failed - return last known count to avoid false stops
-        if last_known_incomplete[0] is not None:
-            return last_known_incomplete[0]
         return -1
+
+    def _task_info_str(count: int) -> str:
+        """Format task count for messages. -1 means ERROR."""
+        if count < 0:
+            return "ERROR: tasks.json is broken/unreadable"
+        return f"{count} tasks remaining"
 
     def mark_checkin_done(checkin_id: str):
         """Mark a check-in as done."""
@@ -495,7 +494,7 @@ def run_daemon(
             "id": checkin_id,
             "status": "pending",
             "scheduled_for": next_time.isoformat(),
-            "note": f"Auto check-in ({get_incomplete_tasks()} tasks remaining)",
+            "note": f"Auto check-in ({_task_info_str(get_incomplete_tasks())})",
             "target": target,
             "created_at": datetime.now().isoformat(),
         })
@@ -541,7 +540,7 @@ def run_daemon(
         try:
             msg = message
 
-            # Yato-level suffix (AGENTS_TO_PM_SUFFIX from defaults.conf)
+            # Yato-level suffix (CHECKIN_TO_PM_SUFFIX from defaults.conf)
             yato_suffix = ""
             try:
                 config_file = Path(yato_path) / "config" / "defaults.conf"
@@ -549,7 +548,7 @@ def run_daemon(
                     import re as _re
                     for line in config_file.read_text().splitlines():
                         line = line.strip()
-                        if line.startswith("AGENTS_TO_PM_SUFFIX="):
+                        if line.startswith("CHECKIN_TO_PM_SUFFIX="):
                             raw = line.split("=", 1)[1].strip()
                             if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'"):
                                 raw = raw[1:-1]
@@ -622,9 +621,8 @@ def run_daemon(
 
             if incomplete != 0:
                 # Send check-in message
-                task_info = f"{incomplete} tasks remaining" if incomplete > 0 else "tasks file unreadable"
                 send_message(
-                    f"Time for check-in! ({task_info}). "
+                    f"Time for check-in! ({_task_info_str(incomplete)}). "
                     "REMINDER: If you received any [DONE] or [BLOCKED] notifications from agents, "
                     "update tasks.json immediately (change task status to 'completed' or 'blocked')."
                 )

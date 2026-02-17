@@ -156,6 +156,7 @@ session: "myproject"
 agent_message_suffix: ""              # Workflow-level: PM → agent messages (read fresh each send)
 checkin_message_suffix: ""             # Workflow-level: check-in daemon → PM messages (read fresh each send)
 agent_to_pm_message_suffix: ""         # Workflow-level: agent → PM messages via notify_pm (read fresh each send)
+user_to_pm_message_suffix: ""          # Workflow-level: user prompt → PM context (read fresh each submit)
 ```
 
 ### Dual-Level Message Suffix System
@@ -166,19 +167,23 @@ Suffixes use a **stacking** system: both yato-level (global) and workflow-level 
 
 **Yato-level** (in `config/defaults.conf`):
 - `PM_TO_AGENTS_SUFFIX=""` — appended to PM/orchestrator → agent messages
-- `AGENTS_TO_PM_SUFFIX=""` — appended to agent → PM messages (notify_pm, check-in daemon)
+- `AGENTS_TO_PM_SUFFIX=""` — appended to agent → PM messages (notify_pm)
+- `CHECKIN_TO_PM_SUFFIX=""` — appended to check-in daemon → PM messages
+- `USER_TO_PM_SUFFIX=""` — injected into PM context when user submits a prompt
 
 **Workflow-level** (in `status.yml`):
 - `agent_message_suffix` — PM → agent messages (workflow-specific)
 - `checkin_message_suffix` — check-in daemon → PM messages (workflow-specific)
 - `agent_to_pm_message_suffix` — agent → PM via notify_pm (workflow-specific)
+- `user_to_pm_message_suffix` — user prompt → PM context (workflow-specific)
 
 **Direction mapping:**
 | Direction | Yato-level (defaults.conf) | Workflow-level (status.yml) |
 |-----------|---------------------------|----------------------------|
 | PM → Agent | `PM_TO_AGENTS_SUFFIX` | `agent_message_suffix` |
 | Agent → PM | `AGENTS_TO_PM_SUFFIX` | `agent_to_pm_message_suffix` |
-| Check-in → PM | `AGENTS_TO_PM_SUFFIX` | `checkin_message_suffix` |
+| Check-in → PM | `CHECKIN_TO_PM_SUFFIX` | `checkin_message_suffix` |
+| User → PM | `USER_TO_PM_SUFFIX` | `user_to_pm_message_suffix` |
 
 **team.yml** defines the proposed team structure:
 ```yaml
