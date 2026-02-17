@@ -6,14 +6,17 @@
 # 1. Read JSON from stdin (PreToolUse Bash hook)
 # 2. Extract command from tool_input
 # 3. If command doesn't contain checkin cancel patterns → allow (exit 0)
-# 4. Check if running as an agent (AGENT_ROLE env var or identity.yml)
+# 4. Detect role via identity.yml scanning (shared role_detection module)
 # 5. If agent → block (exit 2)
 # 6. Otherwise → allow (it's the user)
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 INPUT=$(cat)
 
 # Extract the command from tool_input
-COMMAND=$(echo "$INPUT" | uv run python -c "
+COMMAND=$(echo "$INPUT" | uv run --directory "$PLUGIN_ROOT" python -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -33,39 +36,19 @@ if ! echo "$COMMAND" | grep -qE '(checkin_scheduler\.py\s+cancel|checkin\s+cance
     exit 0
 fi
 
-# Command is a checkin cancel - check if we're an agent
+# Command is a checkin cancel - detect role via identity.yml scanning
+ROLE=$(HOOK_CWD="${HOOK_CWD:-$(pwd)}" uv run --directory "$PLUGIN_ROOT" python -c "
+import sys
+sys.path.insert(0, '$SCRIPT_DIR')
+from role_detection import detect_role
+role = detect_role()
+if role:
+    print(role)
+" 2>/dev/null)
 
-# Check AGENT_ROLE environment variable
-if [[ -n "$AGENT_ROLE" ]]; then
+if [[ -n "$ROLE" ]]; then
     echo "BLOCKED: Agents cannot cancel check-ins. Only the user can cancel check-ins manually via /cancel-checkin."
     exit 2
-fi
-
-# Check tmux AGENT_ROLE if in tmux
-if [[ -n "$TMUX" ]]; then
-    TMUX_ROLE=$(tmux showenv AGENT_ROLE 2>/dev/null | grep '=' | cut -d= -f2)
-    if [[ -n "$TMUX_ROLE" ]]; then
-        echo "BLOCKED: Agents cannot cancel check-ins. Only the user can cancel check-ins manually via /cancel-checkin."
-        exit 2
-    fi
-fi
-
-# Check for identity.yml in current directory
-if [[ -f "identity.yml" ]]; then
-    ROLE=$(uv run python -c "
-import yaml, sys
-try:
-    with open('identity.yml') as f:
-        data = yaml.safe_load(f)
-    if data and 'role' in data:
-        print(data['role'])
-except:
-    pass
-" 2>/dev/null)
-    if [[ -n "$ROLE" ]]; then
-        echo "BLOCKED: Agents cannot cancel check-ins. Only the user can cancel check-ins manually via /cancel-checkin."
-        exit 2
-    fi
 fi
 
 # Not an agent - allow

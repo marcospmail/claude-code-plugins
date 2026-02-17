@@ -96,18 +96,16 @@ When you see "continue":
 3. Do NOTHING else
 EOF
 
-# Create PM identity.yml
+# Create PM identity.yml (same format as agent template - session/window filled by orchestrator)
 cat > "$WORKFLOW_PATH/agents/pm/identity.yml" <<EOF
 name: PM
 role: pm
-agent_id: pending
-can_modify_code: false
 model: opus
-pm_window: none
-agents_registry: ../../agents.yml
-instructions: ./instructions.md
-constraints: ./constraints.md
-created_at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+window:
+session:
+workflow: $WORKFLOW_NAME
+# Values: true (developer), test-only (qa), false (reviewer/pm)
+can_modify_code: false
 EOF
 
 # Create PM constraints.md with actual PM constraints

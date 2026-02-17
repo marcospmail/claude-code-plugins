@@ -14,71 +14,22 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import yaml
 
-def get_agent_role() -> Optional[str]:
-    """
-    Determine the current agent's role.
-
-    Checks:
-    1. AGENT_ROLE environment variable (set by tmux or directly)
-    2. Tmux session environment (if in tmux)
-    3. identity.yml in current directory
-    """
-    # Check environment variable first
-    # Note: If AGENT_ROLE is in environ but empty, that means "no role" (don't check tmux)
-    if "AGENT_ROLE" in os.environ:
-        role = os.environ["AGENT_ROLE"]
-        if role:
-            return role.lower()
-        # Explicitly empty - return None without checking tmux
-        return None
-
-    # Try to get from tmux env (only if AGENT_ROLE not explicitly set)
-    if os.environ.get("TMUX"):
-        try:
-            result = subprocess.run(
-                ["tmux", "showenv", "AGENT_ROLE"],
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
-            if result.returncode == 0 and "=" in result.stdout:
-                role = result.stdout.strip().split("=", 1)[1]
-                if role:
-                    return role.lower()
-        except Exception:
-            pass
-
-    # Check for identity.yml in current directory
-    identity_file = Path.cwd() / "identity.yml"
-    if identity_file.exists():
-        try:
-            import yaml
-            with open(identity_file) as f:
-                data = yaml.safe_load(f)
-            if data and "role" in data:
-                return data["role"].lower()
-        except Exception:
-            pass
-
-    return None
+from role_detection import detect_role, find_project_root_from_cwd
 
 
-def get_agent_name() -> Optional[str]:
-    """Get the current agent's name from AGENT_NAME env or tmux env."""
-    if "AGENT_NAME" in os.environ:
-        name = os.environ["AGENT_NAME"]
-        if name:
-            return name
-        return None
+def _get_workflow_name() -> Optional[str]:
+    """Get workflow name from environment or tmux env."""
+    name = os.environ.get("WORKFLOW_NAME")
+    if name:
+        return name
 
     if os.environ.get("TMUX"):
         try:
             result = subprocess.run(
-                ["tmux", "showenv", "AGENT_NAME"],
-                capture_output=True,
-                text=True,
-                timeout=2,
+                ["tmux", "showenv", "WORKFLOW_NAME"],
+                capture_output=True, text=True, timeout=2,
             )
             if result.returncode == 0 and "=" in result.stdout:
                 name = result.stdout.strip().split("=", 1)[1]
@@ -99,7 +50,7 @@ def find_workflow_path() -> Optional[Path]:
     2. Tmux WORKFLOW_NAME env var
     3. Most recent numbered workflow folder (fallback)
     """
-    project_root = find_project_root()
+    project_root = find_project_root_from_cwd()
     if not project_root:
         return None
 
@@ -107,55 +58,17 @@ def find_workflow_path() -> Optional[Path]:
     if not workflow_dir.exists():
         return None
 
-    # Try WORKFLOW_NAME env var
-    workflow_name = os.environ.get("WORKFLOW_NAME")
+    workflow_name = _get_workflow_name()
     if workflow_name:
         path = workflow_dir / workflow_name
         if path.exists():
             return path
-
-    # Try tmux env
-    if os.environ.get("TMUX"):
-        try:
-            result = subprocess.run(
-                ["tmux", "showenv", "WORKFLOW_NAME"],
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
-            if result.returncode == 0 and "=" in result.stdout:
-                workflow_name = result.stdout.strip().split("=", 1)[1]
-                if workflow_name:
-                    path = workflow_dir / workflow_name
-                    if path.exists():
-                        return path
-        except Exception:
-            pass
 
     # Fallback: most recent numbered folder
     workflows = sorted(workflow_dir.glob("[0-9][0-9][0-9]-*"), reverse=True)
     if workflows and workflows[0].is_dir():
         return workflows[0]
 
-    return None
-
-
-def find_project_root() -> Optional[Path]:
-    """Find the project root by looking for .workflow/ directory.
-
-    Uses HOOK_CWD env var (set by hooks.json) to get the original working
-    directory before uv run --directory changes CWD to the plugin directory.
-    Falls back to Path.cwd() if HOOK_CWD is not set.
-    """
-    hook_cwd = os.environ.get("HOOK_CWD")
-    if hook_cwd:
-        current = Path(hook_cwd)
-    else:
-        current = Path.cwd()
-    while current != current.parent:
-        if (current / ".workflow").exists():
-            return current
-        current = current.parent
     return None
 
 
@@ -170,7 +83,6 @@ def load_agents_from_yml(workflow_path: Path) -> List[Dict[str, Any]]:
         return []
 
     try:
-        import yaml
         with open(agents_file) as f:
             data = yaml.safe_load(f)
         if not data:
@@ -276,7 +188,7 @@ def main():
         return 0
 
     # Check if current agent has a role (PM, developer, QA, etc.)
-    role = get_agent_role()
+    role = detect_role()
 
     if not role:
         # Not an agent (user/orchestrator) - allow Task tool
@@ -284,15 +196,13 @@ def main():
         return 0
 
     # Agent detected - block Task tool
-    current_name = get_agent_name()
-
-    # Try to load teammates from agents.yml
+    # Try to load teammates from agents.yml for the block message
     agents = []
     workflow_path = find_workflow_path()
     if workflow_path:
         agents = load_agents_from_yml(workflow_path)
 
-    message = build_block_message(role, agents, current_name)
+    message = build_block_message(role, agents, None)
 
     output = {
         "decision": "block",

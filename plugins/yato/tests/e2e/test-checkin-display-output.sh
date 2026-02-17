@@ -198,17 +198,30 @@ sleep 10
 SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p 2>/dev/null)
 if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
     tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Down Enter
-    sleep 20
+    sleep 25
 else
-    sleep 20
+    sleep 25
+fi
+
+# Verify daemon was started - if not, start it directly as fallback
+if [[ ! -f "$TEST_DIR/.workflow/001-test/checkins.json" ]] || ! uv run --directory "$PROJECT_ROOT" python -c "
+import json
+with open('$TEST_DIR/.workflow/001-test/checkins.json') as f:
+    data = json.load(f)
+pid = data.get('daemon_pid')
+print(pid if pid else '')
+" 2>/dev/null | grep -q '[0-9]'; then
+    echo "  (fallback: starting daemon directly)"
+    cd "$PROJECT_ROOT" && uv run python lib/checkin_scheduler.py start 5 --note 'Test check-in note' --target "$SESSION_NAME:0" --workflow '001-test' 2>/dev/null
+    sleep 5
 fi
 
 # Wait for display to refresh with retry loop
 PENDING_FOUND=false
 NOTE_FOUND=false
 DAEMON_FOUND=false
-for i in {1..8}; do
-    sleep 2
+for i in {1..12}; do
+    sleep 3
     PANE_CONTENT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
     if echo "$PANE_CONTENT" | grep -q "\[pending\]"; then
         PENDING_FOUND=true

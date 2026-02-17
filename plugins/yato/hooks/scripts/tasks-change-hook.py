@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """
-PostToolUse hook that detects changes to tasks.json and restarts check-ins if needed.
+PostToolUse hook that detects changes to tasks.json and manages check-in daemon lifecycle.
 
 When tasks.json is modified:
-1. Check if the check-in daemon is stopped (PID not running)
-2. Check if there are incomplete tasks (pending, in_progress, blocked)
-3. If both conditions are true, restart the check-in daemon
+1. If daemon is running → do nothing
+2. If daemon is dead + incomplete tasks → restart daemon
+3. If daemon is dead + all tasks complete → cleanup stale state (clear daemon_pid,
+   cancel pending entries, update status.yml to completed, add audit entry)
 
-This handles the scenario where:
-- Check-in stops (tasks complete or manually cancelled)
-- New task is added to tasks.json
-- Check-in should automatically restart to monitor progress
+This handles:
+- Auto-restart when check-in stops and new tasks appear
+- Stale state cleanup when daemon dies with all tasks already complete
 """
 
 import json
 import os
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -177,6 +179,72 @@ def restart_checkin(workflow_path: Path, workflow_name: str, task_count: int) ->
     return True
 
 
+def cleanup_stale_state(workflow_path: Path) -> bool:
+    """Clean up stale daemon state when daemon is dead and all tasks are complete.
+
+    Performs:
+    - Clears daemon_pid from checkins.json
+    - Marks pending check-in entries as cancelled
+    - Adds 'stale-state-cleaned' audit entry to checkins.json
+    - Updates status.yml to 'completed'
+
+    Returns True if cleanup was performed, False if no stale state existed.
+    """
+    checkins_file = workflow_path / "checkins.json"
+
+    if not checkins_file.exists():
+        return False
+
+    try:
+        with open(checkins_file, "r") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return False
+
+    # Only clean up if daemon_pid is set (stale state exists)
+    if data.get("daemon_pid") is None:
+        return False
+
+    now = datetime.now().isoformat()
+
+    # Clear daemon_pid
+    data["daemon_pid"] = None
+
+    # Mark pending entries as cancelled
+    for c in data.get("checkins", []):
+        if c.get("status") == "pending":
+            c["status"] = "cancelled"
+            c["cancelled_at"] = now
+
+    # Add audit entry
+    data.setdefault("checkins", []).append({
+        "id": f"stale-state-cleaned-{int(datetime.fromisoformat(now).timestamp())}",
+        "status": "stale-state-cleaned",
+        "note": "Stale state cleaned: daemon was dead with all tasks complete",
+        "created_at": now,
+    })
+
+    # Save modified checkins.json
+    with open(checkins_file, "w") as f:
+        json.dump(data, f, indent=2)
+
+    # Update status.yml to 'completed'
+    status_file = workflow_path / "status.yml"
+    if status_file.exists():
+        try:
+            with open(status_file, "r") as f:
+                content = f.read()
+            content = re.sub(r"^status:.*$", "status: completed", content, flags=re.MULTILINE)
+            if "completed_at:" not in content:
+                content = content.rstrip() + "\ncompleted_at: " + now + "\n"
+            with open(status_file, "w") as f:
+                f.write(content)
+        except IOError:
+            pass
+
+    return True
+
+
 def main():
     try:
         # Read hook input from stdin
@@ -207,16 +275,17 @@ def main():
 
     # Check if there are incomplete tasks
     has_incomplete, count = has_incomplete_tasks(workflow_path)
-    if not has_incomplete:
-        # No incomplete tasks, nothing to restart
+
+    if has_incomplete:
+        # Dead daemon + incomplete tasks → restart daemon
+        if not restart_checkin(workflow_path, workflow_name, count):
+            return 0
+        print(f"[tasks-change-hook] Started check-in daemon: {count} incomplete tasks detected", file=sys.stderr)
         return 0
 
-    # Restart the check-in daemon (skip if interval not configured yet)
-    if not restart_checkin(workflow_path, workflow_name, count):
-        return 0
-
-    # Output a message to stderr (won't affect hook result)
-    print(f"[tasks-change-hook] Started check-in daemon: {count} incomplete tasks detected", file=sys.stderr)
+    # Dead daemon + no incomplete tasks → cleanup stale state
+    if cleanup_stale_state(workflow_path):
+        print(f"[tasks-change-hook] Cleaned up stale daemon state: all tasks complete", file=sys.stderr)
 
     return 0
 
