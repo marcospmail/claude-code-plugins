@@ -1,250 +1,159 @@
 # YAWF New Project - Examples
 
-## Example 1: Simple Web Application
+## Example 1: Full Args with Project Name
 
 <example>
-<scenario>User wants to create a new web application for a to-do list</scenario>
+<scenario>User provides project name and description</scenario>
 <action>
 
-**User:** "I want to start a new to-do list web app"
+**User:** `/yato-new-project tictactoe a simple tic-tac-toe game`
 
 **Assistant:**
-1. "What would you like to name the tmux session for this project?"
-   **User:** "todo-app"
 
-2. "Where should the project be located?"
-   **User:** "~/projects/todo-app"
+1. Parse args: PROJECT_NAME = "tictactoe", REQUEST = "a simple tic-tac-toe game"
 
-3. Deploy the PM:
+2. Create project directory:
 ```bash
-uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm todo-app -p ~/projects/todo-app
+PROJECT_PATH="$HOME/dev/tictactoe"
+mkdir -p "$PROJECT_PATH"
+PROJECT_SLUG="tictactoe"
 ```
 
-4. Copy attach command:
+3. Create workflow folder:
 ```bash
-echo "tmux attach-session -t todo-app" | pbcopy
+TITLE="a simple tic-tac-toe"
+WORKFLOW_NAME="001-a-simple-tic-tac-toe"
 ```
 
-5. Inform user:
+4. Save request to status.yml
+
+5. Deploy PM:
+```bash
+SESSION_NAME="tictactoe_001-a-simple-tic-tac-toe"
+uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
 ```
-Session created: todo-app
-Project path: ~/projects/todo-app
-Attach command copied to clipboard!
 
-To connect to your session:
-  tmux attach-session -t todo-app
+6. Output:
+```
+Project created at: ~/dev/tictactoe
 
-Or simply paste from clipboard (Cmd+V)
+Session ready!
+
+Paste and press Enter to connect: (already copied to clipboard)
+tmux attach -t tictactoe_001-a-simple-tic-tac-toe
+
+The PM has your request and will continue from there.
 ```
 </action>
 </example>
 
-## Example 2: Microservice Project
+## Example 2: Description Only (Name Derived)
 
 <example>
-<scenario>User wants to create a new authentication microservice</scenario>
+<scenario>User provides only a description, project name is derived</scenario>
 <action>
 
-**User:** "Create a new auth service for our platform"
+**User:** `/yato-new-project a recipe sharing app`
 
 **Assistant:**
-1. "What should we name this session?"
-   **User:** "auth-service"
 
-2. "Where should this microservice be located?"
-   **User:** "~/work/microservices/auth-service"
+1. Parse args: no explicit name, derive PROJECT_NAME = "recipe-sharing-app", REQUEST = "a recipe sharing app"
 
-3. Deploy:
+2. Create project directory:
 ```bash
-uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm auth-service -p ~/work/microservices/auth-service
+PROJECT_PATH="$HOME/dev/recipe-sharing-app"
+mkdir -p "$PROJECT_PATH"
+PROJECT_SLUG="recipe-sharing-app"
 ```
 
-4. Copy:
+3. Create workflow, save request
+
+4. Deploy PM:
 ```bash
-echo "tmux attach-session -t auth-service" | pbcopy
+SESSION_NAME="recipe-sharing-app_001-a-recipe-sharing-app"
+uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "001-a-recipe-sharing-app"
 ```
 
 5. Output:
 ```
-Session created: auth-service
-Project path: ~/work/microservices/auth-service
-Attach command copied to clipboard!
+Project created at: ~/dev/recipe-sharing-app
 
-To connect to your session:
-  tmux attach-session -t auth-service
+Session ready!
 
-Or simply paste from clipboard (Cmd+V)
+Paste and press Enter to connect: (already copied to clipboard)
+tmux attach -t recipe-sharing-app_001-a-recipe-sharing-app
+
+The PM has your request and will continue from there.
 ```
 </action>
 </example>
 
-## Example 3: Mobile App Backend
+## Example 3: No Args (Ask for Name Only)
 
 <example>
-<scenario>User is starting a backend API for a mobile application</scenario>
+<scenario>User provides no arguments at all</scenario>
 <action>
 
-**User:** "I need a backend for my fitness tracking app"
+**User:** `/yato-new-project`
 
 **Assistant:**
-1. "What name would you like for the session?"
-   **User:** "fitness-api"
 
-2. "Where should we set up the project?"
-   **User:** "~/projects/fitness-tracker/backend"
+1. No arguments - ask for project name only:
+   "What should the project be called?"
+   **User:** "weather-dashboard"
 
-3. Deploy:
+2. PROJECT_NAME = "weather-dashboard", REQUEST is empty
+
+3. Create project directory:
 ```bash
-uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm fitness-api -p ~/projects/fitness-tracker/backend
+PROJECT_PATH="$HOME/dev/weather-dashboard"
+mkdir -p "$PROJECT_PATH"
 ```
 
-4. Copy:
+4. Create workflow with default title "new-project"
+
+5. Skip status.yml update (no request)
+
+6. Deploy PM:
 ```bash
-echo "tmux attach-session -t fitness-api" | pbcopy
+SESSION_NAME="weather-dashboard_001-new-project"
+uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "001-new-project"
 ```
 
-5. Response:
+7. Output:
 ```
-Session created: fitness-api
-Project path: ~/projects/fitness-tracker/backend
-Attach command copied to clipboard!
+Project created at: ~/dev/weather-dashboard
 
-To connect to your session:
-  tmux attach-session -t fitness-api
+Session ready!
 
-Or simply paste from clipboard (Cmd+V)
+Paste and press Enter to connect: (already copied to clipboard)
+tmux attach -t weather-dashboard_001-new-project
+
+The PM will ask you what you want to build.
 ```
 </action>
 </example>
 
-## Example 4: Client Project with Specific Naming
+## Example 4: In Tmux with Full Args
 
 <example>
-<scenario>User is creating a project for a client with specific requirements</scenario>
+<scenario>User runs the skill from inside tmux with full arguments</scenario>
 <action>
 
-**User:** "Set up a new project for Acme Corp's dashboard"
+**User:** (inside tmux) `/yato-new-project blog-engine a markdown-powered blog`
 
 **Assistant:**
-1. "What should the session be named?"
-   **User:** "acme-dashboard"
 
-2. "Where should this be located?"
-   **User:** "~/clients/acme-corp/dashboard"
-
-3. Deploy:
+1. Check tmux → IN_TMUX
+2. PROJECT_NAME = "blog-engine", REQUEST = "a markdown-powered blog"
+3. Create ~/dev/blog-engine/
+4. Create workflow, save request
+5. Deploy PM
+6. Switch client (seamless):
 ```bash
-uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm acme-dashboard -p ~/clients/acme-corp/dashboard
+tmux switch-client -t "blog-engine_001-a-markdown-powered-blog"
 ```
 
-4. Copy:
-```bash
-echo "tmux attach-session -t acme-dashboard" | pbcopy
-```
-
-5. Output:
-```
-Session created: acme-dashboard
-Project path: ~/clients/acme-corp/dashboard
-Attach command copied to clipboard!
-
-To connect to your session:
-  tmux attach-session -t acme-dashboard
-
-Or simply paste from clipboard (Cmd+V)
-```
+PM reads status.yml, sees the request, and proceeds.
 </action>
 </example>
-
-## Example 5: Quick Setup with Defaults
-
-<example>
-<scenario>User wants to start quickly with minimal questions</scenario>
-<action>
-
-**User:** "Quick start a new project called 'blog-engine' in ~/projects"
-
-**Assistant:**
-(Infer defaults and confirm)
-
-"I'll create a session named 'blog-engine' at ~/projects/blog-engine. Is that correct?"
-**User:** "Yes"
-
-Deploy:
-```bash
-uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm blog-engine -p ~/projects/blog-engine
-```
-
-Copy:
-```bash
-echo "tmux attach-session -t blog-engine" | pbcopy
-```
-
-Output:
-```
-Session created: blog-engine
-Project path: ~/projects/blog-engine
-Attach command copied to clipboard!
-
-To connect to your session:
-  tmux attach-session -t blog-engine
-
-Or simply paste from clipboard (Cmd+V)
-```
-</action>
-</example>
-
-## Example 6: Handling Path Creation
-
-<example>
-<scenario>User specifies a path that doesn't exist yet</scenario>
-<action>
-
-**User:** "Create a new e-commerce platform"
-
-**Assistant:**
-1. "Session name?"
-   **User:** "ecommerce-platform"
-
-2. "Project path?"
-   **User:** "~/new-ventures/ecommerce"
-
-3. Create directory first:
-```bash
-mkdir -p ~/new-ventures/ecommerce
-```
-
-4. Deploy:
-```bash
-uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm ecommerce-platform -p ~/new-ventures/ecommerce
-```
-
-5. Copy:
-```bash
-echo "tmux attach-session -t ecommerce-platform" | pbcopy
-```
-
-6. Response:
-```
-Created directory: ~/new-ventures/ecommerce
-Session created: ecommerce-platform
-Project path: ~/new-ventures/ecommerce
-Attach command copied to clipboard!
-
-To connect to your session:
-  tmux attach-session -t ecommerce-platform
-
-Or simply paste from clipboard (Cmd+V)
-```
-</action>
-</example>
-
-## Common Patterns Summary
-
-| User Intent | Session Name | Project Path |
-|-------------|--------------|--------------|
-| Personal project | `project-name` | `~/projects/project-name` |
-| Work project | `project-name` | `~/work/project-name` |
-| Client work | `client-project` | `~/clients/client-name/project` |
-| Microservice | `service-name` | `~/work/services/service-name` |
-| Experiment | `experiment-name` | `~/experiments/experiment-name` |

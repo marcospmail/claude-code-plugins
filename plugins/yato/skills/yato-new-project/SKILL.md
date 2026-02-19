@@ -1,7 +1,7 @@
 ---
 name: yato-new-project
 description: Start a new project from scratch using Yato (Yet Another Tmux Orchestrator). Creates a new tmux session with a Project Manager agent. Use when user wants to begin a new codebase or project.
-allowed-tools: Bash,Read,Write,AskUserQuestion
+allowed-tools: Bash,Read,AskUserQuestion
 user-invocable: true
 disable-model-invocation: false
 argument-hint: "[project-name] [what to build]"
@@ -11,9 +11,9 @@ argument-hint: "[project-name] [what to build]"
 
 <context>
 This skill creates a NEW project from scratch. It will:
-1. Ask what to build (if not provided)
+1. Parse or ask for the project name
 2. Create a project folder in ~/dev/
-3. Deploy a PM to coordinate the work
+3. Deploy a PM to coordinate the work (PM handles asking what to build)
 </context>
 
 <instructions>
@@ -34,11 +34,11 @@ Arguments format: `[project-name] [what to build]`
 Examples:
 - `/yato-new-project tictactoe a simple tic-tac-toe game` → name=tictactoe, request="a simple tic-tac-toe game"
 - `/yato-new-project a recipe app` → name derived from request, request="a recipe app"
-- `/yato-new-project` → ask user
+- `/yato-new-project` → ask user for project name only
 
 **If first word looks like a project name (single word, kebab-case)**: Use it as PROJECT_NAME, rest is request.
 **Otherwise**: Derive PROJECT_NAME from request (first 2-3 words, kebab-case).
-**If no arguments**: Just ask "What do you want to build?" - NO preamble, NO explanation, just the question.
+**If no arguments**: Ask only "What should the project be called?" - NO preamble, NO explanation, just the question. Do NOT ask what to build — the PM will handle that.
 
 ## Step 2: Create Project Directory
 
@@ -52,7 +52,12 @@ PROJECT_SLUG=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | tr '._ ' '-')
 ## Step 3: Create Workflow Folder
 
 ```bash
-TITLE=$(echo "$REQUEST" | cut -d' ' -f1-4)
+if [[ -n "$REQUEST" ]]; then
+    TITLE=$(echo "$REQUEST" | cut -d' ' -f1-4)
+else
+    TITLE="new-project"
+fi
+
 WORKFLOW_NAME=$(${CLAUDE_PLUGIN_ROOT}/bin/init-workflow.sh "$PROJECT_PATH" "$TITLE" 2>/dev/null | grep "^Workflow:" | awk '{print $2}')
 
 if [[ -z "$WORKFLOW_NAME" ]]; then
@@ -60,10 +65,11 @@ if [[ -z "$WORKFLOW_NAME" ]]; then
 fi
 ```
 
-## Step 4: Save Request to status.yml
+## Step 4: Save Request to status.yml (if provided)
 
 ```bash
-uv run --directory ${CLAUDE_PLUGIN_ROOT} python -c "
+if [[ -n "$REQUEST" ]]; then
+    uv run --directory ${CLAUDE_PLUGIN_ROOT} python -c "
 content = '''$REQUEST'''
 indented = '\n'.join('  ' + line if line else '' for line in content.split('\n'))
 with open('$PROJECT_PATH/.workflow/$WORKFLOW_NAME/status.yml', 'r') as f:
@@ -72,6 +78,7 @@ yml = yml.replace('initial_request: \"\"', 'initial_request: |\n' + indented)
 with open('$PROJECT_PATH/.workflow/$WORKFLOW_NAME/status.yml', 'w') as f:
     f.write(yml)
 "
+fi
 ```
 
 ## Step 5: Deploy PM
@@ -93,7 +100,7 @@ tmux switch-client -t "$SESSION_NAME"
 echo "tmux attach -t $SESSION_NAME" | pbcopy
 ```
 
-Output:
+**If request was provided**, output:
 ```
 Project created at: ~/dev/[PROJECT_NAME]
 
@@ -103,6 +110,18 @@ Paste and press Enter to connect: (already copied to clipboard)
 tmux attach -t [SESSION_NAME]
 
 The PM has your request and will continue from there.
+```
+
+**If no request**, output:
+```
+Project created at: ~/dev/[PROJECT_NAME]
+
+Session ready!
+
+Paste and press Enter to connect: (already copied to clipboard)
+tmux attach -t [SESSION_NAME]
+
+The PM will ask you what you want to build.
 ```
 </instructions>
 
@@ -133,12 +152,13 @@ The PM has your request and will continue from there.
 <example>
 <scenario>User runs /yato-new-project (no args)</scenario>
 <action>
-1. Ask: "What do you want to build?"
-2. User: "a todo list app"
+1. Ask: "What should the project be called?"
+2. User: "todo-list-app"
 3. PROJECT_NAME = "todo-list-app"
-4. REQUEST = "a todo list app"
+4. REQUEST is empty - do NOT save to status.yml
 5. Create ~/dev/todo-list-app/
-6. Deploy PM and connect
+6. Create workflow, deploy PM
+7. PM asks what to build
 </action>
 </example>
 </examples>

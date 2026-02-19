@@ -1,13 +1,14 @@
 #!/bin/bash
 # test-project-discovery.sh
 #
-# E2E Test: Project Discovery in yato-existing-project Skill
+# E2E Test: yato-existing-project Skill Structure
 #
 # Verifies that:
-# 1. The skill uses LLM (Explore agent) for project discovery instead of bash scripts
+# 1. The skill file exists and has correct frontmatter
 # 2. The skill does NOT contain redundant project type detection bash commands
-# 3. The skill instructs using Task tool with Explore agent for codebase analysis
-# 4. The workflow creates proper context files
+# 3. The skill is a thin launcher (uses deploy-pm, init-workflow.sh)
+# 4. The skill does NOT do pre-PM analysis or file creation
+# 5. The workflow creation infrastructure works (init-workflow.sh)
 #
 # IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
 # Phase 5 workflow creation goes through Claude running inside tmux.
@@ -20,7 +21,7 @@ SESSION_NAME="e2e-$TEST_NAME-$$"
 export TMUX_SOCKET="yato-e2e-test"
 
 echo "======================================================================"
-echo "  E2E Test: Project Discovery in yato-existing-project"
+echo "  E2E Test: yato-existing-project Skill Structure"
 echo "======================================================================"
 echo ""
 echo "Test directory: $TEST_DIR"
@@ -72,7 +73,7 @@ echo ""
 
 # Should NOT have inline project type detection like:
 # test -f package.json && echo "Node.js project detected"
-# These are redundant because Explore agent handles discovery
+# These are redundant because PM handles discovery
 
 if grep -q 'test -f package.json && echo.*project detected' "$SKILL_FILE"; then
     fail "Skill still contains 'test -f package.json && echo project detected' - redundant"
@@ -99,53 +100,75 @@ else
 fi
 
 # ============================================================
-# PHASE 3: Verify Explore agent is used for discovery
+# PHASE 3: Verify skill is a thin launcher (deploy-pm + init-workflow)
 # ============================================================
 echo ""
-echo "Phase 3: Explore agent usage for discovery..."
+echo "Phase 3: Thin launcher pattern..."
 echo ""
 
+if grep -q 'deploy-pm' "$SKILL_FILE"; then
+    pass "Skill uses deploy-pm command"
+else
+    fail "Skill should use deploy-pm to launch PM"
+fi
+
+if grep -q 'init-workflow.sh' "$SKILL_FILE"; then
+    pass "Skill uses init-workflow.sh for workflow creation"
+else
+    fail "Skill should use init-workflow.sh"
+fi
+
+if grep -q 'status.yml' "$SKILL_FILE"; then
+    pass "Skill references status.yml for saving request"
+else
+    fail "Skill should save request to status.yml"
+fi
+
+if grep -q 'switch-client\|tmux attach' "$SKILL_FILE"; then
+    pass "Skill handles tmux connection (attach or switch)"
+else
+    fail "Skill should handle tmux connection"
+fi
+
+# ============================================================
+# PHASE 4: Verify skill does NOT do pre-PM work
+# ============================================================
+echo ""
+echo "Phase 4: No pre-PM analysis or file creation..."
+echo ""
+
+# Should NOT have Haiku sub-agent or Explore agent for analysis
 if grep -q 'subagent_type.*Explore' "$SKILL_FILE"; then
-    pass "Skill instructs using Explore subagent"
+    fail "Skill should NOT use Explore subagent - PM handles discovery"
 else
-    fail "Skill should use Task tool with subagent_type: Explore"
+    pass "No Explore subagent usage (PM handles discovery)"
 fi
 
-if grep -qi 'haiku' "$SKILL_FILE"; then
-    pass "Skill mentions haiku model for efficiency"
+if grep -qi 'model.*haiku' "$SKILL_FILE"; then
+    fail "Skill should NOT spawn haiku sub-agents - PM handles analysis"
 else
-    fail "Skill should use haiku model for Explore agent"
+    pass "No haiku sub-agent spawning (PM handles analysis)"
 fi
 
-if grep -qi 'Targeted.*analysis\|codebase.*analysis\|Analyze.*codebase' "$SKILL_FILE"; then
-    pass "Skill mentions targeted codebase analysis"
+# Should NOT create prd.md, codebase-analysis.md, or tasks.json
+if grep -q 'Create.*prd\.md\|Create.*codebase-analysis\.md' "$SKILL_FILE"; then
+    fail "Skill should NOT create prd.md or codebase-analysis.md - PM handles this"
 else
-    fail "Skill should mention targeted codebase analysis"
+    pass "No context file creation (PM handles this)"
 fi
 
-# ============================================================
-# PHASE 4: Verify context file templates are defined
-# ============================================================
-echo ""
-echo "Phase 4: Context file templates..."
-echo ""
-
-if grep -q 'prd.md' "$SKILL_FILE"; then
-    pass "Skill mentions prd.md creation"
+# Should NOT ask user what they want to accomplish
+if grep -q 'What would you like to accomplish' "$SKILL_FILE"; then
+    fail "Skill should NOT ask user objectives - PM handles this"
 else
-    fail "Skill should create prd.md"
+    pass "No user objective questioning (PM handles this)"
 fi
 
-if grep -q 'codebase-analysis.md' "$SKILL_FILE"; then
-    pass "Skill mentions codebase-analysis.md creation"
+# Should NOT have dual workflow (A/B)
+if grep -q 'WORKFLOW A\|WORKFLOW B' "$SKILL_FILE"; then
+    fail "Skill should NOT have dual workflow pattern"
 else
-    fail "Skill should create codebase-analysis.md"
-fi
-
-if grep -q 'tasks.json' "$SKILL_FILE"; then
-    pass "Skill mentions tasks.json creation"
-else
-    fail "Skill should create tasks.json"
+    pass "No dual workflow pattern (unified flow)"
 fi
 
 # ============================================================
