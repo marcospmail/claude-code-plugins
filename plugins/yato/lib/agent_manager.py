@@ -23,6 +23,7 @@ Provides functions for:
 
 import glob as globmod
 import os
+import re
 import subprocess
 import sys
 import time
@@ -618,8 +619,8 @@ class AgentManager:
                 if has_session:
                     print("Updating existing agent files with window info...")
                     content = identity_file.read_text()
-                    content = content.replace("window:", f"window: {window_index}")
-                    content = content.replace("session:", f"session: {session}")
+                    content = re.sub(r'^(window:).*$', f'\\1 {window_index}', content, flags=re.MULTILINE)
+                    content = re.sub(r'^(session:).*$', f'\\1 {session}', content, flags=re.MULTILINE)
                     identity_file.write_text(content)
                     print(f"Updated identity file: {identity_file}")
             else:
@@ -630,8 +631,8 @@ class AgentManager:
                     identity_file = agent_dir / "identity.yml"
                     if identity_file.exists():
                         content = identity_file.read_text()
-                        content = content.replace("window:", f"window: {window_index}")
-                        content = content.replace("session:", f"session: {session}")
+                        content = re.sub(r'^(window:).*$', f'\\1 {window_index}', content, flags=re.MULTILINE)
+                        content = re.sub(r'^(session:).*$', f'\\1 {session}', content, flags=re.MULTILINE)
                         identity_file.write_text(content)
 
         # Start Claude (only if session exists)

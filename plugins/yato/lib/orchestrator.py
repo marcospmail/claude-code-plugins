@@ -12,6 +12,7 @@ This module provides:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -334,8 +335,8 @@ class Orchestrator:
         pm_identity = project_dir / ".workflow" / (workflow_name or "") / "agents" / "pm" / "identity.yml"
         if pm_identity.exists():
             content = pm_identity.read_text()
-            content = content.replace("window:", f"window: 0")
-            content = content.replace("session:", f"session: {session_name}")
+            content = re.sub(r'^(window:).*$', '\\1 0', content, flags=re.MULTILINE)
+            content = re.sub(r'^(session:).*$', f'\\1 {session_name}', content, flags=re.MULTILINE)
             pm_identity.write_text(content)
 
         return result
