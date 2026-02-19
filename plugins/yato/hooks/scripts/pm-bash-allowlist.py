@@ -51,6 +51,9 @@ def is_yato_script(path: str) -> bool:
         return True
     if "/plugins/yato/" in path:
         return True
+    # Match plugin cache path format: /plugins/cache/claude-code-plugins/yato/
+    if "/claude-code-plugins/yato/" in path:
+        return True
     if "CLAUDE_PLUGIN_ROOT" in path:
         return True
     return False
