@@ -1,6 +1,6 @@
 # Yato (Yet Another Tmux Orchestrator)
 
-**Deploy autonomous Claude agent teams that coordinate, build, and iterate on your codebase in parallel.** Yato is a Claude Code plugin that orchestrates multiple agents (PM, developers, QA, reviewers) across tmux sessions, each with its own independent context window.
+**Deploy autonomous Claude agent teams that coordinate, build, and iterate on your codebase in parallel.** Yato is a Claude Code plugin that orchestrates multiple agents (PM, developers, QA, reviewers, etc.) across tmux sessions, each with its own independent context window.
 
 ## Installation
 
@@ -14,7 +14,7 @@ In Claude Code, run:
 ### Requirements
 
 - **tmux** - Terminal multiplexer
-- **Python >= 3.10** - With PyYAML and Jinja2 (`uv` handles dependencies automatically)
+- **uv** - Python package manager (handles Python and dependencies automatically)
 - **Claude Code**
 
 ## Quick Start
@@ -25,7 +25,7 @@ In Claude Code, run:
 /yato:yato-new-project my-app a todo list with authentication
 ```
 
-Creates `~/dev/my-app/`, deploys a Project Manager, and gives you a tmux attach command. The PM takes over from there - proposing a team, creating agents, and coordinating the work.
+Creates `~/my-app/`, deploys a Project Manager, and gives you a tmux attach command. The PM takes over from there - proposing a team, creating agents, and coordinating the work.
 
 ### Existing Project
 
