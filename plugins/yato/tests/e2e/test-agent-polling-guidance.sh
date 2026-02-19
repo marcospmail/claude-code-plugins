@@ -144,11 +144,12 @@ else
     fail "Instructions missing PM notification for blocked state"
 fi
 
-# Test 5: Contains example of bad polling (infinite loop)
-if grep -q "while true\|infinite" "$INSTRUCTIONS_FILE" 2>/dev/null; then
-    pass "Instructions show bad polling example to avoid"
+# Test 5: Constraints contain polling prohibition
+CONSTRAINTS_FILE="$WORKFLOW_PATH/agents/developer/constraints.md"
+if grep -qi "polling\|infinite" "$CONSTRAINTS_FILE" 2>/dev/null; then
+    pass "Constraints contain polling prohibition"
 else
-    fail "Instructions missing bad polling example"
+    fail "Constraints missing polling prohibition"
 fi
 
 # Test 6: Contains increasing delay guidance
