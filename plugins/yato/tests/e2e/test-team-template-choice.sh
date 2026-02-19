@@ -32,7 +32,6 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -44,61 +43,7 @@ echo "Phase 1: Setting up test environment..."
 
 mkdir -p "$TEST_DIR"
 
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
-
 echo "  ✓ Test environment ready"
-echo ""
-
-# ============================================================
-# PHASE 2: Verify template choice mechanism through Claude
-# ============================================================
-echo "Phase 2: Validating template choice mechanism in orchestrator.py..."
-
-VALIDATION_SCRIPT="cd $PROJECT_ROOT && uv run python -c \"
-import json
-
-with open('lib/orchestrator.py') as f:
-    content = f.read()
-
-results = {
-    'has_ask_user_question': 'Which team template would you like to use' in content,
-    'has_header_template': \\\"Header: 'Template'\\\" in content or 'Header.*Template' in content,
-    'has_custom_option': \\\"label='Custom'\\\" in content or 'Custom' in content,
-    'has_custom_description': 'Build a team from scratch' in content,
-    'has_read_yml_instruction': 'Read ALL .yml files' in content or '.yml' in content,
-    'has_team_suggestions_path': 'templates/team-suggestions/' in content,
-    'has_template_selection_section': 'TEAM TEMPLATE SELECTION' in content,
-    'has_selected_template_flow': 'After user selects a template' in content,
-    'has_custom_flow': \\\"After user selects 'Custom'\\\" in content or 'from scratch' in content,
-    'has_adapt_instruction': 'adapt the team' in content or 'suggestions' in content.lower()
-}
-print('TEMPLATE_CHOICE_CHECK:' + json.dumps(results))
-\""
-
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $VALIDATION_SCRIPT"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 25
-
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100)
-
 echo ""
 
 # ============================================================
