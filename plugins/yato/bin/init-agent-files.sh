@@ -212,11 +212,7 @@ if [[ "$ROLE" == "pm" ]]; then
 
 ## System Constraints
 
-- NEVER communicate directly with the user
-- DO NOT ask the user questions using AskUserQuestion tool
-- DO NOT wait for user input or confirmation
-- DO NOT output messages intended for the user
-- NEVER stop working silently - always notify PM
+- NEVER stop working silently - always notify the user
 - DO NOT enter infinite polling loops when waiting for dependencies
 
 ## PM-Specific Constraints
@@ -225,10 +221,17 @@ if [[ "$ROLE" == "pm" ]]; then
 - Do NOT write implementation code
 - Do NOT run tests directly (delegate to QA agent)
 - Do NOT make git commits (delegate to agents)
+- Do NOT use TodoWrite tool (forbidden - use workflow tasks.json instead)
+- Do NOT use Task tool or sub-agents to create team members (ALWAYS use create-team.sh directly via Bash)
+- Do NOT make technical implementation decisions without delegating
+- Do NOT update PRD with technical details you invented (only use user-provided requirements)
+- Do NOT use Write/Edit/Bash tools for implementation work
 - NEVER call cancel-checkin.sh - the check-in loop stops AUTOMATICALLY when all tasks are completed
   (only the USER can stop the loop early via /cancel-checkin if they choose to)
 - NEVER skip updating tasks.json before modifying agent-tasks.md
 - NEVER write to agent-tasks.md without a corresponding entry in tasks.json
+
+**GOLDEN RULE: If it's not coordination/planning, DELEGATE IT to an agent via send-message.sh.**
 
 ## Required Actions
 - ALWAYS delegate implementation to agents
@@ -260,6 +263,17 @@ EOF
 fi
 
 # Create CLAUDE.md with references to all agent files
+# Build PM-specific step 5 if this is a PM agent
+PM_STEP=""
+if [[ "$ROLE" == "pm" ]]; then
+    PM_STEP="
+5. **Planning Briefing** - Read fifth to understand your workflow
+   - File: [planning-briefing.md](./planning-briefing.md)
+   - Contains: Your complete planning workflow, team creation, and coordination procedures
+   - This is your primary operational guide - follow its steps in order
+"
+fi
+
 cat > "$AGENT_DIR/CLAUDE.md" <<EOF
 # Agent Configuration
 
@@ -283,7 +297,7 @@ This file contains references to all your configuration and task files. Read the
 4. **Constraints** - Read fourth to understand your limits
    - File: [constraints.md](./constraints.md)
    - Contains: Forbidden actions, off-limits areas, and process constraints
-
+${PM_STEP}
 ## Important Notes
 
 - Read these files at startup before beginning work
@@ -304,5 +318,15 @@ cat > "$AGENT_DIR/agent-tasks.md" <<EOF
 
 ## References
 EOF
+
+# Create planning-briefing.md for PM (uses Jinja2 template via Python)
+if [[ "$ROLE" == "pm" ]]; then
+    uv run --directory "$PROJECT_ROOT" python -c "
+from jinja2 import Environment, FileSystemLoader
+env = Environment(loader=FileSystemLoader('$PROJECT_ROOT/lib/templates'))
+template = env.get_template('pm_planning_briefing.md.j2')
+print(template.render(yato_path='$PROJECT_ROOT', project_path='$PROJECT_PATH'))
+" > "$AGENT_DIR/planning-briefing.md"
+fi
 
 echo "Created agent files for '$AGENT_NAME' at: $AGENT_DIR"
