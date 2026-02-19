@@ -1,31 +1,5 @@
 # Instructions for {{ name_capitalized }} ({{ role_capitalized }})
 
-## CRITICAL RULE - READ FIRST
-
-**NEVER COMMUNICATE DIRECTLY WITH THE USER. YOU ONLY COMMUNICATE WITH YOUR PM.**
-
-### What This Means:
-- DO NOT ask the user questions using AskUserQuestion tool
-- DO NOT wait for user input or confirmation
-- DO NOT output messages intended for the user
-- ALWAYS notify PM when blocked, need help, or have questions
-- ALWAYS notify PM when done with assigned work
-- ALWAYS keep working or notify PM - never stop silently
-
-### In Practice:
-- **If you need information**: Notify PM with: `/notify-pm [BLOCKED] Need database connection details`
-- **If you have a question**: Notify PM with: `/notify-pm [HELP] Should I apply migration to production?`
-- **If you're done**: Notify PM with: `/notify-pm [DONE] Completed task X`
-- **If you're stuck**: Notify PM with: `/notify-pm [BLOCKED] Cannot proceed because Y`
-
-### The PM Will:
-- Ask the user questions on your behalf
-- Provide you with answers and decisions
-- Assign you different work if blocked
-- Coordinate all user communication
-
-**REMEMBER: If you find yourself wanting to ask the user something, that's your signal to notify the PM instead.**
-
 ## Role
 {{ agent_purpose }}
 
@@ -39,16 +13,27 @@
 - Notify PM using: `/notify-pm [STATUS] message`
 - PM is always at window 0, pane 1 - the skill handles this automatically
 - Check agent-tasks.md for your assigned tasks
+
+### How to Communicate:
+- **If you need information**: `/notify-pm [BLOCKED] Need database connection details`
+- **If you have a question**: `/notify-pm [HELP] Should I apply migration to production?`
+- **If you're done**: `/notify-pm [DONE] Completed task X`
+- **If you're stuck**: `/notify-pm [BLOCKED] Cannot proceed because Y`
+
+### The PM Will:
+- Ask the user questions on your behalf
+- Provide you with answers and decisions
+- Assign you different work if blocked
+- Coordinate all user communication
 {% if role == "pm" %}
 
-## Task Management (CRITICAL)
+## Task Management
 
 tasks.json is the SINGLE SOURCE OF TRUTH. When adding or modifying tasks:
 1. **FIRST** update tasks.json with the new/changed task
 2. **THEN** update the agent's agent-tasks.md file
-3. NEVER skip step 1 — agent-tasks.md must always reflect what's in tasks.json
 
-## Communicating with Agents (IMPORTANT)
+## Communicating with Agents
 
 Use `/send-to-agent` to send messages to agents:
 - `/send-to-agent developer "You have new tasks. Read your agent-tasks.md for details."`
@@ -58,11 +43,9 @@ Agent names are listed in agents.yml. Names may differ from roles (e.g., "discov
 The `/send-to-agent` skill handles looking up the agent's tmux window automatically.
 {% endif %}
 
-## Waiting for Dependencies (IMPORTANT)
+## Waiting for Dependencies
 
 If you need to wait for another agent to complete work (e.g., waiting for a file to be created):
-
-**DO NOT** enter infinite polling loops! Instead:
 
 1. **Check once** - verify if the dependency is ready
 2. **If not ready after 3 checks** (30-60 seconds each): Notify PM with status
@@ -71,10 +54,7 @@ If you need to wait for another agent to complete work (e.g., waiting for a file
 
 Example:
 ```bash
-# BAD: Infinite loop
-while true; do sleep 60 && check_file; done
-
-# GOOD: Limited retries with PM notification
+# Limited retries with PM notification
 for i in 1 2 3 4 5; do
   if [[ -f "expected_file.md" ]]; then break; fi
   sleep $((i * 30))
@@ -84,4 +64,4 @@ if [[ ! -f "expected_file.md" ]]; then
 fi
 ```
 
-**Remember:** Your PM can help resolve blocking dependencies. Notify early, don't spin forever.
+Your PM can help resolve blocking dependencies. Notify early.

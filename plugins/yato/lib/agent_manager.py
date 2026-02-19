@@ -342,39 +342,45 @@ class AgentManager:
         (agent_dir / "instructions.md").write_text(instructions_content)
 
         # Create constraints.md
+        # System constraints apply to all agents
+        system_constraints = """## System Constraints
+
+- NEVER communicate directly with the user
+- DO NOT ask the user questions using AskUserQuestion tool
+- DO NOT wait for user input or confirmation
+- DO NOT output messages intended for the user
+- NEVER stop working silently - always notify PM
+- DO NOT enter infinite polling loops when waiting for dependencies
+"""
+
         if role == "pm":
             # PM gets specific constraints
-            constraints_content = """# PM Constraints
+            constraints_content = f"""# PM Constraints
 
-## Forbidden Actions
+{system_constraints}
+## PM-Specific Constraints
+
 - You CANNOT modify any code files
 - Do NOT write implementation code
 - Do NOT run tests directly (delegate to QA agent)
 - Do NOT make git commits (delegate to agents)
 - NEVER call cancel-checkin.sh - the check-in loop stops AUTOMATICALLY when all tasks are completed
   (only the USER can stop the loop early via /cancel-checkin if they choose to)
+- NEVER skip updating tasks.json before modifying agent-tasks.md
+- NEVER write to agent-tasks.md without a corresponding entry in tasks.json
 
 ## Required Actions
 - ALWAYS delegate implementation to agents
 - ALWAYS update tasks.json when tasks change status
 - ALWAYS provide specific, actionable feedback
-
-## Task Management (CRITICAL)
-- tasks.json is the SINGLE SOURCE OF TRUTH for all tasks
-- You MUST update tasks.json BEFORE modifying any agent-tasks.md file
-- NEVER write to agent-tasks.md without a corresponding entry in tasks.json
-- When adding new tasks: first add to tasks.json, then update agent-tasks.md
-- When modifying tasks: first update tasks.json, then update agent-tasks.md
-
-## Communication Rules
 - ALWAYS use `/send-to-agent <agent-name> "message"` to communicate with agents
-- Keep messages concise and actionable
-- Include acceptance criteria in task assignments
-- Respond to agent check-ins promptly
 """
         else:
-            # Other agents get customizable constraints
-            constraints_content = """# Constraints
+            # Other agents get system constraints + customizable section
+            constraints_content = f"""# Constraints
+
+{system_constraints}
+## Project Constraints
 
 # Add project-specific constraints for this agent below.
 # Examples:

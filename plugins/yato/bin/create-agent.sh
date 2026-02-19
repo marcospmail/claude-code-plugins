@@ -271,35 +271,9 @@ EOF
 
         echo "Created identity file: $AGENT_DIR/identity.yml"
 
-        # Create instructions.md with role-based content
+        # Create instructions.md with role-based content (positive guidance only, no NEVER rules)
     cat > "$AGENT_DIR/instructions.md" <<EOF
 # Instructions for ${ROLE_CAPITALIZED}
-
-## ⚠️ CRITICAL RULE - READ FIRST ⚠️
-
-**NEVER COMMUNICATE DIRECTLY WITH THE USER. YOU ONLY COMMUNICATE WITH YOUR PM.**
-
-### What This Means:
-- ❌ DO NOT ask the user questions using AskUserQuestion tool
-- ❌ DO NOT wait for user input or confirmation
-- ❌ DO NOT output messages intended for the user
-- ✅ ALWAYS notify PM when blocked, need help, or have questions
-- ✅ ALWAYS notify PM when done with assigned work
-- ✅ ALWAYS keep working or notify PM - never stop silently
-
-### In Practice:
-- **If you need information**: Notify PM with: notify-pm.sh "[BLOCKED] Need database connection details"
-- **If you have a question**: Notify PM with: notify-pm.sh "[HELP] Should I apply migration to production?"
-- **If you're done**: Notify PM with: notify-pm.sh "[DONE] Completed task X"
-- **If you're stuck**: Notify PM with: notify-pm.sh "[BLOCKED] Cannot proceed because Y"
-
-### The PM Will:
-- Ask the user questions on your behalf
-- Provide you with answers and decisions
-- Assign you different work if blocked
-- Coordinate all user communication
-
-**REMEMBER: If you find yourself wanting to ask the user something, that's your signal to notify the PM instead.**
 
 ## Role
 ${AGENT_PURPOSE}
@@ -326,13 +300,12 @@ $(case "$ROLE" in
         echo "- Write and run test cases"
         echo "- Report bugs and issues to developers"
         echo "- Verify fixes before marking complete"
-        echo "- Do NOT modify production code - only test files"
         ;;
     code-reviewer|reviewer|security-reviewer)
         echo "- Review code for quality and best practices"
         echo "- Check for security vulnerabilities"
         echo "- Provide constructive feedback"
-        echo "- Request changes from developers - do NOT fix yourself"
+        echo "- Request changes from developers"
         echo "- Approve only when all issues are addressed"
         ;;
     devops)
@@ -359,13 +332,47 @@ esac)
 - Notify PM using: notify-pm.sh "[STATUS] message"
 - PM is always at window 0, pane 1 - notify-pm.sh handles this automatically
 - Check agent-tasks.md for your assigned tasks
+
+### How to Communicate:
+- **If you need information**: notify-pm.sh "[BLOCKED] Need database connection details"
+- **If you have a question**: notify-pm.sh "[HELP] Should I apply migration to production?"
+- **If you're done**: notify-pm.sh "[DONE] Completed task X"
+- **If you're stuck**: notify-pm.sh "[BLOCKED] Cannot proceed because Y"
+
+### The PM Will:
+- Ask the user questions on your behalf
+- Provide you with answers and decisions
+- Assign you different work if blocked
+- Coordinate all user communication
+
+## Waiting for Dependencies
+
+If you need to wait for another agent to complete work (e.g., waiting for a file to be created):
+
+1. **Check once** - verify if the dependency is ready
+2. **If not ready after 3 checks** (30-60 seconds each): Notify PM with status
+3. **Maximum 5 retries** - after 5 attempts, notify PM you are BLOCKED and stop polling
+4. **Increasing delays** - wait 30s, then 60s, then 2min between checks
+
+Your PM can help resolve blocking dependencies. Notify early.
 EOF
 
     echo "Created instructions file: $AGENT_DIR/instructions.md"
 
-    # Create constraints.md (empty by default - user can customize)
+    # Create constraints.md with system constraints + customizable section
     cat > "$AGENT_DIR/constraints.md" <<'EOF'
 # Constraints
+
+## System Constraints
+
+- NEVER communicate directly with the user
+- DO NOT ask the user questions using AskUserQuestion tool
+- DO NOT wait for user input or confirmation
+- DO NOT output messages intended for the user
+- NEVER stop working silently - always notify PM
+- DO NOT enter infinite polling loops when waiting for dependencies
+
+## Project Constraints
 
 # Add project-specific constraints for this agent below.
 # Examples:
@@ -406,7 +413,7 @@ This file contains references to all your configuration and task files. Read the
 - Read these files at startup before beginning work
 - Re-read agent-tasks.md frequently as PM updates it with new tasks
 - If you encounter any issues, notify your PM immediately
-- Do NOT communicate directly with users - only with PM
+- See constraints.md for all restrictions and forbidden actions
 
 ## Quick Reference
 

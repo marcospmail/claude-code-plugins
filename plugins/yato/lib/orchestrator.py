@@ -317,6 +317,19 @@ class Orchestrator:
         subprocess.run(_tmux_cmd() + ["select-pane", "-t", pm_target, "-T", "PM"], capture_output=True)
         subprocess.run(_tmux_cmd() + ["set-option", "-p", "-t", pm_target, "allow-set-title", "off"], capture_output=True)
 
+        # Create PM agent files (identity.yml, instructions.md, constraints.md, CLAUDE.md, agent-tasks.md)
+        if workflow_name:
+            pm_agent_dir = project_dir / ".workflow" / workflow_name / "agents" / "pm"
+            if not pm_agent_dir.exists():
+                lib_dir = Path(__file__).parent
+                subprocess.run(
+                    ["uv", "run", "--directory", str(lib_dir.parent),
+                     "python", str(lib_dir / "agent_manager.py"),
+                     "init-files", "pm", "pm",
+                     "-p", str(project_dir), "-m", "opus"],
+                    capture_output=True
+                )
+
         # Register PM agent - PM always uses Opus (pane 1, since pane 0 is check-in display)
         agent = self._register_agent_to_workflow(
             project_path=str(project_dir),
