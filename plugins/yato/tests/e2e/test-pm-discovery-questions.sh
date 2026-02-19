@@ -45,7 +45,7 @@ echo "Phase 1: Setting up test environment..."
 
 mkdir -p "$TEST_DIR"
 
-ORCHESTRATOR_FILE="$PROJECT_ROOT/lib/orchestrator.py"
+BRIEFING_TEMPLATE="$PROJECT_ROOT/lib/templates/pm_planning_briefing.md.j2"
 
 # IMPORTANT: Use larger window size for Claude's TUI to work properly
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
@@ -77,7 +77,7 @@ echo ""
 echo "Phase 2: Verifying PM briefing content via Claude..."
 
 # Ask Claude to grep for discovery question patterns
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: grep -ic 'What are we building' $ORCHESTRATOR_FILE && grep -ic 'What would you like to accomplish' $ORCHESTRATOR_FILE"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: grep -ic 'What are we building' $BRIEFING_TEMPLATE && grep -ic 'What would you like to accomplish' $BRIEFING_TEMPLATE"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -99,56 +99,56 @@ echo ""
 echo "Phase 3: Checking PM briefing patterns..."
 
 # Test 1: PM asks "What are we building?" for new/empty projects
-if grep -qi "What are we building" "$ORCHESTRATOR_FILE"; then
+if grep -qi "What are we building" "$BRIEFING_TEMPLATE"; then
     pass "PM briefing includes 'What are we building?' question for new projects"
 else
     fail "PM briefing missing 'What are we building?' for new projects"
 fi
 
 # Test 2: PM asks "What would you like to accomplish?" for existing projects
-if grep -qi "What would you like to accomplish" "$ORCHESTRATOR_FILE"; then
+if grep -qi "What would you like to accomplish" "$BRIEFING_TEMPLATE"; then
     pass "PM briefing includes 'What would you like to accomplish?' for existing projects"
 else
     fail "PM briefing missing 'What would you like to accomplish?' for existing projects"
 fi
 
 # Test 3: PM should be conversational - ONE question at a time
-if grep -qi "ONE question at a time\|Ask ONE question" "$ORCHESTRATOR_FILE"; then
+if grep -qi "ONE question at a time\|Ask ONE question" "$BRIEFING_TEMPLATE"; then
     pass "PM briefing instructs asking ONE question at a time"
 else
     fail "PM briefing missing 'ONE question at a time' instruction"
 fi
 
 # Test 4: PM should confirm understanding before proceeding
-if grep -qi "Is this correct\|clarification" "$ORCHESTRATOR_FILE"; then
+if grep -qi "Is this correct\|clarification" "$BRIEFING_TEMPLATE"; then
     pass "PM briefing includes confirmation step before proceeding"
 else
     fail "PM briefing missing confirmation instruction"
 fi
 
 # Test 5: PM should summarize understanding
-if grep -qi "SUMMARIZE" "$ORCHESTRATOR_FILE"; then
+if grep -qi "SUMMARIZE" "$BRIEFING_TEMPLATE"; then
     pass "PM briefing includes instruction to SUMMARIZE understanding"
 else
     fail "PM briefing missing SUMMARIZE instruction"
 fi
 
 # Test 6: PM should wait for user confirmation
-if grep -qi "Wait for confirmation\|wait for user" "$ORCHESTRATOR_FILE"; then
+if grep -qi "Wait for confirmation\|wait for user" "$BRIEFING_TEMPLATE"; then
     pass "PM briefing includes instruction to wait for user confirmation"
 else
     fail "PM briefing missing 'wait for confirmation' instruction"
 fi
 
 # Test 7: PM should NOT skip questions or assume answers
-if grep -qi "NEVER skip\|never assume" "$ORCHESTRATOR_FILE"; then
+if grep -qi "NEVER skip\|never assume" "$BRIEFING_TEMPLATE"; then
     pass "PM briefing includes instruction to never skip questions/assume answers"
 else
     fail "PM briefing missing 'never skip/assume' instruction"
 fi
 
 # Test 8: PM should handle PRD input options
-if grep -qi "a brief description.*URL.*PRD" "$ORCHESTRATOR_FILE"; then
+if grep -qi "a brief description.*URL.*PRD" "$BRIEFING_TEMPLATE"; then
     pass "PM briefing mentions PRD/description/URL input options"
 else
     fail "PM briefing missing PRD input options"

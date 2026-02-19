@@ -3,7 +3,7 @@
 #
 # E2E Test: Team Template Choice via AskUserQuestion
 #
-# Verifies that the PM briefing in orchestrator.py instructs PM to:
+# Verifies that the PM briefing template instructs PM to:
 # 1. Read ALL .yml files from templates/team-suggestions/ directory
 # 2. Present templates via AskUserQuestion with "Which team template would you like to use?"
 # 3. Include a "Custom" option for building from scratch
@@ -52,31 +52,31 @@ echo ""
 echo "Phase 3: Verifying AskUserQuestion template choice..."
 echo ""
 
-ORCH_FILE="$PROJECT_ROOT/lib/orchestrator.py"
+BRIEFING_TEMPLATE="$PROJECT_ROOT/lib/templates/pm_planning_briefing.md.j2"
 
 # Test 1: PM briefing contains AskUserQuestion for template selection
-if grep -q "Which team template would you like to use" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "Which team template would you like to use" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM briefing has AskUserQuestion: 'Which team template would you like to use?'"
 else
     fail "PM briefing missing AskUserQuestion for template selection"
 fi
 
 # Test 2: AskUserQuestion uses correct header
-if grep -q "Header.*Template\|Header: 'Template'" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "Header.*Template\|Header: 'Template'" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "AskUserQuestion uses 'Template' header"
 else
     fail "AskUserQuestion missing 'Template' header"
 fi
 
 # Test 3: Options are built from template files
-if grep -q "template name\|label is the template name" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "template name\|label is the template name" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Options use template name as label"
 else
     fail "Options do not reference template name as label"
 fi
 
 # Test 4: Options include template description
-if grep -q "template description\|description is the template description" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "template description\|description is the template description" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Options use template description"
 else
     fail "Options do not reference template description"
@@ -86,14 +86,14 @@ echo ""
 echo "Testing Custom option..."
 
 # Test 5: Custom option is present
-if grep -q "label='Custom'" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "label='Custom'" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Custom option has label='Custom'"
 else
     fail "Custom option missing label='Custom'"
 fi
 
 # Test 6: Custom option has description
-if grep -q "Build a team from scratch" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "Build a team from scratch" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Custom option has 'Build a team from scratch' description"
 else
     fail "Custom option missing description"
@@ -103,21 +103,21 @@ echo ""
 echo "Testing template selection flow..."
 
 # Test 7: After selecting a template, PM reads that file
-if grep -q "After user selects a template" "$ORCH_FILE" 2>/dev/null; then
+if grep -qi "After user selects a.*TEMPLATE" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Has flow for when user selects a template"
 else
     fail "Missing flow for template selection"
 fi
 
 # Test 8: After selecting Custom, PM proposes from scratch
-if grep -q "After user selects 'Custom'" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "After user selects 'Custom'" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Has flow for when user selects Custom"
 else
     fail "Missing flow for Custom selection"
 fi
 
 # Test 9: Templates are starting points, not rigid
-if grep -q "suggestions\|adapt the team\|starting point" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "suggestions\|adapt the team\|starting point" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Templates are treated as suggestions/starting points"
 else
     fail "Missing indication that templates are suggestions"
@@ -127,21 +127,21 @@ echo ""
 echo "Testing template discovery..."
 
 # Test 10: PM reads from templates/team-suggestions/ directory
-if grep -q "templates/team-suggestions/" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "templates/team-suggestions/" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM reads from templates/team-suggestions/ directory"
 else
     fail "PM does not reference templates/team-suggestions/ directory"
 fi
 
 # Test 11: PM reads ALL .yml files
-if grep -q "\.yml" "$ORCH_FILE" 2>/dev/null && grep -q "team-suggestions" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "\.yml" "$BRIEFING_TEMPLATE" 2>/dev/null && grep -q "team-suggestions" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM discovers .yml template files from team-suggestions directory"
 else
     fail "PM does not discover .yml template files"
 fi
 
 # Test 12: Template path uses yato_path variable
-if grep -q "{yato_path}/templates/team-suggestions" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "{{ yato_path }}/templates/team-suggestions" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Template path uses yato_path variable"
 else
     fail "Template path does not use yato_path variable"
@@ -151,14 +151,14 @@ echo ""
 echo "Testing TEAM TEMPLATE SELECTION section..."
 
 # Test 13: Section heading exists
-if grep -q "TEAM TEMPLATE SELECTION" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "TEAM TEMPLATE SELECTION" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "TEAM TEMPLATE SELECTION section exists in PM briefing"
 else
     fail "TEAM TEMPLATE SELECTION section missing from PM briefing"
 fi
 
 # Test 14: Extract name and description from templates
-if grep -q "extract.*name.*description\|'name' and 'description'" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "extract.*name.*description\|'name' and 'description'" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM instructed to extract name and description from templates"
 else
     fail "PM not instructed to extract template fields"

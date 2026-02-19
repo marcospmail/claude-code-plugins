@@ -41,7 +41,7 @@ echo "Phase 1: Setting up test environment..."
 
 mkdir -p "$TEST_DIR"
 
-TARGET_FILE="$PROJECT_ROOT/lib/orchestrator.py"
+BRIEFING_TEMPLATE="$PROJECT_ROOT/lib/templates/pm_planning_briefing.md.j2"
 
 # IMPORTANT: Use larger window size for Claude's TUI to work properly
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
@@ -73,7 +73,7 @@ echo ""
 echo "Phase 2: Verifying PM briefing content via Claude..."
 
 # Ask Claude to grep for the check-in interval patterns
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: grep -c 'AskUserQuestion' $TARGET_FILE && grep -c 'minutes' $TARGET_FILE"
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: grep -c 'AskUserQuestion' $BRIEFING_TEMPLATE && grep -c 'minutes' $BRIEFING_TEMPLATE"
 sleep 1
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
 sleep 10
@@ -95,35 +95,35 @@ echo ""
 echo "Phase 3: Checking PM briefing patterns..."
 
 # Test 1: PM briefing mentions AskUserQuestion for check-in interval
-if grep -q "check-in interval.*AskUserQuestion" "$TARGET_FILE" 2>/dev/null; then
+if grep -q "check-in interval.*AskUserQuestion" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM briefing mentions AskUserQuestion for check-in interval"
 else
     fail "PM briefing missing AskUserQuestion for check-in interval"
 fi
 
 # Test 2: 3 minutes option exists
-if grep -q "'3 minutes'" "$TARGET_FILE" 2>/dev/null; then
+if grep -q "'3 minutes'" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "3 minutes option exists"
 else
     fail "3 minutes option missing"
 fi
 
 # Test 3: 5 minutes (Recommended) option exists
-if grep -q "5 minutes (Recommended)" "$TARGET_FILE" 2>/dev/null; then
+if grep -q "5 minutes (Recommended)" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "5 minutes (Recommended) option exists"
 else
     fail "5 minutes (Recommended) option missing"
 fi
 
 # Test 4: 10 minutes option exists
-if grep -q "'10 minutes'" "$TARGET_FILE" 2>/dev/null; then
+if grep -q "'10 minutes'" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "10 minutes option exists"
 else
     fail "10 minutes option missing"
 fi
 
 # Test 5: update_checkin_interval command is referenced
-if grep -q "update_checkin_interval" "$TARGET_FILE" 2>/dev/null; then
+if grep -q "update_checkin_interval" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "update_checkin_interval command referenced"
 else
     fail "update_checkin_interval command not referenced"

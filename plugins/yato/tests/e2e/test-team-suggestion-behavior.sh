@@ -34,7 +34,7 @@ fail() {
 }
 
 TEMPLATES_DIR="$PROJECT_ROOT/templates/team-suggestions"
-ORCH_FILE="$PROJECT_ROOT/lib/orchestrator.py"
+BRIEFING_TEMPLATE="$PROJECT_ROOT/lib/templates/pm_planning_briefing.md.j2"
 
 # ============================================================
 # SCENARIO 1: Development Template → Multi-Agent Team
@@ -120,21 +120,21 @@ echo "Scenario 3: PM briefing instructs template-based team selection"
 echo "--------------------------------------------------------------"
 
 # Test 9: PM briefing instructs to read templates from team-suggestions/
-if grep -q "team-suggestions/" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "team-suggestions/" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Scenario 3: PM briefing references team-suggestions/ directory"
 else
     fail "Scenario 3: PM briefing doesn't reference team-suggestions/ directory"
 fi
 
 # Test 10: PM briefing uses AskUserQuestion for template selection
-if grep -q "Which team template would you like to use" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "Which team template would you like to use" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Scenario 3: PM briefing uses AskUserQuestion for template selection"
 else
     fail "Scenario 3: PM briefing missing AskUserQuestion for template selection"
 fi
 
 # Test 11: PM briefing handles Custom option (no template)
-if grep -q "After user selects 'Custom'" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "After user selects 'Custom'" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Scenario 3: PM briefing handles Custom (no template) option"
 else
     fail "Scenario 3: PM briefing missing Custom option handling"

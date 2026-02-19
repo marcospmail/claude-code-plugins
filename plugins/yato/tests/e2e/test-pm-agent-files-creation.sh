@@ -141,6 +141,12 @@ else
     fail "agent-tasks.md not found"
 fi
 
+if [[ -f "$PM_DIR/planning-briefing.md" ]]; then
+    pass "planning-briefing.md exists"
+else
+    fail "planning-briefing.md not found"
+fi
+
 echo ""
 
 # ============================================================
@@ -162,11 +168,25 @@ else
     fail "constraints.md missing '## PM-Specific Constraints' section"
 fi
 
-# Verify key system constraints are present
-if grep -q "NEVER communicate directly with the user" "$PM_CONSTRAINTS" 2>/dev/null; then
-    pass "System constraint: NEVER communicate directly with the user"
+# Verify PM system constraints are present (PM-appropriate, not non-PM system constraints)
+if grep -q "NEVER stop working silently" "$PM_CONSTRAINTS" 2>/dev/null; then
+    pass "System constraint: NEVER stop working silently"
 else
-    fail "Missing system constraint: NEVER communicate directly with the user"
+    fail "Missing system constraint: NEVER stop working silently"
+fi
+
+# Verify PM does NOT have non-PM system constraints
+if grep -q "NEVER communicate directly with the user" "$PM_CONSTRAINTS" 2>/dev/null; then
+    fail "PM constraints should NOT contain 'NEVER communicate directly with the user'"
+else
+    pass "PM constraints correctly omit non-PM system constraints"
+fi
+
+# Verify GOLDEN RULE is present
+if grep -q "GOLDEN RULE" "$PM_CONSTRAINTS" 2>/dev/null; then
+    pass "PM constraints include GOLDEN RULE"
+else
+    fail "PM constraints missing GOLDEN RULE"
 fi
 
 # Verify key PM-specific constraints
@@ -220,6 +240,54 @@ if grep -q "NEVER communicate directly with the user" "$PM_INSTRUCTIONS" 2>/dev/
     fail "instructions.md still contains system constraints (should be in constraints.md only)"
 else
     pass "instructions.md does not contain system constraints (correct)"
+fi
+
+echo ""
+
+# ============================================================
+# PHASE 7: Verify CLAUDE.md references planning-briefing.md
+# ============================================================
+echo "Phase 7: Verifying CLAUDE.md references planning-briefing.md..."
+
+PM_CLAUDE="$PM_DIR/CLAUDE.md"
+
+if grep -q "planning-briefing.md" "$PM_CLAUDE" 2>/dev/null; then
+    pass "CLAUDE.md references planning-briefing.md"
+else
+    fail "CLAUDE.md does not reference planning-briefing.md"
+fi
+
+if grep -q "Planning Briefing" "$PM_CLAUDE" 2>/dev/null; then
+    pass "CLAUDE.md has 'Planning Briefing' entry in reading list"
+else
+    fail "CLAUDE.md missing 'Planning Briefing' entry"
+fi
+
+echo ""
+
+# ============================================================
+# PHASE 8: Verify planning-briefing.md content
+# ============================================================
+echo "Phase 8: Verifying planning-briefing.md content..."
+
+PM_BRIEFING="$PM_DIR/planning-briefing.md"
+
+if grep -q "PM Planning Briefing" "$PM_BRIEFING" 2>/dev/null; then
+    pass "planning-briefing.md has title"
+else
+    fail "planning-briefing.md missing title"
+fi
+
+if grep -q "What are we building" "$PM_BRIEFING" 2>/dev/null; then
+    pass "planning-briefing.md has discovery questions"
+else
+    fail "planning-briefing.md missing discovery questions"
+fi
+
+if grep -q "TEAM TEMPLATE SELECTION" "$PM_BRIEFING" 2>/dev/null; then
+    pass "planning-briefing.md has team template selection"
+else
+    fail "planning-briefing.md missing team template selection"
 fi
 
 echo ""

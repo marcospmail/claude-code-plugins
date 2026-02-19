@@ -131,18 +131,18 @@ check_pm_constraints() {
         fail "$label: missing '## PM-Specific Constraints' section"
     fi
 
-    # System constraint: NEVER communicate directly with the user
-    if grep -q "NEVER communicate directly with the user" "$constraints_file" 2>/dev/null; then
-        pass "$label: system constraint - NEVER communicate with user"
+    # PM system constraint: NEVER stop working silently (PM-appropriate)
+    if grep -q "NEVER stop working silently" "$constraints_file" 2>/dev/null; then
+        pass "$label: system constraint - NEVER stop working silently"
     else
-        fail "$label: missing system constraint - NEVER communicate with user"
+        fail "$label: missing system constraint - NEVER stop working silently"
     fi
 
-    # System constraint: AskUserQuestion prohibition
-    if grep -q "DO NOT ask the user questions using AskUserQuestion" "$constraints_file" 2>/dev/null; then
-        pass "$label: system constraint - AskUserQuestion prohibition"
+    # PM should NOT have non-PM system constraints (PM communicates with user)
+    if grep -q "NEVER communicate directly with the user" "$constraints_file" 2>/dev/null; then
+        fail "$label: PM should NOT have 'NEVER communicate with user' constraint"
     else
-        fail "$label: missing system constraint - AskUserQuestion prohibition"
+        pass "$label: correctly omits non-PM system constraints"
     fi
 
     # System constraint: infinite polling
@@ -150,6 +150,13 @@ check_pm_constraints() {
         pass "$label: system constraint - polling prohibition"
     else
         fail "$label: missing system constraint - polling prohibition"
+    fi
+
+    # PM constraint: GOLDEN RULE
+    if grep -q "GOLDEN RULE" "$constraints_file" 2>/dev/null; then
+        pass "$label: PM constraint - GOLDEN RULE"
+    else
+        fail "$label: missing PM constraint - GOLDEN RULE"
     fi
 
     # PM-specific: cannot modify code

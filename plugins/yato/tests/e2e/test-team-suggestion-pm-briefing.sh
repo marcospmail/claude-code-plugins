@@ -3,7 +3,7 @@
 #
 # E2E Test: PM Briefing References Team Suggestion Templates
 #
-# Verifies that the PM briefing in orchestrator.py references the team
+# Verifies that the PM briefing template references the team
 # suggestion templates directory and instructs PM to use them.
 #
 # IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
@@ -77,7 +77,7 @@ echo "Phase 2: Checking PM briefing references templates..."
 
 BRIEFING_CHECK="cd $PROJECT_ROOT && uv run python -c \"
 import json
-with open('lib/orchestrator.py') as f:
+with open('lib/templates/pm_planning_briefing.md.j2') as f:
     content = f.read()
 
 results = {
@@ -107,63 +107,58 @@ echo "Phase 3: Verifying PM briefing content..."
 echo ""
 
 # Check orchestrator.py directly for template references
-ORCH_FILE="$PROJECT_ROOT/lib/orchestrator.py"
+BRIEFING_TEMPLATE="$PROJECT_ROOT/lib/templates/pm_planning_briefing.md.j2"
 
-if grep -q "templates/team-suggestions/" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "templates/team-suggestions/" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM briefing references templates/team-suggestions/ directory"
 else
     fail "PM briefing does not reference templates/team-suggestions/ directory"
 fi
 
-if grep -q "\.yml" "$ORCH_FILE" 2>/dev/null && grep -q "team-suggestions" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "\.yml" "$BRIEFING_TEMPLATE" 2>/dev/null && grep -q "team-suggestions" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM briefing references .yml template files in team-suggestions directory"
 else
     fail "PM briefing does not reference .yml template files"
 fi
 
-if grep -q "starting point\|suggestion" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "starting point\|suggestion" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM briefing instructs to use templates as starting points"
 else
     fail "PM briefing does not instruct to use templates as starting points"
 fi
 
-if grep -q "not mandatory\|from scratch" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "not mandatory\|from scratch" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM briefing maintains backward compatibility (templates optional)"
 else
     fail "PM briefing does not indicate templates are optional"
 fi
 
 # Verify the template reference is in step 5 (team proposal section)
-if grep -q "TEAM TEMPLATE SELECTION" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "TEAM TEMPLATE SELECTION" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM briefing has TEAM TEMPLATE SELECTION section"
 else
     fail "PM briefing missing TEAM TEMPLATE SELECTION section"
 fi
 
 # Verify PM briefing instructs to use AskUserQuestion for template choice
-if grep -q "Which team template would you like to use" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "Which team template would you like to use" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM briefing instructs AskUserQuestion for template selection"
 else
     fail "PM briefing missing AskUserQuestion for template selection"
 fi
 
 # Verify Custom option is included
-if grep -q "Custom" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "Custom" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "PM briefing includes Custom option for building from scratch"
 else
     fail "PM briefing missing Custom option"
 fi
 
 # Verify template path uses yato_path variable
-if grep -q "yato_path.*templates/team-suggestions" "$ORCH_FILE" 2>/dev/null; then
+if grep -q "{{ yato_path }}/templates/team-suggestions" "$BRIEFING_TEMPLATE" 2>/dev/null; then
     pass "Template path uses yato_path variable for discovery"
 else
-    # Check with f-string pattern
-    if grep -q "{yato_path}/templates/team-suggestions" "$ORCH_FILE" 2>/dev/null; then
-        pass "Template path uses yato_path variable for discovery"
-    else
-        fail "Template path does not use yato_path variable"
-    fi
+    fail "Template path does not use yato_path variable"
 fi
 
 # ============================================================
