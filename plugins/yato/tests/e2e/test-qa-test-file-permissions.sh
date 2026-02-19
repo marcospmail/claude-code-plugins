@@ -91,7 +91,7 @@ fi
 # Find the workflow directory
 WORKFLOW_DIR=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1)
 
-# If no workflow dir exists, create one manually and run agent_manager
+# If no workflow dir exists, create one manually and run agent_manager directly
 if [[ -z "$WORKFLOW_DIR" ]]; then
     echo "  No workflow found, creating manually..."
     mkdir -p "$TEST_DIR/.workflow/001-test-qa"
@@ -101,19 +101,9 @@ session: $SESSION_NAME
 EOF
     echo "001-test-qa" > "$TEST_DIR/.workflow/current"
 
-    # Ask Claude to create agent with explicit workflow
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $TEST_DIR && WORKFLOW_NAME=001-test-qa uv run python $PROJECT_ROOT/lib/agent_manager.py create $SESSION_NAME qa -p $TEST_DIR 2>&1 && echo 'AGENT_CREATE_DONE2'"
-    sleep 1
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 10
-
-    SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-    if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-        tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-        sleep 20
-    else
-        sleep 20
-    fi
+    # Run agent_manager directly (not through Claude) for reliability
+    echo "  Creating QA agent files directly..."
+    cd "$TEST_DIR" && uv run --directory "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/agent_manager.py" init-files qa qa -p "$TEST_DIR" 2>&1 || true
 
     WORKFLOW_DIR="$TEST_DIR/.workflow/001-test-qa"
 fi

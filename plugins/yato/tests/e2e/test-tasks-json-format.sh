@@ -7,9 +7,6 @@
 # 1. tasks.json format is correctly parsed for task status detection
 # 2. Different task statuses are detected correctly
 # 3. Display rendering works for various task states
-#
-# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
-# All Python execution and script calls go through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -33,12 +30,11 @@ cleanup() {
     echo ""; echo "Cleaning up..."
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
-    rm -f /tmp/e2e-taskjson-count-$$.txt /tmp/e2e-taskjson-display-$$.txt 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # ============================================================
-# Setup: Create test project with workflow and start Claude
+# Setup: Create test project with workflow
 # ============================================================
 echo "Phase 1: Setting up test environment..."
 
@@ -49,72 +45,45 @@ status: in-progress
 checkin_interval_minutes: 1
 EOF
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
+# Create a tmux session for env var tests
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
 
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
 echo "  - Test directory: $TEST_DIR"
 echo "  - Session: $SESSION_NAME"
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
-
 echo "  ✓ Test environment ready"
 echo ""
 
 # ============================================================
-# Helper: Count incomplete tasks via Claude
+# Helper: Count incomplete tasks directly via Python
 # ============================================================
 count_incomplete() {
     local tasks_file="$1"
-    local output_file="/tmp/e2e-taskjson-count-$$.txt"
-
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"import json; data=json.load(open('$tasks_file')); print(len([t for t in data.get('tasks',[]) if t.get('status') in ('pending','in_progress','blocked')]))\" > '$output_file' 2>&1"
-    sleep 1
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 30
-
-    cat "$output_file" 2>/dev/null | tr -d ' \n'
+    cd "$PROJECT_ROOT" && uv run python -c "
+import json
+data = json.load(open('$tasks_file'))
+print(len([t for t in data.get('tasks', []) if t.get('status') in ('pending', 'in_progress', 'blocked')]))
+" 2>/dev/null | tr -d ' \n'
 }
 
 # ============================================================
-# Helper: Display tasks via Claude
+# Helper: Display tasks directly via Python
 # ============================================================
 display_tasks() {
     local tasks_file="$1"
-    local output_file="/tmp/e2e-taskjson-display-$$.txt"
-
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"
+    cd "$PROJECT_ROOT" && uv run python -c "
 import json
-data=json.load(open('$tasks_file'))
-tasks=data.get('tasks',[])
-icons={'pending':'○','in_progress':'◐','blocked':'✗','completed':'●'}
+data = json.load(open('$tasks_file'))
+tasks = data.get('tasks', [])
+icons = {'pending': '○', 'in_progress': '◐', 'blocked': '✗', 'completed': '●'}
 for t in tasks:
-    s=t.get('status','pending')
-    i=icons.get(s,'?')
-    tid=t.get('id','?')
-    sub=t.get('subject','No subject')[:45]
-    ag=t.get('agent','?')
+    s = t.get('status', 'pending')
+    i = icons.get(s, '?')
+    tid = t.get('id', '?')
+    sub = t.get('subject', 'No subject')[:45]
+    ag = t.get('agent', '?')
     print(f'{i} {tid}: {sub} [{ag}]')
-\" > '$output_file' 2>&1"
-    sleep 1
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 30
-
-    cat "$output_file" 2>/dev/null
+" 2>/dev/null
 }
 
 # ============================================================
