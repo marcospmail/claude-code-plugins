@@ -13,7 +13,7 @@ In Claude Code, run:
 
 ### Requirements
 
-- **Python >= 3.10** - `uv` handles dependencies automatically
+- **uv** - Python package manager (handles Python and dependencies automatically)
 - **Claude Code**
 
 ## Usage
