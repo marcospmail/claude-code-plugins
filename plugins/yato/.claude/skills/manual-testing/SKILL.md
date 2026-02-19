@@ -1,7 +1,7 @@
 ---
 name: manual-testing
 description: Manual testing guide for Yato. Use when you need to manually test Yato workflows.
-allowed-tools: Bash, Read
+allowed-tools: Bash, Read, Skill
 user-invocable: true
 argument-hint: "[what to test]"
 ---
@@ -10,9 +10,13 @@ argument-hint: "[what to test]"
 
 Guide for manually testing Yato workflows via tmux.
 
-## Starting a Test
+## MANDATORY: Use Real Workflows
 
-Use Yato skills to start workflows:
+You MUST use Yato skills to start a real workflow. DO NOT bypass by running scripts directly (e.g., init-workflow.sh, agent_manager.py, save_team_structure). The point of manual testing is to verify the full end-to-end flow with live Claude agents.
+
+## Step 1: Start a Real Workflow
+
+Use one of these Yato skills:
 
 ```
 /yato:yato-new-project test-app a simple counter app
@@ -20,51 +24,47 @@ Use Yato skills to start workflows:
 /yato:yato-resume
 ```
 
-Then attach to the tmux session to monitor.
+This will create a tmux session with a PM and agents. You MUST use these skills — not raw shell commands.
 
-## Tmux Commands
+## Step 2: Monitor the Tmux Session
 
 ```bash
 # List sessions
 tmux list-sessions
 
-# Attach to session (read-only)
-tmux attach -t <session> -r
-
-# List windows
+# List windows in a session
 tmux list-windows -t <session>
 
-# Capture pane output
-tmux capture-pane -t <session>:<window> -p | tail -50
-
-# Kill session when done
-tmux kill-session -t <session>
+# Capture pane output (PM is window 0, agents are window 1+)
+tmux capture-pane -t <session>:0 -p | tail -50
+tmux capture-pane -t <session>:1 -p | tail -50
 ```
 
-## What to Check
+## Step 3: Verify Workflow Files
 
-**Workflow files** in `.workflow/<name>/`:
+Check `.workflow/<name>/` in the project directory:
 
-- `status.yml` - workflow status
-- `prd.md` - requirements
-- `team.yml` - proposed agents
-- `tasks.json` - task list and status
-- `agents.yml` - created agents
+- `status.yml` - workflow status and config
+- `prd.md` - generated requirements
+- `team.yml` - proposed team structure
+- `tasks.json` - task list with status and assignments
+- `agents.yml` - registered agents with window numbers
+- `agents/<name>/instructions.md` - agent instructions (positive guidance)
+- `agents/<name>/constraints.md` - agent constraints (prohibitions)
+- `agents/<name>/CLAUDE.md` - agent entry point config
+- `agents/<name>/identity.yml` - agent metadata
 
-**Tmux windows**:
+## Step 4: Observe Agent Behavior
 
-- Window 0: PM agent
-- Window 1+: Developer/QA agents
+Watch the live agents to verify they:
+- Follow their instructions.md (role, responsibilities, communication)
+- Respect their constraints.md (system constraints, project constraints)
+- Communicate through PM (not directly with user)
+- Use /notify-pm for status updates
 
-## Quick Monitoring
+## Step 5: Cleanup
 
 ```bash
-# Watch PM
-tmux capture-pane -t <session>:0 -p | tail -30
-
-# Watch developer
-tmux capture-pane -t <session>:1 -p | tail -30
-
-# Check task status
-cat .workflow/*/tasks.json | grep '"status"'
+# Kill the tmux session when done
+tmux kill-session -t <session>
 ```

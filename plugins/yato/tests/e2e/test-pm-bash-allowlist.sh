@@ -211,6 +211,15 @@ else
     fail "PM should be allowed to run bash with yato scripts"
 fi
 
+# yato script via bash (plugin cache path containing /claude-code-plugins/yato/)
+CACHE_PATH="/home/user/.claude/plugins/cache/claude-code-plugins/yato/3.11.2/bin/create-team.sh"
+OUTPUT=$(run_hook_in_pane "0" "bash $CACHE_PATH /project dev:developer:opus")
+if echo "$OUTPUT" | grep -q '"continue": true\|"continue":true'; then
+    pass "PM allowed: bash with yato cache path script"
+else
+    fail "PM should be allowed to run bash with yato cache path scripts"
+fi
+
 # head (read-only tool)
 OUTPUT=$(run_hook_in_pane "0" "head -20 file.txt")
 if echo "$OUTPUT" | grep -q '"continue": true\|"continue":true'; then
