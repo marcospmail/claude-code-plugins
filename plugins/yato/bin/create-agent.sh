@@ -197,11 +197,6 @@ if [[ -n "$PROJECT_PATH" ]]; then
         # Use agent name (lowercase window name) to find agent folder
         AGENT_NAME_LOWER=$(echo "$WINDOW_NAME" | tr '[:upper:]' '[:lower:]')
         AGENT_DIR="${WORKFLOW_PATH}/agents/${AGENT_NAME_LOWER}"
-
-        # Also check by role for backward compatibility
-        if [[ ! -d "$AGENT_DIR" ]]; then
-            AGENT_DIR="${WORKFLOW_PATH}/agents/${ROLE}"
-        fi
     else
         echo "Warning: No active workflow found. Creating agents directory."
         # Create a default agents directory under .workflow if no workflow exists
