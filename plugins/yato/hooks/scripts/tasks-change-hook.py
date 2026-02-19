@@ -78,28 +78,36 @@ def is_daemon_running(workflow_path: Path) -> bool:
         return False
 
 
-def has_incomplete_tasks(workflow_path: Path) -> Tuple[bool, int]:
+def has_incomplete_tasks(workflow_path: Path) -> Tuple[Optional[bool], int]:
     """
     Check if there are incomplete tasks in tasks.json.
 
+    Uses retry logic to handle race conditions when tasks.json is being written.
+
     Returns:
-        Tuple of (has_incomplete, count)
+        Tuple of (has_incomplete, count) where has_incomplete is None on read failure
     """
+    import time
+
     tasks_file = workflow_path / "tasks.json"
 
     if not tasks_file.exists():
         return False, 0
 
-    try:
-        with open(tasks_file, "r") as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return False, 0
+    # Retry up to 3 times with 0.1s delay (matches daemon's get_incomplete_tasks behavior)
+    for attempt in range(3):
+        try:
+            with open(tasks_file, "r") as f:
+                data = json.load(f)
+            tasks = data.get("tasks", [])
+            incomplete = [t for t in tasks if t.get("status") in ("pending", "in_progress", "blocked")]
+            return len(incomplete) > 0, len(incomplete)
+        except (json.JSONDecodeError, IOError):
+            if attempt < 2:
+                time.sleep(0.1)
 
-    tasks = data.get("tasks", [])
-    incomplete = [t for t in tasks if t.get("status") in ("pending", "in_progress", "blocked")]
-
-    return len(incomplete) > 0, len(incomplete)
+    # All retries failed — return None to signal uncertainty (don't assume complete)
+    return None, -1
 
 
 def get_checkin_interval(workflow_path: Path) -> Optional[int]:
@@ -275,6 +283,11 @@ def main():
 
     # Check if there are incomplete tasks
     has_incomplete, count = has_incomplete_tasks(workflow_path)
+
+    if has_incomplete is None:
+        # Could not read tasks.json after retries — don't assume anything
+        print(f"[tasks-change-hook] Could not read tasks.json after retries, skipping", file=sys.stderr)
+        return 0
 
     if has_incomplete:
         # Dead daemon + incomplete tasks → restart daemon
