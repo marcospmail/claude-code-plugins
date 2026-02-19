@@ -8,9 +8,6 @@
 # 2. WORKFLOW_NAME env var is set in tmux session
 # 3. Concurrent workflows in same project are isolated
 # 4. Each session has its own WORKFLOW_NAME value
-#
-# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
-# All workflow creation goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -43,6 +40,7 @@ cleanup() {
     echo ""
     echo "Cleaning up..."
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "e2e-iso-a-$$" 2>/dev/null || true
     tmux -L "$TMUX_SOCKET" kill-session -t "e2e-iso-b-$$" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
 }
@@ -59,44 +57,20 @@ echo "function test() { return true; }" > "$TEST_DIR/app.js"
 # Initialize git so init-workflow.sh works
 cd "$TEST_DIR" && git init -q && git config user.name 'Test' && git config user.email 'test@test.com'
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
+# Create a tmux session so init-workflow.sh can detect session name
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-# Wait for Claude to start
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo "  ✓ Test environment ready"
 echo ""
 
 # ============================================================
-# Test 1: Create first workflow through Claude
+# Test 1: Create first workflow
 # ============================================================
-echo "Test 1: Creating first workflow through Claude..."
+echo "Test 1: Creating first workflow..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Add feature X'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
-
-# Debug output
-echo "  Debug - After first workflow:"
-tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -30 | tail -15
-echo ""
+# Run init-workflow.sh inside the tmux session so it can detect session name
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Add feature X'" Enter
+sleep 5
 
 # Get the workflow name
 WORKFLOW_A=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^001-" | head -1)
@@ -144,20 +118,13 @@ fi
 tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_A" 2>/dev/null || true
 
 # ============================================================
-# Test 4: Create second workflow through Claude (concurrent isolation)
+# Test 4: Create second workflow (concurrent isolation)
 # ============================================================
 echo ""
-echo "Test 4: Creating second workflow through Claude (concurrent isolation)..."
+echo "Test 4: Creating second workflow (concurrent isolation)..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Second feature'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
-
-# Debug output
-echo "  Debug - After second workflow:"
-tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -30 | tail -15
-echo ""
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Second feature'" Enter
+sleep 5
 
 WORKFLOW_B=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^002-" | head -1)
 

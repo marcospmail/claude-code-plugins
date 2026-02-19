@@ -5,9 +5,6 @@
 #
 # Verifies that workflow directories are created with sequential numbering (001, 002, 003)
 # Tests creating multiple workflows and validates correct numbering sequence.
-#
-# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
-# All workflow creation goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -46,46 +43,21 @@ echo "function test() { return true; }" > "$TEST_DIR/app.js"
 cd "$TEST_DIR" && git init -q && git config user.name Test && git config user.email test@test.com
 
 echo "  - Test directory: $TEST_DIR"
-echo "  - Session: $SESSION_NAME"
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
+# Create a tmux session so init-workflow.sh can detect session name
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-# Wait for Claude to start
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo "  ✓ Test environment ready"
 echo ""
 
 # ============================================================
-# Test 1: Create first workflow through Claude
+# Test 1: Create first workflow
 # ============================================================
 echo "Test 1: Creating first workflow..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'First workflow'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
-
-# Debug: show what Claude did
-echo "  Debug - After first workflow:"
-tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -30 | tail -15
-echo ""
+# Run init-workflow.sh inside the tmux session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'First workflow'" Enter
+sleep 5
 
 # Verify first workflow directory
 WF1=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^001-" | head -1)
@@ -103,20 +75,13 @@ else
 fi
 
 # ============================================================
-# Test 2: Create second workflow through Claude
+# Test 2: Create second workflow
 # ============================================================
 echo ""
 echo "Test 2: Creating second workflow..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Second workflow'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
-
-# Debug: show what Claude did
-echo "  Debug - After second workflow:"
-tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -30 | tail -15
-echo ""
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Second workflow'" Enter
+sleep 5
 
 # Verify second workflow directory
 WF2=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^002-" | head -1)
@@ -134,20 +99,13 @@ else
 fi
 
 # ============================================================
-# Test 3: Create third workflow through Claude
+# Test 3: Create third workflow
 # ============================================================
 echo ""
 echo "Test 3: Creating third workflow..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Third workflow'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
-
-# Debug: show what Claude did
-echo "  Debug - After third workflow:"
-tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -30 | tail -15
-echo ""
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Third workflow'" Enter
+sleep 5
 
 # Verify third workflow directory
 WF3=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^003-" | head -1)

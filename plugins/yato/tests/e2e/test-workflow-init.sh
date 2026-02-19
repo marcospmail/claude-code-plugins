@@ -8,9 +8,6 @@
 # - status.yml with correct fields
 # - agents.yml with PM entry
 # - agents/pm/ directory with identity and instructions
-#
-# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
-# All workflow creation goes through Claude running inside tmux.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -58,53 +55,20 @@ cd "$TEST_DIR" && git init -q && git config user.name 'Test' && git config user.
 
 echo "  - Project: $TEST_DIR"
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
+# Create a tmux session so init-workflow.sh can detect session name
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
-
-# Wait for Claude to start with retry loop for trust prompt
-echo "  - Waiting for Claude to start..."
-CLAUDE_READY=false
-for i in {1..10}; do
-    sleep 3
-    OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-    if echo "$OUTPUT" | grep -qi "trust"; then
-        echo "  - Trust prompt found, accepting..."
-        tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-        sleep 15
-        CLAUDE_READY=true
-        break
-    elif echo "$OUTPUT" | grep -q "❯\|>\|Claude"; then
-        echo "  - Claude prompt detected"
-        CLAUDE_READY=true
-        break
-    fi
-done
-
-if [[ "$CLAUDE_READY" != "true" ]]; then
-    echo "  - No trust prompt found, waiting for Claude..."
-    sleep 10
-fi
 
 echo "  ✓ Test environment ready"
 echo ""
 
 # ============================================================
-# PHASE 2: Initialize workflow through Claude
+# PHASE 2: Initialize workflow directly
 # ============================================================
-echo "Phase 2: Running init-workflow.sh through Claude..."
+echo "Phase 2: Running init-workflow.sh..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Add user authentication feature'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
-
-# Debug: show what Claude did
-echo "  Debug - After workflow init:"
-tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -30 | tail -15
-echo ""
+# Run init-workflow.sh inside the tmux session so it can detect session name
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Add user authentication feature'" Enter
+sleep 5
 
 echo "  - Workflow initialized"
 echo ""
