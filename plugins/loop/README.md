@@ -13,7 +13,7 @@ In Claude Code, run:
 
 ### Requirements
 
-- **Python >= 3.10** - With croniter (`uv` handles dependencies automatically)
+- **Python >= 3.10** - `uv` handles dependencies automatically
 - **Claude Code**
 
 ## Usage
