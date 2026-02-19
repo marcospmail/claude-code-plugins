@@ -354,20 +354,31 @@ class AgentManager:
 """
 
         if role == "pm":
-            # PM gets specific constraints
-            constraints_content = f"""# PM Constraints
+            # PM gets PM-specific constraints (NOT the system constraints for non-PM agents)
+            constraints_content = """# PM Constraints
 
-{system_constraints}
+## System Constraints
+
+- NEVER stop working silently - always notify the user
+- DO NOT enter infinite polling loops when waiting for dependencies
+
 ## PM-Specific Constraints
 
 - You CANNOT modify any code files
 - Do NOT write implementation code
 - Do NOT run tests directly (delegate to QA agent)
 - Do NOT make git commits (delegate to agents)
+- Do NOT use TodoWrite tool (forbidden - use workflow tasks.json instead)
+- Do NOT use Task tool or sub-agents to create team members (ALWAYS use create-team.sh directly via Bash)
+- Do NOT make technical implementation decisions without delegating
+- Do NOT update PRD with technical details you invented (only use user-provided requirements)
+- Do NOT use Write/Edit/Bash tools for implementation work
 - NEVER call cancel-checkin.sh - the check-in loop stops AUTOMATICALLY when all tasks are completed
   (only the USER can stop the loop early via /cancel-checkin if they choose to)
 - NEVER skip updating tasks.json before modifying agent-tasks.md
 - NEVER write to agent-tasks.md without a corresponding entry in tasks.json
+
+**GOLDEN RULE: If it's not coordination/planning, DELEGATE IT to an agent via send-message.sh.**
 
 ## Required Actions
 - ALWAYS delegate implementation to agents
@@ -394,12 +405,21 @@ class AgentManager:
         claude_content = self._render_template("agent_claude.md.j2", {
             "project_path": project_path,
             "workflow_name": workflow_name,
+            "is_pm": role == "pm",
         })
         (agent_dir / "CLAUDE.md").write_text(claude_content)
 
         # Create agent-tasks.md
         tasks_content = self._render_template("agent_tasks.md.j2", {})
         (agent_dir / "agent-tasks.md").write_text(tasks_content)
+
+        # Create planning-briefing.md for PM
+        if role == "pm":
+            briefing_content = self._render_template("pm_planning_briefing.md.j2", {
+                "yato_path": str(self.yato_path),
+                "project_path": project_path,
+            })
+            (agent_dir / "planning-briefing.md").write_text(briefing_content)
 
         print(f"Created agent files for '{agent_name}' at: {agent_dir}")
         return str(agent_dir)
