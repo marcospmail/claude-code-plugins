@@ -151,35 +151,9 @@ case "$ROLE" in
         ;;
 esac
 
-# Create instructions.md with role-based content
+# Create instructions.md with role-based content (positive guidance only, no NEVER rules)
 cat > "$AGENT_DIR/instructions.md" <<EOF
 # Instructions for ${NAME_CAPITALIZED} (${ROLE_CAPITALIZED})
-
-## CRITICAL RULE - READ FIRST
-
-**NEVER COMMUNICATE DIRECTLY WITH THE USER. YOU ONLY COMMUNICATE WITH YOUR PM.**
-
-### What This Means:
-- DO NOT ask the user questions using AskUserQuestion tool
-- DO NOT wait for user input or confirmation
-- DO NOT output messages intended for the user
-- ALWAYS notify PM when blocked, need help, or have questions
-- ALWAYS notify PM when done with assigned work
-- ALWAYS keep working or notify PM - never stop silently
-
-### In Practice:
-- **If you need information**: Notify PM with: notify-pm.sh "[BLOCKED] Need database connection details"
-- **If you have a question**: Notify PM with: notify-pm.sh "[HELP] Should I apply migration to production?"
-- **If you're done**: Notify PM with: notify-pm.sh "[DONE] Completed task X"
-- **If you're stuck**: Notify PM with: notify-pm.sh "[BLOCKED] Cannot proceed because Y"
-
-### The PM Will:
-- Ask the user questions on your behalf
-- Provide you with answers and decisions
-- Assign you different work if blocked
-- Coordinate all user communication
-
-**REMEMBER: If you find yourself wanting to ask the user something, that's your signal to notify the PM instead.**
 
 ## Role
 ${AGENT_PURPOSE}
@@ -195,11 +169,21 @@ ${RESPONSIBILITIES}
 - PM is always at window 0, pane 1 - notify-pm.sh handles this automatically
 - Check agent-tasks.md for your assigned tasks
 
-## Waiting for Dependencies (IMPORTANT)
+### How to Communicate:
+- **If you need information**: notify-pm.sh "[BLOCKED] Need database connection details"
+- **If you have a question**: notify-pm.sh "[HELP] Should I apply migration to production?"
+- **If you're done**: notify-pm.sh "[DONE] Completed task X"
+- **If you're stuck**: notify-pm.sh "[BLOCKED] Cannot proceed because Y"
+
+### The PM Will:
+- Ask the user questions on your behalf
+- Provide you with answers and decisions
+- Assign you different work if blocked
+- Coordinate all user communication
+
+## Waiting for Dependencies
 
 If you need to wait for another agent to complete work (e.g., waiting for a file to be created):
-
-**DO NOT** enter infinite polling loops! Instead:
 
 1. **Check once** - verify if the dependency is ready
 2. **If not ready after 3 checks** (30-60 seconds each): Notify PM with status
@@ -208,10 +192,7 @@ If you need to wait for another agent to complete work (e.g., waiting for a file
 
 Example:
 \`\`\`bash
-# BAD: Infinite loop
-while true; do sleep 60 && check_file; done
-
-# GOOD: Limited retries with PM notification
+# Limited retries with PM notification
 for i in 1 2 3 4 5; do
   if [[ -f "expected_file.md" ]]; then break; fi
   sleep \$((i * 30))
@@ -221,12 +202,54 @@ if [[ ! -f "expected_file.md" ]]; then
 fi
 \`\`\`
 
-**Remember:** Your PM can help resolve blocking dependencies. Notify early, don't spin forever.
+Your PM can help resolve blocking dependencies. Notify early.
 EOF
 
-# Create constraints.md (empty by default - user can customize)
-cat > "$AGENT_DIR/constraints.md" <<'EOF'
+# Create constraints.md with system constraints + customizable section
+if [[ "$ROLE" == "pm" ]]; then
+    cat > "$AGENT_DIR/constraints.md" <<'EOF'
+# PM Constraints
+
+## System Constraints
+
+- NEVER communicate directly with the user
+- DO NOT ask the user questions using AskUserQuestion tool
+- DO NOT wait for user input or confirmation
+- DO NOT output messages intended for the user
+- NEVER stop working silently - always notify PM
+- DO NOT enter infinite polling loops when waiting for dependencies
+
+## PM-Specific Constraints
+
+- You CANNOT modify any code files
+- Do NOT write implementation code
+- Do NOT run tests directly (delegate to QA agent)
+- Do NOT make git commits (delegate to agents)
+- NEVER call cancel-checkin.sh - the check-in loop stops AUTOMATICALLY when all tasks are completed
+  (only the USER can stop the loop early via /cancel-checkin if they choose to)
+- NEVER skip updating tasks.json before modifying agent-tasks.md
+- NEVER write to agent-tasks.md without a corresponding entry in tasks.json
+
+## Required Actions
+- ALWAYS delegate implementation to agents
+- ALWAYS update tasks.json when tasks change status
+- ALWAYS provide specific, actionable feedback
+- ALWAYS use `/send-to-agent <agent-name> "message"` to communicate with agents
+EOF
+else
+    cat > "$AGENT_DIR/constraints.md" <<'EOF'
 # Constraints
+
+## System Constraints
+
+- NEVER communicate directly with the user
+- DO NOT ask the user questions using AskUserQuestion tool
+- DO NOT wait for user input or confirmation
+- DO NOT output messages intended for the user
+- NEVER stop working silently - always notify PM
+- DO NOT enter infinite polling loops when waiting for dependencies
+
+## Project Constraints
 
 # Add project-specific constraints for this agent below.
 # Examples:
@@ -234,6 +257,7 @@ cat > "$AGENT_DIR/constraints.md" <<'EOF'
 # - Do NOT make database schema changes
 # - Do NOT use jQuery
 EOF
+fi
 
 # Create CLAUDE.md with references to all agent files
 cat > "$AGENT_DIR/CLAUDE.md" <<EOF
@@ -265,7 +289,7 @@ This file contains references to all your configuration and task files. Read the
 - Read these files at startup before beginning work
 - Re-read agent-tasks.md frequently as PM updates it with new tasks
 - If you encounter any issues, notify your PM immediately
-- Do NOT communicate directly with users - only with PM
+- See constraints.md for all restrictions and forbidden actions
 
 ## Quick Reference
 
