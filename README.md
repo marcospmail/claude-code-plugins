@@ -46,6 +46,6 @@ claude-code-plugins/
 │       │   └── plugin.json     # Plugin manifest
 │       ├── skills/loop/        # /loop skill
 │       ├── hooks/              # Stop hook for loop continuation
-│       └── lib/                # loop_manager.py (pure stdlib)
+│       └── lib/                # loop_manager.py + croniter
 └── README.md
 ```
