@@ -60,38 +60,17 @@ echo "Phase 1: Setting up test environment..."
 mkdir -p "$TEST_DIR"
 echo "function test() { return true; }" > "$TEST_DIR/app.js"
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "orchestrator" -c "$TEST_DIR"
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo "  ✓ Test environment ready"
 echo ""
 
 # ============================================================
-# PHASE 2: Initialize workflow through Claude
+# PHASE 2: Initialize workflow directly
 # ============================================================
-echo "Phase 2: Initializing workflow through Claude..."
+echo "Phase 2: Initializing workflow..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test custom naming'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test custom naming"
 
 # Get workflow name and set it in the tmux session environment
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
@@ -102,27 +81,21 @@ echo "  - Workflow: $WORKFLOW_NAME"
 echo ""
 
 # ============================================================
-# PHASE 3: Save team structure through Claude
+# PHASE 3: Save team structure directly
 # ============================================================
-echo "Phase 3: Saving team structure through Claude (simulating PM workflow)..."
+echo "Phase 3: Saving team structure..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' discoverer:qa:opus impl:developer:opus"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+source "$PROJECT_ROOT/bin/workflow-utils.sh" && save_team_structure "$TEST_DIR" discoverer:qa:opus impl:developer:opus
 
 echo "  - Team structure saved"
 echo ""
 
 # ============================================================
-# PHASE 4: Create team windows through Claude
+# PHASE 4: Create team windows directly
 # ============================================================
-echo "Phase 4: Creating team through Claude..."
+echo "Phase 4: Creating team..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/create-team.sh '$TEST_DIR' discoverer:qa:opus impl:developer:opus"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/create-team.sh" "$TEST_DIR" discoverer:qa:opus impl:developer:opus
 
 echo "  - Team creation completed"
 echo ""
