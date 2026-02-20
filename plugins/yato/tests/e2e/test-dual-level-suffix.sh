@@ -41,17 +41,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Helper: send a command to Claude and approve the permission prompt
-send_to_claude() {
-    local cmd="$1"
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "$cmd"
-    sleep 1
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
-    sleep 15  # Wait for Claude to show permission prompt
-
-    # Approve the permission prompt (press Enter to accept "Yes")
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
-    sleep 10  # Wait for command to execute
+# Helper: run a Python command directly (no Claude CLI needed)
+run_python() {
+    local python_code="$1"
+    cd "$PROJECT_ROOT" && YATO_PATH="$TEST_DIR" TMUX_SOCKET="$TMUX_SOCKET" uv run python -c "$python_code"
+    sleep 2  # Allow tmux pane to receive the message
 }
 
 # Helper: set config values in defaults.conf
@@ -82,18 +76,6 @@ data['$field'] = '$value'
 sf.write_text(yaml.dump(data, default_flow_style=False))
 "
 }
-
-# ============================================================
-# QA Validator: Check real Claude Code environment
-# ============================================================
-echo "QA Validator: Checking Claude Code environment..."
-if ! which claude >/dev/null 2>&1; then
-    echo "ERROR: 'claude' command not found in PATH"
-    echo "This test requires a real Claude Code installation."
-    exit 99
-fi
-echo "  claude found: $(which claude)"
-echo ""
 
 # ============================================================
 # Setup
@@ -127,35 +109,18 @@ echo ""
 
 # Create tmux session mimicking real Yato layout:
 #   Window 0: pane 0 = checkin display, pane 1 = PM (notify_pm target)
-#   Window 1: Claude (for running test commands)
-#   Window 2: Agent (receiver for PM->agent messages)
-echo "Starting tmux session and Claude..."
+#   Window 1: Agent (receiver for PM->agent messages)
+# Note: No Claude window needed — commands run directly via run_python()
+echo "Starting tmux session..."
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "pm-window" -c "$TEST_DIR"
 # Split window 0 to create pane 0 and pane 1 (PM pane at 0.1)
 tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -h -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "claude" -c "$TEST_DIR"
 tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "agent" -c "$TEST_DIR"
 
-# Disable flow control in PM pane (0.1) and Agent window (2)
+# Disable flow control in PM pane (0.1) and Agent window (1)
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.1" "stty -ixon" Enter
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:2" "stty -ixon" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "stty -ixon" Enter
 sleep 1
-
-# Start Claude in window 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "claude" Enter
-
-echo "Waiting for Claude to start..."
-sleep 8
-
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" Enter
-    sleep 15
-else
-    echo "No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo ""
 
@@ -175,9 +140,9 @@ set_workflow_suffix "agent_message_suffix" "$WF_AGENT_SUFFIX"
 
 MSG1="BOTH_PM_TO_AGENT_$(date +%s)"
 
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:2', '$MSG1', workflow_status_file='$STATUS_FILE')\""
+run_python "from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:1', '$MSG1', workflow_status_file='$STATUS_FILE')"
 
-OUTPUT1=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:2" -p)
+OUTPUT1=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
 
 echo "Debug - Agent pane:"
 echo "$OUTPUT1" | tail -15
@@ -212,14 +177,14 @@ echo ""
 
 set_workflow_suffix "agent_message_suffix" ""
 # Clear agent pane
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:2" "clear" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "clear" Enter
 sleep 1
 
 MSG2="YATO_ONLY_$(date +%s)"
 
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:2', '$MSG2', workflow_status_file='$STATUS_FILE')\""
+run_python "from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:1', '$MSG2', workflow_status_file='$STATUS_FILE')"
 
-OUTPUT2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:2" -p)
+OUTPUT2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
 
 if echo "$OUTPUT2" | grep -Fq -- "$YATO_PM_SUFFIX"; then
     pass "Yato-level suffix present when only yato set"
@@ -245,14 +210,14 @@ echo ""
 set_config "" ""
 set_workflow_suffix "agent_message_suffix" "$WF_AGENT_SUFFIX"
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:2" "clear" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "clear" Enter
 sleep 1
 
 MSG3="WF_ONLY_$(date +%s)"
 
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:2', '$MSG3', workflow_status_file='$STATUS_FILE')\""
+run_python "from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:1', '$MSG3', workflow_status_file='$STATUS_FILE')"
 
-OUTPUT3=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:2" -p)
+OUTPUT3=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
 
 if echo "$OUTPUT3" | grep -Fq -- "$WF_AGENT_SUFFIX"; then
     pass "Workflow-level suffix present when only workflow set"
@@ -278,14 +243,14 @@ echo ""
 set_config "" ""
 set_workflow_suffix "agent_message_suffix" ""
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:2" "clear" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "clear" Enter
 sleep 1
 
 MSG4="CLEAN_MSG_$(date +%s)"
 
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:2', '$MSG4', workflow_status_file='$STATUS_FILE')\""
+run_python "from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:1', '$MSG4', workflow_status_file='$STATUS_FILE')"
 
-OUTPUT4=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:2" -p)
+OUTPUT4=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
 
 if echo "$OUTPUT4" | grep -Fq -- "$MSG4"; then
     pass "Clean message delivered"
@@ -321,7 +286,7 @@ sleep 1
 
 MSG5="AGENT_TO_PM_$(date +%s)"
 
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import notify_pm; notify_pm('$MSG5', session='$SESSION_NAME', workflow_status_file='$STATUS_FILE')\""
+run_python "from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import notify_pm; notify_pm('$MSG5', session='$SESSION_NAME', workflow_status_file='$STATUS_FILE')"
 
 # Capture from PM pane (0.1)
 OUTPUT5=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0.1" -p)
@@ -365,7 +330,7 @@ sleep 1
 
 MSG6="AGENT_YATO_ONLY_$(date +%s)"
 
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import notify_pm; notify_pm('$MSG6', session='$SESSION_NAME', workflow_status_file='$STATUS_FILE')\""
+run_python "from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import notify_pm; notify_pm('$MSG6', session='$SESSION_NAME', workflow_status_file='$STATUS_FILE')"
 
 # Capture from PM pane (0.1)
 OUTPUT6=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0.1" -p)
@@ -404,7 +369,7 @@ sleep 1
 MSG7="CHECKIN_DUAL_$(date +%s)"
 
 # Simulate what the checkin daemon does: read CHECKIN_TO_PM_SUFFIX and stack with workflow suffix, send to PM pane (0.1)
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"
+run_python "
 import yaml
 from pathlib import Path
 from lib.config import load_config, get as get_config
@@ -420,7 +385,7 @@ if yato_suffix:
 if wf_suffix:
     msg = msg + chr(10) + chr(10) + wf_suffix
 send_message('$SESSION_NAME:0.1', msg)
-\""
+"
 
 # Capture from PM pane (0.1)
 OUTPUT7=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0.1" -p)
@@ -463,15 +428,15 @@ ORDER_WF="--ORDER_SECOND_WF--"
 set_config "$ORDER_YATO" ""
 set_workflow_suffix "agent_message_suffix" "$ORDER_WF"
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:2" "clear" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "clear" Enter
 sleep 1
 
 MSG8="ORDER_TEST_$(date +%s)"
 
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:2', '$MSG8', workflow_status_file='$STATUS_FILE')\""
+run_python "from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:1', '$MSG8', workflow_status_file='$STATUS_FILE')"
 
 # Capture full pane as a single string for ordering check
-OUTPUT8=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:2" -p)
+OUTPUT8=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
 
 echo "Debug - Agent pane (ordering test):"
 echo "$OUTPUT8" | tail -20
