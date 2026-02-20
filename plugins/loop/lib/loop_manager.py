@@ -21,8 +21,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
-from croniter import croniter
-
 # ==================== Time Parser ====================
 
 
@@ -126,13 +124,14 @@ def validate_cron_expression(expr: str) -> bool:
     Raises:
         ValueError: If the expression is invalid
     """
+    from croniter import croniter as _croniter
     fields = expr.strip().split()
     if len(fields) != 5:
         raise ValueError(
             f'Cron expression must have exactly 5 fields '
             f'(minute hour day-of-month month day-of-week). Got {len(fields)} fields.'
         )
-    if not croniter.is_valid(expr):
+    if not _croniter.is_valid(expr):
         raise ValueError(
             f'Invalid cron expression: "{expr}". '
             'Use 5-field format: minute hour day-of-month month day-of-week '

@@ -1,6 +1,6 @@
 {
   "name": "loop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Repeating prompt loops for Claude Code - execute any prompt at intervals with configurable stop conditions (times, duration, or forever mode).",
   "author": {
     "name": "Personal"
