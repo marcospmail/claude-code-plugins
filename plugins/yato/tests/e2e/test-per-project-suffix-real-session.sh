@@ -38,17 +38,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Helper: send a command to Claude and approve the permission prompt
-send_to_claude() {
-    local cmd="$1"
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "$cmd"
-    sleep 1
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" Enter
-    sleep 15  # Wait for Claude to show permission prompt
-
-    # Approve the permission prompt (press Enter to accept "Yes")
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" Enter
-    sleep 10  # Wait for command to execute
+# Helper: run a Python command directly (no Claude CLI needed)
+run_python() {
+    local python_code="$1"
+    cd "$PROJECT_ROOT" && YATO_PATH="$TEST_DIR" TMUX_SOCKET="$TMUX_SOCKET" uv run python -c "$python_code"
+    sleep 2  # Allow tmux pane to receive the message
 }
 
 # ============================================================
@@ -82,39 +76,18 @@ agent_message_suffix: "$AGENT_SUFFIX"
 checkin_message_suffix: "$CHECKIN_SUFFIX"
 EOF
 
-# Create a dummy file so Claude trusts the directory
-echo "// test project" > "$TEST_DIR/index.js"
-
 echo "Test directory: $TEST_DIR"
 echo "Session: $SESSION_NAME"
 echo "Status file: $STATUS_FILE"
 echo ""
 
-# Create tmux session with two windows: Claude (window 0) and receiver (window 1)
-echo "Starting tmux session and Claude..."
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "claude" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "receiver" -c "$TEST_DIR"
+# Create tmux session with receiver window (no Claude needed)
+echo "Starting tmux session..."
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "receiver" -c "$TEST_DIR"
 
 # Disable flow control in receiver
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "stty -ixon" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "stty -ixon" Enter
 sleep 1
-
-# Start Claude in window 0 (skip permissions to avoid blocking on bash prompts)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "claude --dangerously-skip-permissions" Enter
-
-# Wait for Claude to start and handle trust prompt
-echo "Waiting for Claude to start..."
-sleep 8
-
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" Enter
-    sleep 15
-else
-    echo "No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo ""
 echo "======================================================================"
@@ -124,16 +97,10 @@ echo ""
 
 MSG1="AGENT_REAL_$(date +%s)"
 
-# Ask Claude to run send_message with workflow_status_file parameter
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.tmux_utils import send_message; send_message('$SESSION_NAME:1', '$MSG1', workflow_status_file='$STATUS_FILE')\""
-
-# Debug: show what Claude did
-echo "Debug - Claude output after Test 1:"
-tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p | tail -15
-echo ""
+run_python "from lib.tmux_utils import send_message; send_message('$SESSION_NAME:0', '$MSG1', workflow_status_file='$STATUS_FILE')"
 
 # Capture receiver pane output
-OUTPUT1=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
+OUTPUT1=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p)
 
 echo "Debug - Receiver pane content:"
 echo "$OUTPUT1" | tail -10
@@ -170,10 +137,9 @@ echo ""
 
 MSG2="NOTIFY_PM_REAL_$(date +%s)"
 
-# Send message WITHOUT workflow_status_file (simulates notify_pm path - no suffix)
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.tmux_utils import send_message; send_message('$SESSION_NAME:1', '$MSG2')\""
+run_python "from lib.tmux_utils import send_message; send_message('$SESSION_NAME:0', '$MSG2')"
 
-OUTPUT2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
+OUTPUT2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p)
 
 echo "Debug - Receiver pane after notify_pm path:"
 echo "$OUTPUT2" | tail -10
@@ -214,10 +180,9 @@ sf.write_text(yaml.dump(data, default_flow_style=False))
 
 MSG3="FRESH_READ_$(date +%s)"
 
-# Ask Claude to send again - should pick up the NEW suffix
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.tmux_utils import send_message; send_message('$SESSION_NAME:1', '$MSG3', workflow_status_file='$STATUS_FILE')\""
+run_python "from lib.tmux_utils import send_message; send_message('$SESSION_NAME:0', '$MSG3', workflow_status_file='$STATUS_FILE')"
 
-OUTPUT3=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
+OUTPUT3=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p)
 
 echo "Debug - Receiver pane after suffix change:"
 echo "$OUTPUT3" | tail -10
@@ -249,7 +214,7 @@ MSG4="CHECKIN_REAL_$(date +%s)"
 
 # Simulate what the checkin daemon does: read checkin_message_suffix from status.yml
 # and append it to the message before sending
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"
+run_python "
 import yaml
 from pathlib import Path
 from lib.tmux_utils import send_message
@@ -257,10 +222,10 @@ sf = Path('$STATUS_FILE')
 data = yaml.safe_load(sf.read_text())
 suffix = data.get('checkin_message_suffix', '')
 msg = '$MSG4' + suffix
-send_message('$SESSION_NAME:1', msg)
-\""
+send_message('$SESSION_NAME:0', msg)
+"
 
-OUTPUT4=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
+OUTPUT4=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p)
 
 echo "Debug - Receiver pane after checkin suffix test:"
 echo "$OUTPUT4" | tail -10
