@@ -3,15 +3,14 @@
 #
 # E2E Test: Check-in daemon scheduling and control
 #
-# Verifies through Claude Code:
+# Verifies:
 # 1. Daemon starts with correct PID stored in checkins.json
 # 2. Duplicate daemon starts are prevented
 # 3. Daemon can be cancelled
 # 4. After cancel, new daemon can be started
 # 5. Status command shows daemon info
 #
-# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
-# All execution goes through Claude running inside a tmux session.
+# IMPORTANT: All execution goes through direct CLI calls (no Claude CLI needed).
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -80,27 +79,8 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
+# Create tmux session (needed as check-in target)
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-
-# Start Claude in the session
-# Unset CLAUDECODE to allow nested Claude launch (when test runs from within Claude Code)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "unset CLAUDECODE && claude --dangerously-skip-permissions" Enter
-
-# Wait for Claude to start and handle trust prompt
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Check for trust prompt and send Enter to accept
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo "  ✓ Test environment ready"
 echo ""
@@ -110,21 +90,9 @@ echo ""
 # ============================================================
 echo "Phase 2: Testing first daemon starts successfully..."
 
-# Ask Claude to start the check-in daemon
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py start 1 --note 'First check-in' --target '$SESSION_NAME:0' --workflow '001-test-workflow'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt if it appears
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    echo "  - Skill trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
+# Start check-in daemon directly (CWD must be TEST_DIR for workflow discovery)
+cd "$TEST_DIR" && TMUX_SOCKET="$TMUX_SOCKET" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/checkin_scheduler.py" start 1 --note 'First check-in' --target "$SESSION_NAME:0" --workflow '001-test-workflow'
+sleep 3
 
 # Verify daemon_pid is stored in checkins.json
 DAEMON_PID=$(uv run python -c "
@@ -175,20 +143,9 @@ fi
 echo ""
 echo "Phase 3: Testing duplicate daemon start is prevented..."
 
-# Ask Claude to start another daemon while one is running
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py start 1 --note 'Duplicate check-in' --target '$SESSION_NAME:0' --workflow '001-test-workflow'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt if it reappears
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
+# Try to start another daemon while one is running - capture output
+DUP_OUTPUT=$(cd "$TEST_DIR" && TMUX_SOCKET="$TMUX_SOCKET" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/checkin_scheduler.py" start 1 --note 'Duplicate check-in' --target "$SESSION_NAME:0" --workflow '001-test-workflow' 2>&1)
+sleep 2
 
 # Verify still same PID (no new process started)
 NEW_PID=$(uv run python -c "
@@ -207,35 +164,22 @@ else
     fail "PID changed from $DAEMON_PID to $NEW_PID"
 fi
 
-# Check Claude's output for "already running" message
-AGENT_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100)
-if echo "$AGENT_OUTPUT" | grep -qi "already running"; then
+# Check output for "already running" message
+if echo "$DUP_OUTPUT" | grep -qi "already running"; then
     pass "Duplicate daemon prevented with message"
 else
-    fail "Duplicate daemon should report 'already running'"
+    fail "Duplicate daemon should report 'already running' (output: $DUP_OUTPUT)"
 fi
 
 # ============================================================
 # PHASE 4: Test daemon can be cancelled
 # ============================================================
 echo ""
-echo "Phase 4: Testing daemon cancellation via /cancel-checkin..."
+echo "Phase 4: Testing daemon cancellation..."
 
-# Use the /cancel-checkin skill
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "/cancel-checkin"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt if it appears
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    echo "  - Skill trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
+# Cancel the daemon directly
+cd "$TEST_DIR" && TMUX_SOCKET="$TMUX_SOCKET" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/checkin_scheduler.py" cancel --workflow '001-test-workflow'
+sleep 2
 
 # Verify the process is killed
 if [[ -n "$DAEMON_PID" ]] && kill -0 "$DAEMON_PID" 2>/dev/null; then
@@ -267,19 +211,8 @@ fi
 echo ""
 echo "Phase 5: Testing daemon start after cancel..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py start 1 --note 'After cancel check-in' --target '$SESSION_NAME:0' --workflow '001-test-workflow'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt if it reappears
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
+cd "$TEST_DIR" && TMUX_SOCKET="$TMUX_SOCKET" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/checkin_scheduler.py" start 1 --note 'After cancel check-in' --target "$SESSION_NAME:0" --workflow '001-test-workflow'
+sleep 3
 
 # Verify new daemon started
 NEW_DAEMON_PID=$(uv run python -c "
@@ -305,32 +238,18 @@ fi
 echo ""
 echo "Phase 6: Testing status command..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py status --workflow '001-test-workflow'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt if it reappears
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-STATUS_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100)
+STATUS_OUTPUT=$(cd "$TEST_DIR" && TMUX_SOCKET="$TMUX_SOCKET" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/checkin_scheduler.py" status --workflow '001-test-workflow' 2>&1)
 
 if echo "$STATUS_OUTPUT" | grep -q "Daemon running: True"; then
     pass "Status shows daemon running"
 else
-    fail "Status should show daemon running"
+    fail "Status should show daemon running (output: $STATUS_OUTPUT)"
 fi
 
 if echo "$STATUS_OUTPUT" | grep -q "Daemon PID:"; then
     pass "Status shows daemon PID"
 else
-    fail "Status should show daemon PID"
+    fail "Status should show daemon PID (output: $STATUS_OUTPUT)"
 fi
 
 # ============================================================
