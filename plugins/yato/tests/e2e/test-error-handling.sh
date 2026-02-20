@@ -36,25 +36,8 @@ trap cleanup EXIT
 
 mkdir -p "$TEST_DIR"
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
+# Create tmux session (needed by some scripts)
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo "  ✓ Test environment ready"
 echo ""
@@ -66,12 +49,7 @@ echo ""
 # ============================================================
 echo "Test 1: notify-pm.sh without arguments..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/notify-pm.sh > /tmp/e2e-notify-$$.txt 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
-
-NOTIFY_OUTPUT=$(cat /tmp/e2e-notify-$$.txt 2>/dev/null)
+NOTIFY_OUTPUT=$("$PROJECT_ROOT/bin/notify-pm.sh" 2>&1 || true)
 if echo "$NOTIFY_OUTPUT" | grep -qi "usage"; then
     pass "notify-pm.sh shows usage when missing arguments"
 else
@@ -84,12 +62,7 @@ fi
 echo ""
 echo "Test 2: send-message.sh with missing arguments..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/send-message.sh > /tmp/e2e-send-$$.txt 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
-
-SEND_OUTPUT=$(cat /tmp/e2e-send-$$.txt 2>/dev/null)
+SEND_OUTPUT=$("$PROJECT_ROOT/bin/send-message.sh" 2>&1 || true)
 if echo "$SEND_OUTPUT" | grep -qi "usage"; then
     pass "send-message.sh shows usage when missing arguments"
 else
@@ -103,17 +76,9 @@ echo ""
 echo "Test 3: create-team.sh with no agents..."
 
 # First initialize a workflow so create-team has something to work with
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Error test'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Error test"
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd '$TEST_DIR' && TMUX='' $PROJECT_ROOT/bin/create-team.sh '$TEST_DIR' > /tmp/e2e-create-$$.txt 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
-
-CREATE_OUTPUT=$(cat /tmp/e2e-create-$$.txt 2>/dev/null)
+CREATE_OUTPUT=$(cd "$TEST_DIR" && TMUX="" TMUX_SOCKET="$TMUX_SOCKET" "$PROJECT_ROOT/bin/create-team.sh" "$TEST_DIR" 2>&1 || true)
 if echo "$CREATE_OUTPUT" | grep -qi "no agent\|error\|usage"; then
     pass "create-team.sh errors when no agents specified"
 else
@@ -128,10 +93,7 @@ echo "Test 4: init-workflow.sh creates directories if missing..."
 
 NEW_DIR="$TEST_DIR/new-project"
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$NEW_DIR' 'New project test'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/init-workflow.sh" "$NEW_DIR" "New project test"
 
 if [[ -d "$NEW_DIR/.workflow" ]]; then
     pass "init-workflow.sh creates directories as needed"
@@ -145,12 +107,8 @@ fi
 echo ""
 echo "Test 5: get_current_workflow with missing path..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: unset TMUX && source $PROJECT_ROOT/bin/workflow-utils.sh && get_current_workflow /nonexistent/path > /tmp/e2e-wfutils-$$.txt 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
-
-MISSING_WF=$(cat /tmp/e2e-wfutils-$$.txt 2>/dev/null | grep -v "DONE" || echo "")
+MISSING_WF=$(unset TMUX && source "$PROJECT_ROOT/bin/workflow-utils.sh" && get_current_workflow /nonexistent/path 2>&1 || echo "")
+MISSING_WF=$(echo "$MISSING_WF" | grep -v "DONE" || echo "")
 if [[ -z "$MISSING_WF" ]]; then
     pass "get_current_workflow returns empty for missing path"
 else
