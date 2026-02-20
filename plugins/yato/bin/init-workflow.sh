@@ -4,7 +4,7 @@
 # Usage: ./init-workflow.sh <project-path> "<title>"
 #
 # Creates a workflow folder like: .workflow/001-add-user-auth/
-# Updates status.yml with session info if in tmux
+# Note: session name in status.yml is set later by orchestrator.py deploy_pm_only
 
 set -e
 
@@ -333,15 +333,13 @@ with open('$WORKFLOW_PATH/status.yml', 'w') as f:
     echo "Added initial_request to status.yml"
 fi
 
-# Get session if in tmux and update status.yml directly
+# NOTE: We do NOT write the session name here. init-workflow.sh runs in the
+# INVOKING session (e.g. the user's current session), not the workflow session.
+# The correct session name is set later by orchestrator.py deploy_pm_only,
+# which creates the actual workflow tmux session.
+
+# Get session for agents.yml (best-effort, orchestrator will correct it)
 SESSION=$(tmux $TMUX_FLAGS display-message -p '#S' 2>/dev/null || echo "")
-if [[ -z "$SESSION" ]]; then
-    # Fallback: find session whose pane has PROJECT_PATH as current directory
-    SESSION=$(tmux $TMUX_FLAGS list-panes -a -F "#{session_name} #{pane_current_path}" 2>/dev/null | grep "$PROJECT_PATH" | head -1 | awk '{print $1}')
-fi
-if [[ -n "$SESSION" ]]; then
-    sed -i '' "s/^session: .*/session: \"$SESSION\"/" "$WORKFLOW_PATH/status.yml"
-fi
 
 # Create agents.yml with PM entry (pass workflow path directly since we just created it)
 create_agents_yml "$PROJECT_PATH" "${SESSION:-unknown}" "$WORKFLOW_PATH"

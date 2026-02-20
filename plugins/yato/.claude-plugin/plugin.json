@@ -1,6 +1,6 @@
 {
   "name": "yato",
-  "version": "3.11.3",
+  "version": "3.11.4",
   "description": "Yato (Yet Another Tmux Orchestrator) - AI-powered multi-agent orchestration via tmux sessions. Deploy teams of Claude agents (PM, Developer, QA, Code-Reviewer, etc) that work in parallel with independent contexts.",
   "author": {
     "name": "Personal"

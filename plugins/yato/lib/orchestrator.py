@@ -352,6 +352,14 @@ class Orchestrator:
             content = re.sub(r'^(session:).*$', f'\\1 {session_name}', content, flags=re.MULTILINE)
             pm_identity.write_text(content)
 
+        # Update status.yml with the correct session name (the workflow session,
+        # not the invoking session where init-workflow.sh ran)
+        status_file = project_dir / ".workflow" / (workflow_name or "") / "status.yml"
+        if status_file.exists():
+            content = status_file.read_text()
+            content = re.sub(r'^(session:).*$', f'\\1 "{session_name}"', content, flags=re.MULTILINE)
+            status_file.write_text(content)
+
         return result
 
     def start_pm_with_planning_briefing(self, pm_target: str, project_path: str) -> bool:

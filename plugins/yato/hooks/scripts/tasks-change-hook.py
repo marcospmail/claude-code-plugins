@@ -146,7 +146,7 @@ def get_session_target(workflow_path: Path) -> str:
             data = yaml.safe_load(f)
         if data and isinstance(data, dict):
             session = data.get("session", "")
-            if session:
+            if session and session != "_":
                 return f"{session}:0.1"
     except (IOError, yaml.YAMLError):
         pass
