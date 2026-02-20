@@ -32,17 +32,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Helper: send a command to Claude and approve the permission prompt
-send_to_claude() {
-    local cmd="$1"
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "$cmd"
-    sleep 1
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" Enter
-    sleep 15  # Wait for Claude to show permission prompt
-
-    # Approve the permission prompt (press Enter to accept "Yes")
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" Enter
-    sleep 10  # Wait for command to execute
+# Helper: run a Python command directly (no Claude CLI needed)
+run_python() {
+    local python_code="$1"
+    cd "$PROJECT_ROOT" && YATO_PATH="$TEST_DIR" TMUX_SOCKET="$TMUX_SOCKET" uv run python -c "$python_code"
+    sleep 2  # Allow tmux pane to receive the message
 }
 
 # Setup test environment
@@ -59,38 +53,17 @@ DEFAULT_ORCHESTRATOR_WINDOW="0"
 LOG_DIR=".yato/logs"
 EOF
 
-# Create a dummy file so Claude trusts the directory
-echo "// test project" > "$TEST_DIR/index.js"
-
 echo "Test directory: $TEST_DIR"
 echo "Session: $SESSION_NAME"
 echo ""
 
-# Create tmux session with two windows: Claude (window 0) and receiver (window 1)
-echo "Starting tmux session and Claude..."
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "claude" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "receiver" -c "$TEST_DIR"
+# Create tmux session with receiver window (no Claude needed)
+echo "Starting tmux session..."
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "receiver" -c "$TEST_DIR"
 
 # Disable flow control in receiver
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "stty -ixon" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "stty -ixon" Enter
 sleep 1
-
-# Start Claude in window 0 (skip permissions to avoid blocking on bash prompts)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "claude --dangerously-skip-permissions" Enter
-
-# Wait for Claude to start and handle trust prompt
-echo "Waiting for Claude to start..."
-sleep 8
-
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" Enter
-    sleep 15
-else
-    echo "No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo ""
 echo "Testing PM_TO_AGENTS_SUFFIX feature..."
@@ -102,16 +75,10 @@ echo ""
 echo "Test 1: Verify suffix is appended to message"
 MSG1="HELLO_AGENT_$(date +%s)"
 
-# Ask Claude to run the send_message function targeting the receiver window
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.tmux_utils import send_message; send_message('$SESSION_NAME:1', '$MSG1')\""
-
-# Debug: show what Claude did
-echo "Debug - Claude output after Test 1:"
-tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p | tail -15
-echo ""
+run_python "from lib.tmux_utils import send_message; send_message('$SESSION_NAME:0', '$MSG1')"
 
 # Capture receiver pane output
-OUTPUT1=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
+OUTPUT1=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p)
 
 echo "Debug - Receiver pane content:"
 echo "$OUTPUT1" | tail -10
@@ -147,9 +114,9 @@ echo ""
 echo "Test 2: Verify suffix added to multiple messages"
 MSG2="SECOND_MSG_$(date +%s)"
 
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.tmux_utils import send_message; send_message('$SESSION_NAME:1', '$MSG2')\""
+run_python "from lib.tmux_utils import send_message; send_message('$SESSION_NAME:0', '$MSG2')"
 
-OUTPUT2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
+OUTPUT2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p)
 
 if echo "$OUTPUT2" | grep -Fq "$MSG2" && echo "$OUTPUT2" | grep -Fq "$EXPECTED_SUFFIX"; then
     pass "Suffix consistently appended to second message"
@@ -173,9 +140,9 @@ EOF
 
 MSG3="EMPTY_SUFFIX_MSG_$(date +%s)"
 
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:1', '$MSG3')\""
+run_python "from lib.config import load_config; load_config(force_reload=True); from lib.tmux_utils import send_message; send_message('$SESSION_NAME:0', '$MSG3')"
 
-OUTPUT3=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
+OUTPUT3=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p)
 
 if echo "$OUTPUT3" | grep -Fq "$MSG3"; then
     pass "Message delivered with empty suffix"
