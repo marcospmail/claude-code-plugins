@@ -114,20 +114,20 @@ Run this pattern (do not modify the PROJECT_DIR capture):
 ```bash
 # With stop condition (--times or --for)
 PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "PROMPT_HERE" \
-  --session "$CLAUDE_CODE_SESSION_ID" \
+  --session "${CLAUDE_SESSION_ID}" \
   --project "$PROJECT_DIR" \
   --times N \  # OR --for "DURATION"
   --every "INTERVAL"  # Optional
 
 # Forever mode (no --times or --for)
 PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "PROMPT_HERE" \
-  --session "$CLAUDE_CODE_SESSION_ID" \
+  --session "${CLAUDE_SESSION_ID}" \
   --project "$PROJECT_DIR" \
   --every "INTERVAL"  # Optional
 
 # With cron schedule
 PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "PROMPT_HERE" \
-  --session "$CLAUDE_CODE_SESSION_ID" \
+  --session "${CLAUDE_SESSION_ID}" \
   --project "$PROJECT_DIR" \
   --cron "CRON_EXPRESSION" \
   --times N  # Optional stop condition
@@ -137,28 +137,28 @@ PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager
 
 ```bash
 # Run 3 times with no delay
-PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check the logs for errors" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --times 3
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check the logs for errors" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --times 3
 
 # Run every 5 minutes for 30 minutes
-PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "run the test suite" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --for "30m" --every "5m"
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "run the test suite" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --for "30m" --every "5m"
 
 # Run 5 times with 1 minute interval
-PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check build status" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --times 5 --every "1m"
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check build status" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --times 5 --every "1m"
 
 # Run forever every 10 minutes (cancel with /loop --cancel)
-PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check for new deployments" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --every "10m"
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check for new deployments" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --every "10m"
 
 # Cron: daily at noon
-PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "0 12 * * *"
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --cron "0 12 * * *"
 
 # Cron: every 5 minutes
-PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "*/5 * * * *"
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --cron "*/5 * * * *"
 
 # Cron: 9am & 5pm on weekdays, run 10 times
-PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "0 9,17 * * 1-5" --times 10
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --cron "0 9,17 * * 1-5" --times 10
 
 # Cron: daily at noon for 7 days
-PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "0 12 * * *" --for "168h"
+PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --cron "0 12 * * *" --for "168h"
 ```
 
 ## Execute First Iteration Immediately
@@ -196,7 +196,7 @@ The Stop hook will:
 <input>/loop check the logs for errors --times 3</input>
 <action>
 1. Extract: prompt="check the logs for errors", times=3, interval=immediate
-2. Run: PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check the logs for errors" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --times 3
+2. Run: PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check the logs for errors" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --times 3
 3. Output: "Loop started (1/3): check the logs for errors"
 4. IMMEDIATELY check the logs for errors (execute the prompt NOW)
 </action>
@@ -206,7 +206,7 @@ The Stop hook will:
 <input>/loop run tests --every 5m --for 1h</input>
 <action>
 1. Extract: prompt="run tests", duration="1h", interval="5m"
-2. Run: PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "run tests" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --for "1h" --every "5m"
+2. Run: PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "run tests" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --for "1h" --every "5m"
 3. Output: "Loop started (1/?): run tests"
 4. IMMEDIATELY run the tests (execute the prompt NOW)
 </action>
@@ -235,7 +235,7 @@ The Stop hook will:
 2. Use AskUserQuestion: "How long should this loop run?"
    Options: "Run N times", "Run for a duration", "Run forever"
 3. If user selects "Run forever":
-   PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "monitor the build" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR"
+   PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "monitor the build" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR"
 4. If user selects "Run N times": ask for N, then run with --times N
 5. If user selects "Run for a duration": ask for duration, then run with --for DURATION
 6. Output: "Loop started (1/?): monitor the build"
@@ -247,7 +247,7 @@ The Stop hook will:
 <input>/loop check logs --forever --every 5m</input>
 <action>
 1. Extract: prompt="check logs", forever=true, interval="5m"
-2. Run: PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check logs" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --every "5m"
+2. Run: PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check logs" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --every "5m"
 3. Output: "Loop started (1/?): check logs"
 4. IMMEDIATELY check logs (execute the prompt NOW)
 </action>
@@ -259,7 +259,7 @@ The Stop hook will:
 1. Extract: prompt="check system health", cron="0 12 * * *"
 2. Missing stop condition - use AskUserQuestion to ask how long to run
 3. If user selects "Run forever":
-   PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "0 12 * * *"
+   PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --cron "0 12 * * *"
 4. Output: "Loop started: check system health (cron: 0 12 * * *). First execution will run at next cron match."
 5. NOTE: With --cron, first execution waits for next cron match (not immediate)
 </action>
@@ -269,7 +269,7 @@ The Stop hook will:
 <input>/loop "check system health" --cron "*/5 * * * *" --times 3</input>
 <action>
 1. Extract: prompt="check system health", cron="*/5 * * * *", times=3
-2. Run: PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "$CLAUDE_CODE_SESSION_ID" --project "$PROJECT_DIR" --cron "*/5 * * * *" --times 3
+2. Run: PROJECT_DIR=$(pwd) && cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/loop_manager.py start "check system health" --session "${CLAUDE_SESSION_ID}" --project "$PROJECT_DIR" --cron "*/5 * * * *" --times 3
 3. Output: "Loop started (1/3): check system health (cron: */5 * * * *). First execution will run at next cron match."
 4. NOTE: With --cron, first execution waits for next cron match (not immediate)
 </action>

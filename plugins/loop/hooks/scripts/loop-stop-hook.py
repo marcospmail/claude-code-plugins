@@ -25,8 +25,6 @@ from datetime import datetime
 from pathlib import Path
 import os
 
-from croniter import croniter
-
 # Add lib to path for imports - use parent.parent to get to loop plugin root
 PLUGIN_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PLUGIN_ROOT))
@@ -53,13 +51,8 @@ def debug_log(message):
 def find_active_loop_in_project(project_path: Path, session_id: str = None):
     """Scan .workflow/loops/ in the project for an active loop matching this session.
 
-    Session matching:
-    - If session_id provided: Only return loop if session_id matches exactly
-    - If session_id NOT provided AND exactly ONE active loop: Return it (fallback)
-    - If session_id NOT provided AND multiple active loops: Return None (ambiguous)
-
-    This ensures each Claude session only continues its own loop while providing
-    a fallback for older Claude Code versions or missing session context.
+    Strict session matching: only returns a loop if session_id matches exactly.
+    No fallbacks or wildcards.
 
     Returns (loop_folder, meta) tuple if found, (None, None) otherwise.
     """
@@ -94,12 +87,7 @@ def find_active_loop_in_project(project_path: Path, session_id: str = None):
             debug_log(f"[SKIP] Loop session {meta.get('session_id')} != current {session_id}")
         return None, None
 
-    # No session_id provided - use fallback only if exactly ONE active loop
-    if len(active_loops) == 1:
-        debug_log(f"[FALLBACK] No session_id, returning single active loop")
-        return active_loops[0]
-
-    # Multiple active loops with no session_id - ambiguous, return none
+    # No session_id provided - ambiguous, return none
     debug_log(f"[SKIP] No session_id and {len(active_loops)} active loops - ambiguous")
     return None, None
 
@@ -170,6 +158,7 @@ def main():
     if cron_expression:
         # Cron mode: always wait for next cron match (even first execution)
         try:
+            from croniter import croniter
             cron = croniter(cron_expression, datetime.now())
             next_time = cron.get_next(datetime)
         except (ValueError, KeyError, TypeError) as e:
