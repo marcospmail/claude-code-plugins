@@ -103,7 +103,7 @@ class WorkflowOps:
         project_path: str,
         title: str,
         initial_request: str = "",
-        session: str = "",
+        session: str = "_",
         checkin_interval: int = 15,
     ) -> str:
         """

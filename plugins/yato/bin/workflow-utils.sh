@@ -118,7 +118,7 @@ initial_request: ""
 folder: "$full_path"
 checkin_interval_minutes: _
 created_at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-session: ""
+session: _
 agent_message_suffix: ""
 checkin_message_suffix: ""
 agent_to_pm_message_suffix: ""
