@@ -3,15 +3,14 @@
 #
 # E2E Test: Integration between check-in scheduler and tasks.json
 #
-# Verifies through Claude Code:
-# 1. Check-in schedules when incomplete tasks remain
-# 2. Incomplete task count detection works correctly
+# Verifies:
+# 1. Incomplete task count detection works correctly
+# 2. Check-in schedules when incomplete tasks remain
 # 3. All-completed detection returns 0
 # 4. Interval is read from status.yml
 # 5. Auto-stop updates status.yml when all tasks complete
 #
-# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
-# All execution goes through Claude running inside a tmux session.
+# IMPORTANT: All execution goes through direct CLI calls (no Claude CLI needed).
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -84,26 +83,8 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
+# Create tmux session (needed as check-in target)
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-# Wait for Claude to start and handle trust prompt
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Check for trust prompt and send Enter to accept
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo "  ✓ Test environment ready"
 echo ""
@@ -113,23 +94,7 @@ echo ""
 # ============================================================
 echo "Phase 2: Testing incomplete task count detection..."
 
-# Ask Claude to count incomplete tasks using Python
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"import json; f=open('$TEST_DIR/.workflow/001-test-workflow/tasks.json'); d=json.load(f); inc=[t for t in d['tasks'] if t['status'] in ('pending','in_progress','blocked')]; print(len(inc))\""
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt if it appears
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    echo "  - Skill trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-# Verify directly from test runner
+# Count incomplete tasks directly
 INCOMPLETE=$(uv run python -c "
 import json
 try:
@@ -153,20 +118,9 @@ fi
 echo ""
 echo "Phase 3: Testing check-in scheduling with incomplete tasks..."
 
-# Ask Claude to start the check-in daemon
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py start 1 --note 'Test checkin' --target '$SESSION_NAME:0' --workflow '001-test-workflow'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt if it reappears
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
+# Start check-in daemon directly (CWD must be TEST_DIR for workflow discovery)
+cd "$TEST_DIR" && TMUX_SOCKET="$TMUX_SOCKET" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/checkin_scheduler.py" start 1 --note 'Test checkin' --target "$SESSION_NAME:0" --workflow '001-test-workflow'
+sleep 3
 
 # Check that checkin was scheduled
 PENDING_COUNT=$(uv run python -c "
@@ -187,19 +141,8 @@ else
 fi
 
 # Cancel daemon before next test
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "/cancel-checkin"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
+cd "$TEST_DIR" && TMUX_SOCKET="$TMUX_SOCKET" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/checkin_scheduler.py" cancel --workflow '001-test-workflow'
+sleep 2
 
 # ============================================================
 # PHASE 4: Test all-completed detection
@@ -218,22 +161,7 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-# Ask Claude to count incomplete tasks
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"import json; f=open('$TEST_DIR/.workflow/001-test-workflow/tasks.json'); d=json.load(f); inc=[t for t in d['tasks'] if t['status'] in ('pending','in_progress','blocked')]; print(len(inc))\""
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
-
-# Verify directly
+# Count incomplete tasks directly
 INCOMPLETE=$(uv run python -c "
 import json
 try:
@@ -263,21 +191,6 @@ status: in-progress
 checkin_interval_minutes: 7
 session: e2e-checkin-int
 EOF
-
-# Ask Claude to read the interval
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"import yaml; f=open('$TEST_DIR/.workflow/001-test-workflow/status.yml'); d=yaml.safe_load(f); print(d.get('checkin_interval_minutes', 'MISSING'))\""
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
 
 INTERVAL=$(grep 'checkin_interval_minutes' "$TEST_DIR/.workflow/001-test-workflow/status.yml" 2>/dev/null | awk '{print $2}')
 
@@ -367,8 +280,8 @@ EOF
 # Clear checkins for fresh test
 echo '{"checkins": [], "daemon_pid": null}' > "$TEST_DIR/.workflow/001-test-workflow/checkins.json"
 
-# Ask Claude to simulate the auto-stop logic (same logic as checkin_scheduler.py)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: uv run python -c \"
+# Run the auto-stop logic directly (same logic as checkin_scheduler.py)
+uv run python -c "
 import re, json
 from pathlib import Path
 from datetime import datetime
@@ -380,22 +293,10 @@ if len(inc)==0:
     c=sf.read_text()
     c=re.sub(r'^status:.*$','status: completed',c,flags=re.MULTILINE)
     if 'completed_at:' not in c:
-        c=c.rstrip()+'\\ncompleted_at: '+datetime.now().isoformat()+'\\n'
+        c=c.rstrip()+'\ncompleted_at: '+datetime.now().isoformat()+'\n'
     sf.write_text(c)
     print('Status updated to completed')
-\""
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
+"
 
 # Verify status.yml was updated to completed
 STATUS_VALUE=$(grep '^status:' "$TEST_DIR/.workflow/001-test-workflow/status.yml" | awk '{print $2}')
