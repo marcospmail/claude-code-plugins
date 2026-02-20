@@ -94,35 +94,13 @@ EOF
 
 echo '{"checkins": [], "daemon_pid": null}' > "$TEST_DIR_B/.workflow/001-workflow-b/checkins.json"
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
-# Create Session A with Claude
+# Create tmux sessions (no Claude needed — commands run directly)
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_A" -x 120 -y 40 -c "$TEST_DIR_A"
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" "claude" Enter
-
-# Create Session B with Claude
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_B" -x 120 -y 40 -c "$TEST_DIR_B"
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_B" "claude" Enter
 
 echo "  - Project A: $TEST_DIR_A (session: $SESSION_A)"
 echo "  - Project B: $TEST_DIR_B (session: $SESSION_B)"
-echo "  - Waiting for Claude to start in both sessions..."
-sleep 8
-
-# Handle trust prompts for Session A
-OUTPUT_A=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_A" -p 2>/dev/null)
-if echo "$OUTPUT_A" | grep -qi "trust"; then
-    echo "  - Trust prompt found in Session A, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" Enter
-fi
-
-# Handle trust prompts for Session B
-OUTPUT_B=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_B" -p 2>/dev/null)
-if echo "$OUTPUT_B" | grep -qi "trust"; then
-    echo "  - Trust prompt found in Session B, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_B" Enter
-fi
-
-sleep 15
+sleep 1
 
 echo "  ✓ Test environment ready"
 echo ""
@@ -132,31 +110,13 @@ echo ""
 # ============================================================
 echo "Phase 2: Testing check-in file location..."
 
-# Start check-in daemon in Project A via Claude
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py start 5 --note 'Test A' --target '$SESSION_A:0' --workflow '001-workflow-a'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" Enter
-sleep 10
+# Start check-in daemon in Project A directly (CWD must be the test dir for workflow discovery)
+cd "$TEST_DIR_A" && YATO_PATH="$TEST_DIR_A" TMUX_SOCKET="$TMUX_SOCKET" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/checkin_scheduler.py" start 5 --note 'Test A' --target "$SESSION_A:0" --workflow '001-workflow-a'
 
-# Handle skill trust prompt for Session A
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_A" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" Down Enter
-fi
+# Start check-in daemon in Project B directly
+cd "$TEST_DIR_B" && YATO_PATH="$TEST_DIR_B" TMUX_SOCKET="$TMUX_SOCKET" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/checkin_scheduler.py" start 5 --note 'Test B' --target "$SESSION_B:0" --workflow '001-workflow-b'
 
-# Start check-in daemon in Project B via Claude
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_B" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/checkin_scheduler.py start 5 --note 'Test B' --target '$SESSION_B:0' --workflow '001-workflow-b'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_B" Enter
-sleep 10
-
-# Handle skill trust prompt for Session B
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_B" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_B" Down Enter
-fi
-
-sleep 20
+sleep 5
 
 # Verify Project A checkins.json exists
 if [[ -f "$TEST_DIR_A/.workflow/001-workflow-a/checkins.json" ]]; then
@@ -216,20 +176,10 @@ fi
 echo ""
 echo "Phase 4: Testing cancel isolation..."
 
-# Cancel Project A's check-in via Claude using /cancel-checkin skill
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" "/cancel-checkin"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" Enter
-sleep 10
+# Cancel Project A's check-in directly (CWD must be the test dir for workflow discovery)
+cd "$TEST_DIR_A" && YATO_PATH="$TEST_DIR_A" TMUX_SOCKET="$TMUX_SOCKET" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/checkin_scheduler.py" cancel --workflow '001-workflow-a'
 
-# Handle skill trust prompt
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_A" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_A" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
+sleep 3
 
 # Check Project A has daemon_pid cleared (cancelled)
 A_PID=$(uv run python -c "
