@@ -12,9 +12,9 @@ if [[ "$1" == "--verbose" ]] || [[ "$1" == "-v" ]]; then
     VERBOSE=true
 fi
 
-# Unset CLAUDECODE to allow nested Claude sessions in tests
-# (tests launch Claude Code in tmux, which fails if CLAUDECODE=1 is inherited)
-unset CLAUDECODE
+# Unset all Claude Code env vars to allow nested Claude sessions in tests
+# (tests launch Claude Code in tmux, which fails if these are inherited)
+unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS CLAUDE_CODE_SESSION_ID
 
 export TMUX_SOCKET="yato-e2e-test"
 
@@ -38,10 +38,13 @@ for test_file in "$SCRIPT_DIR"/test-*.sh; do
         test_name=$(basename "$test_file" .sh)
         TOTAL_TESTS=$((TOTAL_TESTS + 1))
 
-        # Clean up any stale e2e sessions from previous tests
-        tmux -L "$TMUX_SOCKET" list-sessions 2>/dev/null | grep -E "^e2e-" | cut -d: -f1 | while read session; do
-            tmux -L "$TMUX_SOCKET" kill-session -t "$session" 2>/dev/null || true
-        done
+        # Kill the entire tmux server to ensure clean state between tests
+        # (individual session cleanup is insufficient — background panes, daemons,
+        # and detached sessions can leak between tests)
+        tmux -L "$TMUX_SOCKET" kill-server 2>/dev/null || true
+
+        # Kill any lingering checkin daemon processes from previous tests
+        pkill -f "checkin_scheduler.*yato-e2e" 2>/dev/null || true
 
         # Delay between tests to allow background processes and tmux to settle
         sleep 2

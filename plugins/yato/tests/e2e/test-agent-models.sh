@@ -67,11 +67,11 @@ echo "  - Project created at $TEST_DIR"
 echo ""
 
 # ============================================================
-# PHASE 2: Create workflow via init-workflow.sh through Claude
+# PHASE 2: Create workflow via init-workflow.sh directly
 # ============================================================
-echo "Phase 2: Creating workflow through Claude..."
+echo "Phase 2: Creating workflow..."
 
-# Create tmux session
+# Create tmux session (needed for session name in status.yml)
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
 
 if ! tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
@@ -81,31 +81,10 @@ fi
 
 pass "Tmux session created"
 
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-echo "  - Waiting for Claude to initialize..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
-
-pass "Claude CLI started"
-
-# Initialize workflow through Claude
+# Initialize workflow directly (no Claude needed)
 echo "  - Initializing workflow..."
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test model assignment'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test model assignment"
+pass "init-workflow.sh completed"
 
 # ============================================================
 # PHASE 3: Verify PM model assignment

@@ -127,7 +127,7 @@ echo ""
 #   Window 0: pane 0 = checkin display, pane 1 = PM (notify_pm target)
 #   Window 1: Claude (for running test commands)
 echo "Starting tmux session and Claude..."
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "pm-window" -c "$TEST_DIR"
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 220 -y 50 -n "pm-window" -c "$TEST_DIR"
 # Split window 0 to create pane 0 and pane 1 (PM pane at 0.1)
 tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -h -c "$TEST_DIR"
 tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "claude" -c "$TEST_DIR"
@@ -399,13 +399,16 @@ ORDER_WF="--ORDER_SECOND_WF--"
 set_config "" "$AGENT_YATO_SUFFIX" "$ORDER_YATO"
 set_workflow_suffix "checkin_message_suffix" "$ORDER_WF"
 
-# Clear PM pane (0.1)
+# Clear PM pane (0.1) — both visible area and scrollback buffer
+# (scrollback can contain markers from previous tests that confuse line-based ordering checks)
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.1" "clear" Enter
+tmux -L "$TMUX_SOCKET" clear-history -t "$SESSION_NAME:0.1" 2>/dev/null || true
 sleep 1
 
 MSG5="CHECKIN_ORDER_$(date +%s)"
 
-send_to_claude "Run this exact command in bash, nothing else: cd $PROJECT_ROOT && YATO_PATH='$TEST_DIR' TMUX_SOCKET='$TMUX_SOCKET' uv run python -c \"
+# Run directly (not through Claude) to avoid session timeout after multiple send_to_claude calls
+cd "$PROJECT_ROOT" && YATO_PATH="$TEST_DIR" TMUX_SOCKET="$TMUX_SOCKET" uv run python -c "
 import yaml
 from pathlib import Path
 from lib.config import load_config, get as get_config
@@ -421,7 +424,8 @@ if yato_suffix:
 if wf_suffix:
     msg = msg + chr(10) + chr(10) + wf_suffix
 send_message('$SESSION_NAME:0.1', msg)
-\""
+"
+sleep 3
 
 # Capture full pane as a single string for ordering check
 OUTPUT5=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0.1" -p)
@@ -443,14 +447,15 @@ else
     fail "Workflow ordering marker missing"
 fi
 
-# Check ordering: find line numbers and verify yato appears first
-YATO_LINE=$(echo "$OUTPUT5" | grep -Fn -- "$ORDER_YATO" | head -1 | cut -d: -f1)
-WF_LINE=$(echo "$OUTPUT5" | grep -Fn -- "$ORDER_WF" | head -1 | cut -d: -f1)
+# Check ordering: use byte offsets to avoid false positives from terminal wrapping
+# (tmux pane wrapping can split markers across lines, making line-number checks unreliable)
+YATO_POS=$(echo "$OUTPUT5" | grep -Fbo -- "$ORDER_YATO" | head -1 | cut -d: -f1)
+WF_POS=$(echo "$OUTPUT5" | grep -Fbo -- "$ORDER_WF" | head -1 | cut -d: -f1)
 
-if [[ -n "$YATO_LINE" && -n "$WF_LINE" && "$YATO_LINE" -lt "$WF_LINE" ]]; then
-    pass "Yato suffix (line $YATO_LINE) appears before workflow suffix (line $WF_LINE)"
+if [[ -n "$YATO_POS" && -n "$WF_POS" && "$YATO_POS" -lt "$WF_POS" ]]; then
+    pass "Yato suffix (byte $YATO_POS) appears before workflow suffix (byte $WF_POS)"
 else
-    fail "Ordering incorrect: yato line=$YATO_LINE, workflow line=$WF_LINE (yato should be first)"
+    fail "Ordering incorrect: yato byte=$YATO_POS, workflow byte=$WF_POS (yato should be first)"
 fi
 
 # ============================================================
