@@ -44,7 +44,6 @@ cleanup() {
     echo ""
     echo "Cleaning up..."
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
-    tmux -L "$TMUX_SOCKET" kill-session -t "e2e-helper-$$" 2>/dev/null || true
     tmux -L "$TMUX_SOCKET" kill-session -t "e2e-agent-names-$$" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
     rm -rf "/tmp/e2e-agent-test-$$" 2>/dev/null || true
@@ -61,35 +60,11 @@ echo ""
 mkdir -p "$TEST_DIR"
 echo "test file" > "$TEST_DIR/test.txt"
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
-HELPER_SESSION="e2e-helper-$$"
-tmux -L "$TMUX_SOCKET" new-session -d -s "$HELPER_SESSION" -x 120 -y 40 -c "$PROJECT_ROOT"
-
-# Start Claude in the helper session
-tmux -L "$TMUX_SOCKET" send-keys -t "$HELPER_SESSION" "claude" Enter
-
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$HELPER_SESSION" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$HELPER_SESSION" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
-
 echo "  ✓ Test environment ready"
 echo ""
 
-# Deploy PM via Claude
-tmux -L "$TMUX_SOCKET" send-keys -t "$HELPER_SESSION" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/orchestrator.py deploy-pm '$SESSION_NAME' -p '$TEST_DIR' > /tmp/e2e-deploy-$$.txt 2>&1"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$HELPER_SESSION" Enter
-sleep 30
+# Deploy PM directly (no Claude needed)
+cd "$PROJECT_ROOT" && TMUX_SOCKET="$TMUX_SOCKET" uv run python lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$TEST_DIR" > /tmp/e2e-deploy-$$.txt 2>&1
 
 # Wait for session to be created
 for i in {1..10}; do
@@ -175,36 +150,18 @@ AGENT_TEST_DIR="/tmp/e2e-agent-test-$$"
 mkdir -p "$AGENT_TEST_DIR"
 echo "test" > "$AGENT_TEST_DIR/test.txt"
 
-# Create a new session for agent testing with Claude
+# Create a new session for agent testing
 tmux -L "$TMUX_SOCKET" new-session -d -s "$AGENT_SESSION" -x 120 -y 40 -n "pm-checkins" -c "$AGENT_TEST_DIR"
 
-# Start Claude in the agent session
-tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" "claude" Enter
-sleep 8
-
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$AGENT_SESSION" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" Enter
-    sleep 15
-else
-    sleep 5
-fi
-
-# Initialize workflow through Claude
-tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$AGENT_TEST_DIR' 'Test agent windows'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" Enter
-sleep 30
+# Initialize workflow directly
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/init-workflow.sh" "$AGENT_TEST_DIR" "Test agent windows"
 
 # Get workflow name and set it in the tmux session environment
 WORKFLOW_NAME=$(ls "$AGENT_TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
 tmux -L "$TMUX_SOCKET" setenv -t "$AGENT_SESSION" WORKFLOW_NAME "$WORKFLOW_NAME"
 
-# Create team through Claude
-tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" "Run this exact command in bash: $PROJECT_ROOT/bin/create-team.sh '$AGENT_TEST_DIR' developer qa"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$AGENT_SESSION" Enter
-sleep 30
+# Create team directly
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/create-team.sh" "$AGENT_TEST_DIR" developer qa
 
 # Check window names
 WINDOW_LIST=$(tmux -L "$TMUX_SOCKET" list-windows -t "$AGENT_SESSION" -F "#{window_index}:#{window_name}" 2>/dev/null)
