@@ -5,11 +5,11 @@
 #
 # Bug: Two Claude agents in the same directory would both pick up a loop
 # started by only one of them. This happened because:
-# 1. SKILL.md used --session "$(date +%s)" instead of $CLAUDE_CODE_SESSION_ID
+# 1. SKILL.md used --session "$(date +%s)" instead of ${CLAUDE_SESSION_ID}
 # 2. Hook fallback returned the first active loop when session_id was None/missing
 #
 # Fix:
-# 1. SKILL.md now uses $CLAUDE_CODE_SESSION_ID
+# 1. SKILL.md now uses ${CLAUDE_SESSION_ID} (skill substitution variable)
 # 2. Hook fallback only returns a loop if exactly ONE active AND no session_id provided
 #
 # Tests:
@@ -79,15 +79,15 @@ SKILL_FILE="$PROJECT_ROOT/skills/loop/SKILL.md"
 HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/loop-stop-hook.py"
 
 # ============================================================
-# Test 1: Verify SKILL.md uses $CLAUDE_CODE_SESSION_ID
+# Test 1: Verify SKILL.md uses ${CLAUDE_SESSION_ID} substitution variable
 # ============================================================
-echo "Test 1: SKILL.md uses CLAUDE_CODE_SESSION_ID (not timestamp)..."
+echo "Test 1: SKILL.md uses CLAUDE_SESSION_ID substitution (not timestamp)..."
 
-# Test 1a: SKILL.md should contain $CLAUDE_CODE_SESSION_ID
-if grep -q 'CLAUDE_CODE_SESSION_ID' "$SKILL_FILE"; then
-    pass "SKILL.md references \$CLAUDE_CODE_SESSION_ID"
+# Test 1a: SKILL.md should contain ${CLAUDE_SESSION_ID} (skill substitution variable)
+if grep -q 'CLAUDE_SESSION_ID' "$SKILL_FILE"; then
+    pass "SKILL.md references \${CLAUDE_SESSION_ID}"
 else
-    fail "SKILL.md does not reference \$CLAUDE_CODE_SESSION_ID"
+    fail "SKILL.md does not reference \${CLAUDE_SESSION_ID}"
 fi
 
 # Test 1b: SKILL.md should NOT contain $(date +%s) for session
@@ -97,11 +97,12 @@ else
     pass "SKILL.md no longer uses \$(date +%s) for session"
 fi
 
-# Test 1c: Verify CLAUDE_CODE_SESSION_ID env var exists in current Claude session
-if [[ -n "$CLAUDE_CODE_SESSION_ID" ]]; then
-    pass "CLAUDE_CODE_SESSION_ID is set: ${CLAUDE_CODE_SESSION_ID:0:8}..."
+# Test 1c: Verify CLAUDE_SESSION_ID is used as a skill substitution (not bash env var)
+# ${CLAUDE_SESSION_ID} is a Claude Code skill substitution variable, replaced at template load time
+if grep -q '\${CLAUDE_SESSION_ID}' "$SKILL_FILE"; then
+    pass "SKILL.md uses \${CLAUDE_SESSION_ID} skill substitution syntax"
 else
-    fail "CLAUDE_CODE_SESSION_ID env var is not set"
+    fail "SKILL.md does not use \${CLAUDE_SESSION_ID} skill substitution syntax"
 fi
 
 # ============================================================
