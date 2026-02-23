@@ -80,17 +80,31 @@ Agents are **dynamic** - the PM proposes a team based on your task, and you appr
 
 Yato comes with predefined roles (developer, qa, code-reviewer, devops, etc.) but also supports fully custom roles. A team can have multiple agents of the same role (e.g., two developers working on different parts of the codebase). Each agent gets a unique name like `frontend-dev`, `backend-dev`, or `qa-validator`.
 
-**Example team.yml:**
+**Example agents.yml** (after team proposal, before deployment):
 ```yaml
+pm:
+  name: pm
+  role: pm
+  session: "my-session"
+  window: 0
+  pane: 1
+  model: opus
+
 agents:
   - name: backend-dev
     role: developer
+    session: ""
+    window: ""
     model: sonnet
   - name: frontend-dev
     role: developer
+    session: ""
+    window: ""
     model: sonnet
   - name: qa
     role: qa
+    session: ""
+    window: ""
     model: sonnet
 ```
 
@@ -136,9 +150,8 @@ project/.workflow/
     ├── status.yml                   # Workflow metadata, settings, message suffixes
     ├── prd.md                       # Requirements document
     ├── codebase-analysis.md         # Targeted analysis of relevant code areas
-    ├── team.yml                     # Proposed team structure (agents to create)
     ├── tasks.json                   # Task assignments with dependencies
-    ├── agents.yml                   # Runtime registry of created agents
+    ├── agents.yml                   # Agent registry (proposed team + runtime locations)
     ├── checkins.json                # Check-in schedule, history, and daemon PID
     └── agents/                      # Per-agent configuration
         ├── pm/
@@ -160,9 +173,8 @@ project/.workflow/
 | **status.yml** | Workflow status, session name, check-in interval, message suffix configuration |
 | **prd.md** | Requirements document - what to build and why |
 | **codebase-analysis.md** | Automated analysis of relevant project areas for the task |
-| **team.yml** | Proposed team - agent names, roles, and models (created before approval) |
 | **tasks.json** | All tasks with IDs, descriptions, agent assignments, status, and dependency chains (`blockedBy`/`blocks`) |
-| **agents.yml** | Registry of agents actually created (with tmux window mappings) |
+| **agents.yml** | Agent registry - proposed team (name, role, model) and runtime locations (session, window) |
 | **checkins.json** | Check-in daemon state - schedule history and daemon PID |
 | **identity.yml** | Per-agent: name, role, model, project path |
 | **instructions.md** | Per-agent: detailed instructions for the agent's work |

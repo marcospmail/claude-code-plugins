@@ -129,9 +129,8 @@ project/.workflow/
 └── 001-feature-name/
     ├── status.yml             # Workflow status (includes initial_request)
     ├── prd.md                 # Requirements
-    ├── team.yml               # Proposed team structure (agents to create)
-    ├── tasks.json             # Generated tasks (JSON format, assigned to team.yml agents)
-    ├── agents.yml             # Runtime agent registry (created agents)
+    ├── tasks.json             # Generated tasks (JSON format, assigned to agents.yml agents)
+    ├── agents.yml             # Agent registry (proposed team + runtime locations)
     ├── checkins.json          # Check-in schedule and history
     └── agents/                # Agent configs
         ├── developer/
@@ -184,17 +183,6 @@ Suffixes use a **stacking** system: both yato-level (global) and workflow-level 
 | Agent → PM | `AGENTS_TO_PM_SUFFIX` | `agent_to_pm_message_suffix` |
 | Check-in → PM | `CHECKIN_TO_PM_SUFFIX` | `checkin_message_suffix` |
 | User → PM | `USER_TO_PM_SUFFIX` | `user_to_pm_message_suffix` |
-
-**team.yml** defines the proposed team structure:
-```yaml
-agents:
-  - name: developer
-    role: developer
-    model: sonnet
-  - name: qa
-    role: qa
-    model: sonnet
-```
 
 **tasks.json** assigns tasks to agents:
 ```json
