@@ -26,6 +26,8 @@ Use one of these Yato skills:
 
 This will create a tmux session with a PM and agents. You MUST use these skills — not raw shell commands.
 
+**IMPORTANT**: NEVER use `tmux switch-client` or `tmux attach` to connect to the test session. You must stay in your current session and monitor remotely via `tmux capture-pane`. Switching/attaching would disconnect you from your own session.
+
 ## Step 2: Monitor the Tmux Session
 
 ```bash
@@ -46,9 +48,8 @@ Check `.workflow/<name>/` in the project directory:
 
 - `status.yml` - workflow status and config
 - `prd.md` - generated requirements
-- `team.yml` - proposed team structure
+- `agents.yml` - agent registry (proposed team + runtime locations)
 - `tasks.json` - task list with status and assignments
-- `agents.yml` - registered agents with window numbers
 - `agents/<name>/instructions.md` - agent instructions (positive guidance)
 - `agents/<name>/constraints.md` - agent constraints (prohibitions)
 - `agents/<name>/CLAUDE.md` - agent entry point config
