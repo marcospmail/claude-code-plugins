@@ -358,7 +358,7 @@ for i in "${!AGENT_NAMES[@]}"; do
         agent_role="${AGENT_ROLES[$i]}"
 
         # Send briefing with critical communication rule
-        "$SCRIPT_DIR/send-message.sh" "${AGENT_IDS[$i]}" "You are $agent_name ($agent_role). CRITICAL RULE: NEVER communicate directly with the user. You ONLY communicate with the PM at window $PM_PANE. When blocked, use: $SCRIPT_DIR/notify-pm.sh BLOCKED 'reason'. When done: $SCRIPT_DIR/notify-pm.sh DONE 'what completed'. Read your instructions at: .workflow/$WORKFLOW_NAME/agents/$agent_role/instructions.md" > /dev/null 2>&1
+        TMUX_SOCKET="${TMUX_SOCKET}" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/tmux_utils.py" send --skip-suffix "${AGENT_IDS[$i]}" "You are $agent_name ($agent_role). CRITICAL RULE: NEVER communicate directly with the user. You ONLY communicate with the PM at window $PM_PANE. When blocked, use: $SCRIPT_DIR/notify-pm.sh BLOCKED 'reason'. When done: $SCRIPT_DIR/notify-pm.sh DONE 'what completed'. Read your instructions at: .workflow/$WORKFLOW_NAME/agents/$agent_role/instructions.md" > /dev/null 2>&1
 
         echo "  Briefed: $agent_name"
         sleep 2
@@ -425,7 +425,7 @@ IMPORTANT ACTIONS:
 
 Start by checking the current state of all tasks."
 
-"$SCRIPT_DIR/send-message.sh" "$PM_PANE" "$PM_BRIEFING" > /dev/null 2>&1
+TMUX_SOCKET="${TMUX_SOCKET}" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/tmux_utils.py" send --skip-suffix "$PM_PANE" "$PM_BRIEFING" > /dev/null 2>&1
 
 echo "PM pane ready at: $PM_PANE"
 

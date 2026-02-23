@@ -2,7 +2,7 @@
 # init-agent-files.sh - Create agent folder and files (without tmux window)
 #
 # This script creates the agent's configuration files before the tmux window exists.
-# Called by save_team_structure after team.yml is created.
+# Called by save_team_structure after agents are added to agents.yml.
 # When create-agent.sh later creates the window, it will update identity.yml with the window number.
 #
 # Usage: ./init-agent-files.sh <project_path> <agent_name> <role> <model>
@@ -180,6 +180,24 @@ ${RESPONSIBILITIES}
 - Provide you with answers and decisions
 - Assign you different work if blocked
 - Coordinate all user communication
+$(if [[ "$ROLE" == "pm" ]]; then cat <<'PMEOF'
+
+## Task Management
+
+tasks.json is the SINGLE SOURCE OF TRUTH. When adding or modifying tasks:
+1. **FIRST** update tasks.json with the new/changed task
+2. **THEN** update the agent's agent-tasks.md file
+
+## Communicating with Agents
+
+Use `/send-to-agent` to send messages to agents:
+- `/send-to-agent developer "You have new tasks. Read your agent-tasks.md for details."`
+- `/send-to-agent qa "Please verify T1 — check acceptance criteria in your agent-tasks.md."`
+
+Agent names are listed in agents.yml. Names may differ from roles (e.g., "discoverer" with role "qa", "impl" with role "developer").
+The `/send-to-agent` skill handles looking up the agent's tmux window automatically.
+PMEOF
+fi)
 
 ## Waiting for Dependencies
 
@@ -231,7 +249,7 @@ if [[ "$ROLE" == "pm" ]]; then
 - NEVER skip updating tasks.json before modifying agent-tasks.md
 - NEVER write to agent-tasks.md without a corresponding entry in tasks.json
 
-**GOLDEN RULE: If it's not coordination/planning, DELEGATE IT to an agent via send-message.sh.**
+**GOLDEN RULE: If it's not coordination/planning, DELEGATE IT to an agent via /send-to-agent.**
 
 ## Required Actions
 - ALWAYS delegate implementation to agents

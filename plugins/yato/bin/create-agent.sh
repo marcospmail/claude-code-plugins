@@ -523,7 +523,7 @@ notify-pm.sh auto-detects PM location - just run it
 Wait for PM to assign your first tasks via agent-tasks.md."
 
         # Send the summary brief
-        "$SCRIPT_DIR/send-message.sh" "$AGENT_ID" "$SUMMARY_BRIEF"
+        TMUX_SOCKET="${TMUX_SOCKET}" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/tmux_utils.py" send --skip-suffix "$AGENT_ID" "$SUMMARY_BRIEF"
     else
         echo "Warning: Template not found: $TEMPLATE"
     fi
@@ -545,4 +545,4 @@ echo "  Window: $WINDOW_NAME"
 echo ""
 echo "To interact with this agent:"
 echo "  tmux select-window -t $AGENT_ID"
-echo "  $SCRIPT_DIR/send-message.sh $AGENT_ID \"Your message\""
+echo "  uv run --project $PROJECT_ROOT python $PROJECT_ROOT/lib/tmux_utils.py send $AGENT_ID \"Your message\""
