@@ -10,8 +10,7 @@
 # 4. Verifies PM, Developer, and QA are all BLOCKED
 # 5. Verifies unknown sessions (user) are ALLOWED
 #
-# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
-# All script execution goes through Claude running inside tmux.
+# Hook scripts are tested by feeding them JSON input directly.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -56,38 +55,17 @@ echo "Phase 1: Setting up test project..."
 mkdir -p "$TEST_DIR"
 cd "$TEST_DIR" && git init -q && git config user.name "Test" && git config user.email "test@test.com"
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo "  ✓ Test environment ready"
 echo ""
 
 # ============================================================
-# PHASE 2: Initialize workflow through Claude
+# PHASE 2: Initialize workflow
 # ============================================================
-echo "Phase 2: Initializing workflow through Claude..."
+echo "Phase 2: Initializing workflow..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $BIN_DIR/init-workflow.sh '$TEST_DIR' 'test-blocking'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+TMUX_SOCKET="$TMUX_SOCKET" bash "$BIN_DIR/init-workflow.sh" "$TEST_DIR" "test-blocking"
 
 # Find the created workflow
 WORKFLOW_DIR=$(ls -td "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-*/ 2>/dev/null | head -1)

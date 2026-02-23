@@ -181,19 +181,19 @@ else
     fail "PM should be blocked from Task tool"
 fi
 
-if echo "$PM_OUTPUT" | grep -q "TASK SUB-AGENT BLOCKED"; then
-    pass "Block message contains 'TASK SUB-AGENT BLOCKED'"
+if echo "$PM_OUTPUT" | grep -q "BLOCKED.*PM.*sub-agents"; then
+    pass "Block message indicates PM blocked from sub-agents"
 else
-    fail "Block message should contain 'TASK SUB-AGENT BLOCKED'"
+    fail "Block message should indicate PM blocked from sub-agents"
 fi
 
-if echo "$PM_OUTPUT" | grep -q "You are a pm agent"; then
-    pass "Block message mentions PM role"
+if echo "$PM_OUTPUT" | grep -q "general-purpose"; then
+    pass "Block message mentions blocked subagent type"
 else
-    fail "Block message should mention PM role"
+    fail "Block message should mention blocked subagent type"
 fi
 
-if echo "$PM_OUTPUT" | grep -q "delegate work to your team agents"; then
+if echo "$PM_OUTPUT" | grep -q "send-to-agent"; then
     pass "PM block message contains delegation instruction"
 else
     fail "PM block message should contain delegation instruction"
@@ -278,7 +278,7 @@ else
     fail "Block message should include send message instructions"
 fi
 
-if echo "$SYNTAX_OUTPUT" | grep -q "uv run python lib/tmux_utils.py send"; then
+if echo "$SYNTAX_OUTPUT" | grep -q "uv run --project.*python.*tmux_utils.py send"; then
     pass "Block message includes send command syntax"
 else
     fail "Block message should include uv run python command syntax"
@@ -326,10 +326,10 @@ else
     fail "Should still block PM without agents.yml"
 fi
 
-if echo "$NO_AGENTS_OUTPUT" | grep -q "No team agents found"; then
-    pass "PM sees 'No team agents found' message when agents.yml missing"
+if echo "$NO_AGENTS_OUTPUT" | grep -q "send-to-agent"; then
+    pass "PM sees delegation instruction even without agents.yml"
 else
-    fail "PM should see 'No team agents found' when agents.yml missing"
+    fail "PM should see delegation instruction even without agents.yml"
 fi
 
 rm -rf "$NO_AGENTS_DIR"
