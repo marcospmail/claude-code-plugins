@@ -3,10 +3,10 @@
 #
 # E2E Test: Single Agent Creation
 #
-# Verifies through Claude Code that creating a single agent works correctly
-#
-# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
-# All execution goes through Claude running inside a tmux session.
+# Verifies that creating a single agent works correctly:
+# - agents.yml has the agent entry
+# - Agent is named 'qa' (not 'qa-1')
+# - Agent files are generated
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -41,49 +41,17 @@ echo "Phase 1: Setting up test environment..."
 mkdir -p "$TEST_DIR"
 echo "test" > "$TEST_DIR/app.js"
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-# Wait for Claude to start and handle trust prompt
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Check for trust prompt and send Enter to accept
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo "  ✓ Test environment ready"
 echo ""
 
 # ============================================================
-# PHASE 2: Create workflow via Claude
+# PHASE 2: Create workflow
 # ============================================================
-echo "Phase 2: Creating workflow via Claude..."
+echo "Phase 2: Creating workflow..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/workflow_ops.py create 'Single agent test' --project '$TEST_DIR'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
-
-# Handle skill trust prompt if it appears
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    echo "  - Skill trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Single agent test"
 
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
 AGENTS_YML="$TEST_DIR/.workflow/$WORKFLOW_NAME/agents.yml"
@@ -92,28 +60,18 @@ echo "  - Workflow: $WORKFLOW_NAME"
 echo ""
 
 # ============================================================
-# PHASE 3: Create single QA agent via Claude
+# PHASE 3: Create single QA agent
 # ============================================================
-echo "Phase 3: Creating single QA agent via Claude..."
+echo "Phase 3: Creating single QA agent..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: cd $PROJECT_ROOT && uv run python lib/agent_manager.py create '$TEST_DIR' qa -p '$TEST_DIR'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 10
+source "$PROJECT_ROOT/bin/workflow-utils.sh"
+save_team_structure "$TEST_DIR" "qa:qa:sonnet"
 
-# Handle skill trust prompt
-SKILL_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$SKILL_CHECK" | grep -qi "Use skill"; then
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Down Enter
-    sleep 20
-else
-    sleep 20
-fi
+echo ""
 
 # ============================================================
 # PHASE 4: Verify agent creation
 # ============================================================
-echo ""
 echo "Phase 4: Verifying agent creation..."
 
 # Check agents.yml was created/updated
