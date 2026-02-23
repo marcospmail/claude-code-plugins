@@ -94,16 +94,11 @@ echo ""
 # ============================================================
 echo "Phase 2: Testing incomplete task count detection..."
 
-# Count incomplete tasks directly
-INCOMPLETE=$(uv run python -c "
-import json
-try:
-    with open('$TEST_DIR/.workflow/001-test-workflow/tasks.json', 'r') as f:
-        data = json.load(f)
-    incomplete = [t for t in data.get('tasks', []) if t.get('status') in ('pending', 'in_progress', 'blocked')]
-    print(len(incomplete))
-except:
-    print(0)
+# Count incomplete tasks using real TaskManager module
+INCOMPLETE=$(uv run --project "$PROJECT_ROOT" python -c "
+from lib.task_manager import TaskManager
+tm = TaskManager('$TEST_DIR/.workflow/001-test-workflow')
+print(tm.get_incomplete_count())
 " 2>/dev/null)
 
 if [[ "$INCOMPLETE" == "3" ]]; then
@@ -161,16 +156,11 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-# Count incomplete tasks directly
-INCOMPLETE=$(uv run python -c "
-import json
-try:
-    with open('$TEST_DIR/.workflow/001-test-workflow/tasks.json', 'r') as f:
-        data = json.load(f)
-    incomplete = [t for t in data.get('tasks', []) if t.get('status') in ('pending', 'in_progress', 'blocked')]
-    print(len(incomplete))
-except:
-    print(0)
+# Count incomplete tasks using real TaskManager module
+INCOMPLETE=$(uv run --project "$PROJECT_ROOT" python -c "
+from lib.task_manager import TaskManager
+tm = TaskManager('$TEST_DIR/.workflow/001-test-workflow')
+print(tm.get_incomplete_count())
 " 2>/dev/null)
 
 if [[ "$INCOMPLETE" == "0" ]]; then
@@ -212,15 +202,11 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/tasks.json" << 'EOF'
 }
 EOF
 
-INCOMPLETE=$(uv run python -c "
-import json
-try:
-    with open('$TEST_DIR/.workflow/001-test-workflow/tasks.json', 'r') as f:
-        data = json.load(f)
-    incomplete = [t for t in data.get('tasks', []) if t.get('status') in ('pending', 'in_progress', 'blocked')]
-    print(len(incomplete))
-except:
-    print(0)
+# Count incomplete tasks using real TaskManager module
+INCOMPLETE=$(uv run --project "$PROJECT_ROOT" python -c "
+from lib.task_manager import TaskManager
+tm = TaskManager('$TEST_DIR/.workflow/001-test-workflow')
+print(tm.get_incomplete_count())
 " 2>/dev/null)
 
 if [[ "$INCOMPLETE" == "0" ]]; then
@@ -237,15 +223,11 @@ echo "Phase 7: Testing with missing tasks.json..."
 
 rm -f "$TEST_DIR/.workflow/001-test-workflow/tasks.json"
 
-INCOMPLETE=$(uv run python -c "
-import json
-try:
-    with open('$TEST_DIR/.workflow/001-test-workflow/tasks.json', 'r') as f:
-        data = json.load(f)
-    incomplete = [t for t in data.get('tasks', []) if t.get('status') in ('pending', 'in_progress', 'blocked')]
-    print(len(incomplete))
-except:
-    print(0)
+# Count incomplete tasks using real TaskManager module (handles missing file gracefully)
+INCOMPLETE=$(uv run --project "$PROJECT_ROOT" python -c "
+from lib.task_manager import TaskManager
+tm = TaskManager('$TEST_DIR/.workflow/001-test-workflow')
+print(tm.get_incomplete_count())
 " 2>/dev/null)
 
 if [[ "$INCOMPLETE" == "0" ]]; then
@@ -280,25 +262,13 @@ EOF
 # Clear checkins for fresh test
 echo '{"checkins": [], "daemon_pid": null}' > "$TEST_DIR/.workflow/001-test-workflow/checkins.json"
 
-# Run the auto-stop logic directly (same logic as checkin_scheduler.py)
-uv run python -c "
-import re, json
-from pathlib import Path
-from datetime import datetime
-sf=Path('$TEST_DIR/.workflow/001-test-workflow/status.yml')
-tf=Path('$TEST_DIR/.workflow/001-test-workflow/tasks.json')
-d=json.load(open(tf))
-inc=[t for t in d['tasks'] if t['status'] in ('pending','in_progress','blocked')]
-if len(inc)==0:
-    c=sf.read_text()
-    c=re.sub(r'^status:.*$','status: completed',c,flags=re.MULTILINE)
-    if 'completed_at:' not in c:
-        c=c.rstrip()+'\ncompleted_at: '+datetime.now().isoformat()+'\n'
-    sf.write_text(c)
-    print('Status updated to completed')
-"
+# Start the real checkin_scheduler daemon — it should detect all tasks completed and auto-stop
+cd "$TEST_DIR" && TMUX_SOCKET="$TMUX_SOCKET" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/checkin_scheduler.py" start 1 --note 'Auto-stop test' --target "$SESSION_NAME:0" --workflow '001-test-workflow'
 
-# Verify status.yml was updated to completed
+# Wait for daemon to detect all-completed and auto-stop
+sleep 15
+
+# Verify status.yml was updated to completed by the real auto-stop logic
 STATUS_VALUE=$(grep '^status:' "$TEST_DIR/.workflow/001-test-workflow/status.yml" | awk '{print $2}')
 if [[ "$STATUS_VALUE" == "completed" ]]; then
     pass "Auto-stop updates status.yml to 'completed'"

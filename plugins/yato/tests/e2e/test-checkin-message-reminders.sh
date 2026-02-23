@@ -3,10 +3,11 @@
 #
 # E2E Test: Check-in message contains PM reminders
 #
-# Verifies that:
-# 1. Check-in message includes delegation reminder
-# 2. Check-in message includes task status rules
-# 3. Message is actually sent to the target pane
+# Verifies that the REAL check-in daemon generates correct messages:
+# 1. Check-in message contains "Time for check-in" with task count
+# 2. Check-in message includes REMINDER about updating tasks.json
+# 3. Check-in message includes stacked suffix from defaults.conf
+# 4. Message is actually sent to the target pane
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -30,10 +31,21 @@ fail() { echo "  ❌ $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
+    # Kill any daemon processes for this test
+    if [[ -f "$TEST_DIR/.workflow/001-test-workflow/checkins.json" ]]; then
+        DAEMON_PID=$(python3 -c "
+import json
+try:
+    with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json') as f:
+        print(json.load(f).get('daemon_pid', ''))
+except: pass
+" 2>/dev/null)
+        if [[ -n "$DAEMON_PID" ]]; then
+            kill "$DAEMON_PID" 2>/dev/null || true
+        fi
+    fi
     tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
-    # Kill any pending check-in background processes
-    pkill -f "schedule-checkin.*$TEST_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -64,7 +76,6 @@ EOF
 echo '{"checkins": []}' > "$TEST_DIR/.workflow/001-test-workflow/checkins.json"
 
 # Create tmux session with WORKFLOW_NAME env var
-# Use larger window size to capture full messages
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
 
@@ -75,64 +86,54 @@ if ! tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
 fi
 
 pass "Tmux session created: $SESSION_NAME"
-
-# Start Claude in the session (tmux+Claude pattern)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
-
-# Wait for Claude to initialize
-echo "  - Waiting for Claude to initialize..."
-sleep 12
-
 echo "Test directory: $TEST_DIR"
 echo ""
 
 # ============================================================
-# Test 1: Trigger check-in and verify message is sent
+# Phase 1: Start real check-in daemon
 # ============================================================
-echo "Phase 1: Triggering check-in..."
+echo "Phase 1: Starting real check-in daemon..."
 
-# Clear the pane first
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "clear" Enter
-sleep 1
+# Start the daemon with 1-minute interval targeting the session pane
+# Must run from project dir so find_project_root() finds .workflow/
+# YATO_PATH ensures daemon finds config/defaults.conf for suffix stacking
+cd "$TEST_DIR"
+YATO_PATH="$PROJECT_ROOT" TMUX_SOCKET="$TMUX_SOCKET" uv run --directory "$PROJECT_ROOT" python lib/checkin_scheduler.py start 1 \
+    --note "Test checkin" \
+    --target "$SESSION_NAME:0" \
+    --workflow "001-test-workflow" 2>&1
 
-# Run schedule-checkin with a very short interval (will execute after 1 second for testing)
-# We use a custom script to send message immediately for testing
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "cd $TEST_DIR" Enter
-sleep 1
+# Verify daemon started by checking checkins.json for daemon_pid
+sleep 2
+DAEMON_PID=$(python3 -c "
+import json
+with open('$TEST_DIR/.workflow/001-test-workflow/checkins.json') as f:
+    data = json.load(f)
+print(data.get('daemon_pid', ''))
+" 2>/dev/null)
 
-# Directly call send-message.sh with the check-in message format to test immediately
-# This simulates what schedule-checkin.sh does
-NOTE="Test check-in (2 tasks remaining)"
-CHECKIN_MSG="Time for check-in! (\$NOTE)
+if [[ -n "$DAEMON_PID" ]] && kill -0 "$DAEMON_PID" 2>/dev/null; then
+    pass "Check-in daemon started (PID: $DAEMON_PID)"
+else
+    fail "Check-in daemon not running"
+fi
 
-⚠️ PM REMINDERS:
-• DELEGATE work to agents - do NOT implement/code yourself
-• 'completed' = work was ACTUALLY DONE by an agent
-• 'blocked' stays blocked until resolved - you cannot skip tasks
-• If user says 'skip it', task stays BLOCKED (not completed)"
-
-# Send the message directly using send-message.sh
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/send-message.sh '$SESSION_NAME:0' 'Time for check-in! ($NOTE)
-
-⚠️ PM REMINDERS:
-• DELEGATE work to agents - do NOT implement/code yourself
-• 'completed' = work was ACTUALLY DONE by an agent
-• blocked stays blocked until resolved - you cannot skip tasks
-• If user says skip it, task stays BLOCKED (not completed)'" Enter
-
-sleep 3
-
-# Capture pane output
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -50 2>/dev/null)
-
-echo "Debug - Captured output:"
-echo "$OUTPUT"
 echo ""
 
 # ============================================================
-# Test 2: Verify message contains check-in text
+# Phase 2: Wait for daemon to fire and verify message
 # ============================================================
-echo "Phase 2: Verifying message content..."
+echo "Phase 2: Waiting for check-in to fire (1-minute interval + buffer)..."
+
+# Daemon fires after interval_minutes (1 min) + up to DAEMON_POLL_INTERVAL (10s)
+sleep 75
+
+# Capture target pane output
+OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p -S -100 2>/dev/null)
+
+echo "Debug - Captured output:"
+echo "$OUTPUT" | head -20
+echo ""
 
 if echo "$OUTPUT" | grep -qi "Time for check-in"; then
     pass "Message contains 'Time for check-in'"
@@ -140,107 +141,81 @@ else
     fail "Message missing 'Time for check-in'"
 fi
 
-if echo "$OUTPUT" | grep -qi "PM REMINDERS"; then
-    pass "Message contains 'PM REMINDERS' header"
+if echo "$OUTPUT" | grep -qi "tasks remaining\|tasks.json.*broken"; then
+    pass "Message contains task count info"
 else
-    fail "Message missing 'PM REMINDERS' header"
+    fail "Message missing task count info"
 fi
 
 # ============================================================
-# Test 3: Verify delegation reminder
-# ============================================================
-echo ""
-echo "Phase 3: Verifying delegation reminder..."
-
-if echo "$OUTPUT" | grep -qi "DELEGATE.*agents\|DELEGATE work"; then
-    pass "Message contains delegation reminder"
-else
-    fail "Message missing delegation reminder"
-fi
-
-if echo "$OUTPUT" | grep -qi "do NOT implement\|NOT.*implement.*yourself"; then
-    pass "Message contains 'do NOT implement' warning"
-else
-    fail "Message missing 'do NOT implement' warning"
-fi
-
-# ============================================================
-# Test 4: Verify task status rules
+# Phase 3: Verify REMINDER content in message
 # ============================================================
 echo ""
-echo "Phase 4: Verifying task status rules..."
+echo "Phase 3: Verifying REMINDER content..."
 
-if echo "$OUTPUT" | grep -qi "completed.*ACTUALLY.*DONE\|ACTUALLY DONE"; then
-    pass "Message contains 'completed = ACTUALLY DONE' rule"
+if echo "$OUTPUT" | grep -qi "REMINDER"; then
+    pass "Message contains REMINDER"
 else
-    fail "Message missing 'completed = ACTUALLY DONE' rule"
+    fail "Message missing REMINDER"
 fi
 
-if echo "$OUTPUT" | grep -qi "blocked.*stays.*blocked"; then
-    pass "Message contains 'blocked stays blocked' rule"
+if echo "$OUTPUT" | grep -qi "update tasks.json\|tasks.json updated"; then
+    pass "Message mentions updating tasks.json"
 else
-    fail "Message missing 'blocked stays blocked' rule"
-fi
-
-if echo "$OUTPUT" | grep -qi "skip.*BLOCKED\|stays BLOCKED"; then
-    pass "Message contains 'skip keeps BLOCKED' rule"
-else
-    fail "Message missing 'skip keeps BLOCKED' rule"
+    fail "Message missing tasks.json update instruction"
 fi
 
 # ============================================================
-# Test 5: Test actual schedule-checkin.sh output
+# Phase 4: Verify stacked suffix from defaults.conf
+# ============================================================
+echo ""
+echo "Phase 4: Verifying stacked suffix from defaults.conf..."
+
+# CHECKIN_TO_PM_SUFFIX should be appended to the message
+if echo "$OUTPUT" | grep -qi "distribute work\|don.*do work yourself\|MUST ONLY do PM work"; then
+    pass "Suffix contains delegation reminder"
+else
+    fail "Suffix missing delegation reminder (from CHECKIN_TO_PM_SUFFIX)"
+fi
+
+if echo "$OUTPUT" | grep -qi "Read your identity.yml\|Read your instructions.md\|Read your constraints.md"; then
+    pass "Suffix contains file reading reminders"
+else
+    fail "Suffix missing file reading reminders"
+fi
+
+# ============================================================
+# Phase 5: Test schedule-checkin.sh directly
 # ============================================================
 echo ""
 echo "Phase 5: Testing schedule-checkin.sh directly..."
 
-# Have Claude run schedule-checkin.sh (tmux+Claude pattern)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/schedule-checkin.sh 1 'Test note' '$SESSION_NAME:0'" Enter
+SCHEDULE_OUTPUT=$(cd "$TEST_DIR" && TMUX_SOCKET="$TMUX_SOCKET" bash "$BIN_DIR/schedule-checkin.sh" 1 'Test note' "$SESSION_NAME:0" 2>&1)
 
-# Wait for execution
-sleep 5
-
-# Capture output from Claude's pane
-SCHEDULE_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -30 2>/dev/null)
-
-echo "Schedule output (via Claude):"
-echo "$SCHEDULE_OUTPUT" | tail -15
-echo ""
-
-if echo "$SCHEDULE_OUTPUT" | grep -qi "Daemon started\|Starting check-in daemon\|Scheduled\|Check-in"; then
-    pass "schedule-checkin.sh runs without error (via Claude)"
+if echo "$SCHEDULE_OUTPUT" | grep -qi "Daemon started\|Starting check-in daemon\|Scheduled\|Check-in\|already running"; then
+    pass "schedule-checkin.sh runs without error"
 else
-    # Check if it's the guard preventing duplicate
-    if echo "$SCHEDULE_OUTPUT" | grep -qi "already running\|already pending"; then
-        pass "schedule-checkin.sh correctly guards against duplicate (expected behavior)"
-    else
-        fail "schedule-checkin.sh may have issues: $SCHEDULE_OUTPUT"
-    fi
+    fail "schedule-checkin.sh may have issues: $SCHEDULE_OUTPUT"
 fi
 
 # ============================================================
-# Test 6: Verify send-message.sh works with multiline
+# Phase 6: Verify send-message.sh with multiline content
 # ============================================================
 echo ""
 echo "Phase 6: Testing send-message.sh with multiline content..."
 
-# Clear pane
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "clear" Enter
+# Clear the pane first
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "clear" Enter
 sleep 1
 
-# Test multiline message - have Claude run send-message.sh (tmux+Claude pattern)
-MULTILINE_MSG="Line 1: Header
+# Send multiline message directly
+TMUX_SOCKET="$TMUX_SOCKET" "$BIN_DIR/send-message.sh" "$SESSION_NAME:0" "Line 1: Header
 Line 2: Content
-Line 3: More content"
+Line 3: More content" 2>/dev/null
 
-# Send the command through Claude (escape quotes for the message)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$BIN_DIR/send-message.sh '$SESSION_NAME:0' 'Line 1: Header
-Line 2: Content
-Line 3: More content'" Enter
+sleep 2
 
-sleep 3
-
-OUTPUT2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -20 2>/dev/null)
+OUTPUT2=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:0" -p -S -20 2>/dev/null)
 
 if echo "$OUTPUT2" | grep -q "Line 1\|Line 2\|Line 3"; then
     pass "send-message.sh handles multiline messages"
