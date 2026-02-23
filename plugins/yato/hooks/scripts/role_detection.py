@@ -27,15 +27,23 @@ def _safe_int(value) -> Optional[int]:
         return None
 
 
+def _tmux_cmd(*args) -> list:
+    """Build a tmux command, respecting TMUX_SOCKET env var for custom sockets."""
+    socket = os.environ.get("TMUX_SOCKET")
+    base = ["tmux", "-L", socket] if socket else ["tmux"]
+    return base + list(args)
+
+
 def _get_tmux_session_name() -> Optional[str]:
     """Get the current tmux session name."""
     if not os.environ.get("TMUX"):
         return None
     pane_id = os.environ.get("TMUX_PANE")
     try:
-        cmd = ["tmux", "display-message", "-p", "#{session_name}"]
         if pane_id:
-            cmd = ["tmux", "display-message", "-t", pane_id, "-p", "#{session_name}"]
+            cmd = _tmux_cmd("display-message", "-t", pane_id, "-p", "#{session_name}")
+        else:
+            cmd = _tmux_cmd("display-message", "-p", "#{session_name}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
         if result.returncode == 0:
             return result.stdout.strip() or None
@@ -48,9 +56,10 @@ def _get_tmux_window_pane() -> Tuple[Optional[int], Optional[int]]:
     """Get current tmux window index and pane index."""
     pane_id = os.environ.get("TMUX_PANE")
     try:
-        cmd = ["tmux", "display-message", "-p", "#{window_index}:#{pane_index}"]
         if pane_id:
-            cmd = ["tmux", "display-message", "-t", pane_id, "-p", "#{window_index}:#{pane_index}"]
+            cmd = _tmux_cmd("display-message", "-t", pane_id, "-p", "#{window_index}:#{pane_index}")
+        else:
+            cmd = _tmux_cmd("display-message", "-p", "#{window_index}:#{pane_index}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
         if result.returncode == 0:
             parts = result.stdout.strip().split(":")
@@ -98,7 +107,7 @@ def _get_workflow_name() -> Optional[str]:
     if os.environ.get("TMUX"):
         try:
             result = subprocess.run(
-                ["tmux", "showenv", "WORKFLOW_NAME"],
+                _tmux_cmd("showenv", "WORKFLOW_NAME"),
                 capture_output=True, text=True, timeout=2,
             )
             if result.returncode == 0 and "=" in result.stdout:

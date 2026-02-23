@@ -168,10 +168,10 @@ def build_block_message(role: str, agents: List[Dict[str, Any]], current_name: O
             lines.append(f"Your PM: pm at {pm_target}")
             lines.append("")
             lines.append("Send a message with:")
-            lines.append(f"  cd ${{CLAUDE_PLUGIN_ROOT}} && uv run python lib/tmux_utils.py send {pm_target} \"message\"")
+            lines.append(f"  uv run --project ${{CLAUDE_PLUGIN_ROOT}} python ${{CLAUDE_PLUGIN_ROOT}}/lib/tmux_utils.py send {pm_target} \"message\"")
             lines.append("")
             lines.append("Example:")
-            lines.append(f"  cd ${{CLAUDE_PLUGIN_ROOT}} && uv run python lib/tmux_utils.py send {pm_target} \"I need help with this task, can you assign another agent?\"")
+            lines.append(f"  uv run --project ${{CLAUDE_PLUGIN_ROOT}} python ${{CLAUDE_PLUGIN_ROOT}}/lib/tmux_utils.py send {pm_target} \"I need help with this task, can you assign another agent?\"")
         else:
             lines.append("")
             lines.append("No PM found in agents.yml. Contact the orchestrator for guidance.")
@@ -195,7 +195,29 @@ def main():
         print(json.dumps({"continue": True}))
         return 0
 
-    # Agent detected - block Task tool
+    # PM uses blocklist: only block subagent types that can modify code
+    # Non-PM agents: block all Task usage
+    tool_input = hook_input.get("tool_input", {}) or hook_input.get("toolInput", {})
+    subagent_type = tool_input.get("subagent_type", "")
+
+    PM_BLOCKED_SUBAGENTS = {"general-purpose", "Bash"}
+
+    if role == "pm":
+        if subagent_type in PM_BLOCKED_SUBAGENTS:
+            output = {
+                "decision": "block",
+                "reason": (
+                    f"BLOCKED: PM cannot spawn '{subagent_type}' sub-agents (can modify code).\n"
+                    "Use /send-to-agent to delegate code work to your team agents instead."
+                ),
+            }
+            print(json.dumps(output))
+            return 0
+        # PM allowed for all other subagent types (Explore, Plan, etc.)
+        print(json.dumps({"continue": True}))
+        return 0
+
+    # Non-PM agent detected - block all Task tool usage
     # Try to load teammates from agents.yml for the block message
     agents = []
     workflow_path = find_workflow_path()

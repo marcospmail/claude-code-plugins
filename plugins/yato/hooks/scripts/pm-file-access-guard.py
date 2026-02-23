@@ -6,7 +6,6 @@ PM agents should only be able to edit workflow-related files:
 - .workflow/**/tasks.json
 - .workflow/**/prd.md
 - .workflow/**/status.yml
-- .workflow/**/team.yml
 - .workflow/**/agents.yml
 - .workflow/**/checkins.json
 - .workflow/**/agents/**/identity.yml
@@ -35,7 +34,6 @@ PM_ALLOWED_PATTERNS = [
     ".workflow/*/tasks.json",
     ".workflow/*/prd.md",
     ".workflow/*/status.yml",
-    ".workflow/*/team.yml",
     ".workflow/*/agents.yml",
     ".workflow/*/checkins.json",
     # Agent configuration files
@@ -160,7 +158,7 @@ PM can ONLY edit workflow files:
   - .workflow/**/tasks.json (task management)
   - .workflow/**/prd.md (requirements)
   - .workflow/**/status.yml (workflow status)
-  - .workflow/**/team.yml (team structure)
+  - .workflow/**/agents.yml (agent registry)
   - .workflow/**/agents/**/*.yml, *.md (agent configs)
 
 ACTION REQUIRED:

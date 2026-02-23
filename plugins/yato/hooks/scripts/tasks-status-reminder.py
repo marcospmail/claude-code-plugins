@@ -27,7 +27,7 @@ def main():
             "systemMessage": """⚠️ PM RULES - READ CAREFULLY:
 
 DELEGATION (YOU ARE PM, NOT A DEVELOPER):
-• DELEGATE all implementation work to agents via send-message.sh
+• DELEGATE all implementation work to agents via /send-to-agent
 • Do NOT write code, fix bugs, or implement features yourself
 • Do NOT use Write/Edit tools on code files - only on workflow files (tasks.json, prd.md, agent-tasks.md)
 • If work needs doing, assign it to an agent - that's your job as PM
