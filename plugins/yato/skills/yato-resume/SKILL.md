@@ -117,7 +117,7 @@ Wait 5 seconds for Claude to initialize, then brief the PM:
 
 ```bash
 sleep 5
-${CLAUDE_PLUGIN_ROOT}/bin/send-message.sh "$PM_PANE" "RESUMING WORKFLOW: $WORKFLOW_NAME
+TMUX_SOCKET="${TMUX_SOCKET}" uv run --project ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/tmux_utils.py send --skip-suffix "$PM_PANE" "RESUMING WORKFLOW: $WORKFLOW_NAME
 
 Read these files and continue from where you left off:
 - .workflow/$WORKFLOW_NAME/agents/pm/instructions.md
