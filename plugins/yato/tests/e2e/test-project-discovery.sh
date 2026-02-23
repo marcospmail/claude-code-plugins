@@ -172,43 +172,16 @@ else
 fi
 
 # ============================================================
-# PHASE 5: Test workflow context file creation through Claude
+# PHASE 5: Test workflow context file creation
 # ============================================================
 echo ""
-echo "Phase 5: Workflow context files created through Claude..."
+echo "Phase 5: Workflow context files created via init-workflow.sh..."
 echo ""
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
 
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-# Wait for Claude to start
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
-
-# Ask Claude to run init-workflow.sh
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test project discovery'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
-
-# Debug output
-echo "  Debug - After workflow init:"
-tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -30 | tail -15
-echo ""
+# Run init-workflow.sh directly (no Claude CLI needed)
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test project discovery"
 
 # Get workflow name
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)

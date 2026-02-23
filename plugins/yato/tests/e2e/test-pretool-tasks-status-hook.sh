@@ -177,9 +177,9 @@ done
 echo ""
 
 # ============================================================
-# Phase 5: Test with tmux + Claude (E2E)
+# Phase 5: Test hook with real workflow tasks.json file
 # ============================================================
-echo "Phase 5: Testing with Claude in tmux session..."
+echo "Phase 5: Testing hook with real workflow tasks.json..."
 
 mkdir -p "$TEST_DIR/.workflow/001-test"
 
@@ -200,82 +200,42 @@ cat > "$TEST_DIR/.workflow/001-test/tasks.json" << 'EOF'
 }
 EOF
 
-echo "Test directory: $TEST_DIR"
-echo "Session: $SESSION_NAME"
+# Test hook with the real tasks.json path (blocked → completed change)
+REAL_INPUT="{\"toolInput\":{\"file_path\":\"$TEST_DIR/.workflow/001-test/tasks.json\",\"old_string\":\"\\\"status\\\": \\\"blocked\\\"\",\"new_string\":\"\\\"status\\\": \\\"completed\\\"\"}}"
+REAL_OUTPUT=$(echo "$REAL_INPUT" | uv run python "$HOOK_SCRIPT" 2>&1)
 
-# Create tmux session
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
-
-if ! tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
-    fail "Failed to create tmux session"
-    exit 1
-fi
-
-pass "Tmux session created"
-
-# Start Claude with dangerously skip permissions
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
-
-echo "Waiting for Claude to initialize..."
-sleep 12
-
-# Verify Claude started
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -q "❯\|›\|>"; then
-    pass "Claude CLI started (prompt visible)"
+if echo "$REAL_OUTPUT" | jq -e '.continue == true' >/dev/null 2>&1; then
+    pass "Hook allows edit to proceed (advisory)"
 else
-    echo "Debug - tmux output:"
-    echo "$OUTPUT" | tail -15
-    fail "Claude prompt not visible"
+    fail "Hook should return continue:true for tasks.json edit"
 fi
 
-# Send a request to edit tasks.json
-echo "Sending edit request..."
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Edit .workflow/001-test/tasks.json and change status from blocked to completed"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
+REAL_SYSMSG=$(echo "$REAL_OUTPUT" | jq -r '.systemMessage' 2>/dev/null)
 
-echo "Waiting for Claude to process (this may take a moment)..."
-sleep 60
-
-# Capture output
-FINAL_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p -S -100 2>/dev/null)
-
-echo ""
-echo "Debug - Claude response:"
-echo "$FINAL_OUTPUT" | tail -30
-echo ""
-
-# Check if Claude mentioned the rules or refused
-if echo "$FINAL_OUTPUT" | grep -qi "blocked\|status\|task\|complet"; then
-    pass "Claude processed the edit request"
+if [[ -n "$REAL_SYSMSG" ]] && echo "$REAL_SYSMSG" | grep -qi "NEVER.*mark.*completed"; then
+    pass "Hook injects NEVER mark completed warning for real workflow file"
 else
-    fail "Claude response not captured properly"
+    fail "Hook should inject warning for real workflow tasks.json"
 fi
 
-# Check the file status
-FINAL_STATUS=$(uv run python -c "
+if echo "$REAL_SYSMSG" | grep -qi "blocked.*stays.*blocked"; then
+    pass "Hook injects blocked stays blocked warning for real workflow file"
+else
+    fail "Hook should inject blocked warning for real workflow tasks.json"
+fi
+
+# Verify the tasks.json file was NOT modified by the hook (hook is advisory, not blocking)
+FINAL_STATUS=$(python3 -c "
 import json
-try:
-    with open('$TEST_DIR/.workflow/001-test/tasks.json', 'r') as f:
-        data = json.load(f)
-    print(data['tasks'][0]['status'])
-except Exception as e:
-    print('error')
+with open('$TEST_DIR/.workflow/001-test/tasks.json', 'r') as f:
+    data = json.load(f)
+print(data['tasks'][0]['status'])
 " 2>/dev/null)
 
-echo "Final task status in file: $FINAL_STATUS"
-
-# The hook injects a warning - Claude may or may not heed it
-# But we should see SOME response
 if [[ "$FINAL_STATUS" == "blocked" ]]; then
-    pass "Task remained blocked (Claude heeded the warning)"
-elif [[ "$FINAL_STATUS" == "completed" ]]; then
-    # Claude completed it despite warning - the hook still worked (injected message)
-    # This is acceptable as the hook is advisory
-    pass "Task was completed (hook ran, Claude proceeded anyway - advisory behavior)"
+    pass "Tasks.json file unchanged by hook (hook is advisory only)"
 else
-    fail "Unexpected status: $FINAL_STATUS"
+    fail "Tasks.json should not be modified by the hook, got status: $FINAL_STATUS"
 fi
 
 # ============================================================
