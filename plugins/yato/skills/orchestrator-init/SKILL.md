@@ -35,5 +35,5 @@ cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/orchestrator.py start
 
 After initialization, the user should brief the PM:
 ```bash
-cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/tmux_utils.py send <session>:1 "Your project requirements here"
+uv run --project ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/tmux_utils.py send <session>:1 "Your project requirements here"
 ```

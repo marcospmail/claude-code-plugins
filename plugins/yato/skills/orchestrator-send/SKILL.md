@@ -17,7 +17,7 @@ You are sending a message to an orchestrator agent.
 
 1. **Send the message:**
 ```bash
-cd ${CLAUDE_PLUGIN_ROOT} && uv run python lib/tmux_utils.py send <target> "<message>"
+uv run --project ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/tmux_utils.py send <target> "<message>"
 ```
 
 2. **Optionally read the response** after a few seconds:
