@@ -31,11 +31,7 @@ This skill helps you work on an existing codebase using Yato (Yet Another Tmux O
 ## Step 1: Check if User is in Tmux
 
 ```bash
-if [ -n "$TMUX" ]; then
-    echo "IN_TMUX"
-else
-    echo "NOT_IN_TMUX"
-fi
+bash ${CLAUDE_PLUGIN_ROOT}/bin/check-tmux.sh
 ```
 
 ## Step 2: Get Project Info

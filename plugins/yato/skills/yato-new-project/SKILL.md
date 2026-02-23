@@ -20,11 +20,7 @@ This skill creates a NEW project from scratch. It will:
 ## Step 0: Check if User is in Tmux
 
 ```bash
-if [ -n "$TMUX" ]; then
-    echo "IN_TMUX"
-else
-    echo "NOT_IN_TMUX"
-fi
+bash ${CLAUDE_PLUGIN_ROOT}/bin/check-tmux.sh
 ```
 
 ## Step 1: Parse Arguments

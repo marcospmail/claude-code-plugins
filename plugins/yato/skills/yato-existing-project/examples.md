@@ -12,7 +12,7 @@
 
 1. Check tmux:
 ```bash
-if [ -n "$TMUX" ]; then echo "IN_TMUX"; else echo "NOT_IN_TMUX"; fi
+bash ${CLAUDE_PLUGIN_ROOT}/bin/check-tmux.sh
 # NOT_IN_TMUX
 ```
 
@@ -70,7 +70,7 @@ The PM already has your request and will continue from there.
 
 1. Check tmux:
 ```bash
-if [ -n "$TMUX" ]; then echo "IN_TMUX"; else echo "NOT_IN_TMUX"; fi
+bash ${CLAUDE_PLUGIN_ROOT}/bin/check-tmux.sh
 # IN_TMUX
 ```
 
@@ -116,7 +116,7 @@ PM reads status.yml, sees the request, summarizes understanding, and asks for co
 
 1. Check tmux:
 ```bash
-if [ -n "$TMUX" ]; then echo "IN_TMUX"; else echo "NOT_IN_TMUX"; fi
+bash ${CLAUDE_PLUGIN_ROOT}/bin/check-tmux.sh
 # NOT_IN_TMUX
 ```
 
@@ -169,7 +169,7 @@ The PM will ask you what you want to accomplish.
 
 1. Check tmux:
 ```bash
-if [ -n "$TMUX" ]; then echo "IN_TMUX"; else echo "NOT_IN_TMUX"; fi
+bash ${CLAUDE_PLUGIN_ROOT}/bin/check-tmux.sh
 # IN_TMUX
 ```
 
