@@ -104,8 +104,8 @@ create_workflow_folder() {
     local folder_name="${num}-${slug}"
     local full_path="$workflow_dir/$folder_name"
 
-    # Create the folder structure
-    mkdir -p "$full_path/agents/pm"
+    # Create the folder structure (agents/pm/ is created later by agent_manager.py init-files)
+    mkdir -p "$full_path"
 
     # Create status.yml (initial_request will be added by init-workflow.sh if exists)
     # Note: checkin_interval_minutes uses "_" as placeholder until user selects interval
@@ -135,6 +135,13 @@ EOF
 get_current_workflow() {
     local project_path="$1"
     local session_name="${2:-}"
+
+    # Check _YATO_WORKFLOW_NAME override (set by save_team_structure to ensure
+    # init-agent-files.sh targets the correct workflow, not the tmux session's)
+    if [[ -n "${_YATO_WORKFLOW_NAME:-}" ]]; then
+        echo "$_YATO_WORKFLOW_NAME"
+        return
+    fi
 
     # If session name provided, query that session directly
     # Note: TMUX_FLAGS is set by calling scripts (create-team.sh, create-agent.sh, etc.)
@@ -269,6 +276,7 @@ EOF
 }
 
 # Add an agent to agents.yml
+# If an agent with the same name already exists, updates its session/window fields
 add_agent_to_yml() {
     local project_path="$1"
     local agent_name="$2"
@@ -288,6 +296,58 @@ add_agent_to_yml() {
     if [[ ! -f "$agents_file" ]]; then
         echo "Error: agents.yml not found" >&2
         return 1
+    fi
+
+    # Check if agent already exists (from save_team_structure at Step 6)
+    if grep -q "name: $agent_name" "$agents_file"; then
+        # Update existing entry's session and window fields using Python for reliable YAML editing
+        python3 -c "
+import yaml, sys
+with open('$agents_file', 'r') as f:
+    data = yaml.safe_load(f)
+for agent in data.get('agents', []):
+    if agent.get('name') == '$agent_name':
+        agent['session'] = '$session'
+        agent['window'] = $window_number
+        agent['role'] = '$agent_role'
+        agent['model'] = '$model'
+        break
+# Re-write using the same format as _write_agents_yml
+with open('$agents_file', 'w') as f:
+    f.write('# Agent Registry\n')
+    f.write('# This file tracks all agents and their tmux locations\n\n')
+    if 'pm' in data:
+        pm = data['pm']
+        f.write('pm:\n')
+        for key in ['name', 'role', 'session', 'window', 'pane', 'model']:
+            if key in pm:
+                val = pm[key]
+                if isinstance(val, str):
+                    f.write(f'  {key}: \"{val}\"\n')
+                else:
+                    f.write(f'  {key}: {val}\n')
+        f.write('\n')
+    agents = data.get('agents', [])
+    if not agents:
+        f.write('agents: []\n')
+    else:
+        f.write('agents:\n')
+        for agent in agents:
+            first_key = True
+            for key in ['name', 'role', 'session', 'window', 'model']:
+                if key in agent:
+                    val = agent[key]
+                    prefix = '  - ' if first_key else '    '
+                    if isinstance(val, str) and val == '':
+                        f.write(f'{prefix}{key}: \"\"\n')
+                    elif isinstance(val, str):
+                        f.write(f'{prefix}{key}: {val}\n')
+                    else:
+                        f.write(f'{prefix}{key}: {val}\n')
+                    first_key = False
+"
+        echo "Updated $agent_name in agents.yml (window $window_number)"
+        return 0
     fi
 
     # Check if agents: [] is empty and replace it with first agent
@@ -313,8 +373,8 @@ EOF
     echo "Added $agent_name to agents.yml (window $window_number)"
 }
 
-# Save team structure to team.yml and create agent files
-# This file is used by /parse-prd-to-tasks to know which agents are available
+# Save team structure to agents.yml and create agent files
+# Reads existing agents.yml (preserves PM entry), appends new agents with empty session/window.
 # Also creates agent folders with identity.yml, instructions.md, agent-tasks.md, etc.
 # Usage: save_team_structure <project_path> <agents...>
 # Agent format: name:role:model (e.g., "impl:developer:opus" or "qa:qa:sonnet")
@@ -329,19 +389,21 @@ save_team_structure() {
         return 1
     fi
 
-    local team_file="$workflow_path/team.yml"
+    local agents_file="$workflow_path/agents.yml"
 
-    # Create team.yml header
-    cat > "$team_file" <<EOF
-# Team Structure
-# This file defines the agents that will be created for this workflow.
-# Used by /parse-prd-to-tasks to assign tasks to appropriate agents.
-# Created: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+    # Read existing agents.yml and remove the empty agents: [] line if present
+    # We'll append new agents to the agents: section
+    if [[ -f "$agents_file" ]]; then
+        # If agents list is empty, replace it with a non-empty list
+        if grep -q "^agents: \[\]" "$agents_file"; then
+            sed -i '' "s/^agents: \[\]/agents:/" "$agents_file"
+        fi
+    else
+        echo "Error: agents.yml not found at $agents_file" >&2
+        return 1
+    fi
 
-agents:
-EOF
-
-    # Add each agent to team.yml and create their files
+    # Add each agent to agents.yml and create their files
     for agent_spec in "${agents[@]}"; do
         # Parse agent spec: name:role:model
         IFS=':' read -r agent_name agent_role agent_model <<< "$agent_spec"
@@ -358,16 +420,28 @@ EOF
             agent_model="sonnet"
         fi
 
-        # Add to team.yml
-        cat >> "$team_file" <<EOF
+        # Check if agent already exists — skip append if so (update role/model in place)
+        if grep -q "name: $agent_name$" "$agents_file"; then
+            # Agent already in agents.yml — update role and model via sed
+            local line_num=$(grep -n "name: $agent_name$" "$agents_file" | tail -1 | cut -d: -f1)
+            sed -i '' "$((line_num + 1))s/role: .*/role: $agent_role/" "$agents_file"
+            # model is 3 lines after name (name, role, session, window, model)
+            sed -i '' "$((line_num + 4))s/model: .*/model: $agent_model/" "$agents_file"
+        else
+            # Append new agent to agents.yml with empty session/window
+            cat >> "$agents_file" <<EOF
   - name: $agent_name
     role: $agent_role
+    session: ""
+    window: ""
     model: $agent_model
 EOF
+        fi
 
         # Create agent files (identity.yml, instructions.md, agent-tasks.md, etc.)
-        cd "$WORKFLOW_UTILS_DIR/.." && uv run python lib/agent_manager.py init-files "$agent_name" "$agent_role" -p "$project_path" -m "$agent_model"
+        # Pass _YATO_WORKFLOW_NAME so init-agent-files.sh (called by agent_manager) targets the right workflow
+        cd "$WORKFLOW_UTILS_DIR/.." && _YATO_WORKFLOW_NAME="$(basename "$workflow_path")" uv run python lib/agent_manager.py init-files "$agent_name" "$agent_role" -p "$project_path" -m "$agent_model"
     done
 
-    echo "Saved team structure to: $team_file"
+    echo "Saved team structure to: $agents_file"
 }
