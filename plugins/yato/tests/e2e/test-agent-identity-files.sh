@@ -1,11 +1,11 @@
 #!/bin/bash
 # test-agent-identity-files.sh
 #
-# E2E Test: Agent Identity Files via /yato-existing-project
+# E2E Test: Agent Identity Files
 #
 # This test verifies init-workflow.sh creates correct PM identity files:
-# 1. Starts Claude in tmux
-# 2. Runs init-workflow.sh through Claude
+# 1. Creates a tmux session
+# 2. Runs init-workflow.sh directly
 # 3. Verifies:
 #    - PM identity.yml exists with correct fields
 #    - PM instructions.md exists with correct content
@@ -20,7 +20,7 @@ export TMUX_SOCKET="yato-e2e-test"
 PROJECT_SLUG="e2e-test-$TEST_NAME-$$"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  E2E Test: Agent Identity Files via /yato-existing-project   ║"
+echo "║  E2E Test: Agent Identity Files                              ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "Test directory: $TEST_DIR"
@@ -69,11 +69,11 @@ echo "  - Project created at $TEST_DIR"
 echo ""
 
 # ============================================================
-# PHASE 2: Create workflow via init-workflow.sh through Claude
+# PHASE 2: Create workflow via init-workflow.sh
 # ============================================================
-echo "Phase 2: Creating workflow through Claude..."
+echo "Phase 2: Creating workflow..."
 
-# Create tmux session
+# Create tmux session (needed for session name detection)
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 160 -y 50 -c "$TEST_DIR"
 
 if ! tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null; then
@@ -83,41 +83,10 @@ fi
 
 pass "Tmux session created"
 
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
-
-# Wait for Claude to start with retry loop for trust prompt
-echo "  - Waiting for Claude to initialize..."
-CLAUDE_READY=false
-for i in {1..10}; do
-    sleep 3
-    OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-    if echo "$OUTPUT" | grep -qi "trust"; then
-        echo "  - Trust prompt found, accepting..."
-        tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-        sleep 15
-        CLAUDE_READY=true
-        break
-    elif echo "$OUTPUT" | grep -q "❯\|>\|Claude"; then
-        echo "  - Claude prompt detected"
-        CLAUDE_READY=true
-        break
-    fi
-done
-
-if [[ "$CLAUDE_READY" != "true" ]]; then
-    echo "  - No trust prompt found, waiting for Claude..."
-    sleep 10
-fi
-
-pass "Claude CLI started"
-
-# Initialize workflow through Claude
+# Initialize workflow directly
 echo "  - Initializing workflow..."
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test identity file generation'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test identity file generation"
+pass "init-workflow.sh completed"
 
 # ============================================================
 # PHASE 3: Verify PM identity files

@@ -10,8 +10,7 @@
 # 2. The create-agent.sh script correctly derives AGENT_NAME_FOR_PATH
 # 3. All generated files use agent NAME for folder paths
 #
-# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
-# All script execution goes through Claude running inside tmux.
+# Tests init-workflow.sh and save_team_structure directly.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -57,38 +56,17 @@ echo "Phase 1: Setting up test environment..."
 mkdir -p "$TEST_DIR"
 echo "test" > "$TEST_DIR/app.js"
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "orchestrator" -c "$TEST_DIR"
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo "  ✓ Test environment ready"
 echo ""
 
 # ============================================================
-# PHASE 2: Initialize workflow through Claude
+# PHASE 2: Initialize workflow
 # ============================================================
-echo "Phase 2: Initializing workflow through Claude..."
+echo "Phase 2: Initializing workflow..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test briefing paths'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test briefing paths"
 
 # Get workflow name
 WORKFLOW_NAME=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1 | xargs basename)
@@ -98,14 +76,12 @@ echo "  - Workflow: $WORKFLOW_NAME"
 echo ""
 
 # ============================================================
-# PHASE 3: Save team structure with custom names through Claude
+# PHASE 3: Save team structure with custom names
 # ============================================================
-echo "Phase 3: Creating team with custom agent names through Claude..."
+echo "Phase 3: Creating team with custom agent names..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' discoverer:qa:opus"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+source "$PROJECT_ROOT/bin/workflow-utils.sh"
+save_team_structure "$TEST_DIR" "discoverer:qa:opus"
 
 echo "  - Team structure saved"
 echo ""
@@ -174,22 +150,29 @@ fi
 echo ""
 
 # ============================================================
-# PHASE 6: Verify team.yml structure
+# PHASE 6: Verify agents.yml structure
 # ============================================================
-echo "Phase 6: Verifying team.yml structure..."
+echo "Phase 6: Verifying agents.yml structure..."
 
-# Test 8: team.yml has discoverer entry
-if grep -q "name: discoverer$" "$WORKFLOW_PATH/team.yml" 2>/dev/null; then
-    pass "team.yml has agent: discoverer"
+# Test 8: agents.yml has discoverer entry
+if grep -q "name: discoverer$" "$WORKFLOW_PATH/agents.yml" 2>/dev/null; then
+    pass "agents.yml has agent: discoverer"
 else
-    fail "team.yml missing discoverer"
+    fail "agents.yml missing discoverer"
 fi
 
-# Test 9: team.yml shows qa role for discoverer
-if grep -A 2 "name: discoverer$" "$WORKFLOW_PATH/team.yml" 2>/dev/null | grep -q "role: qa"; then
-    pass "team.yml shows discoverer role: qa"
+# Test 9: agents.yml shows qa role for discoverer
+if grep -A 4 "name: discoverer$" "$WORKFLOW_PATH/agents.yml" 2>/dev/null | grep -q "role: qa"; then
+    pass "agents.yml shows discoverer role: qa"
 else
-    fail "team.yml has wrong role for discoverer"
+    fail "agents.yml has wrong role for discoverer"
+fi
+
+# Test 10: No team.yml file created (replaced by agents.yml)
+if [[ -f "$WORKFLOW_PATH/team.yml" ]]; then
+    fail "team.yml exists (should not be created, agents.yml is the single source)"
+else
+    pass "No team.yml file created (agents.yml is single source of truth)"
 fi
 
 # ============================================================

@@ -10,8 +10,7 @@
 # 2. Instructions mention max retry guidance
 # 3. Instructions tell agents to notify PM when blocked
 #
-# IMPORTANT: This tests through Claude Code, NOT by calling scripts directly.
-# All script execution goes through Claude running inside tmux.
+# Tests init-workflow.sh and save_team_structure directly.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -49,45 +48,24 @@ cleanup() {
 trap cleanup EXIT
 
 # ============================================================
-# PHASE 1: Setup and create agent through Claude
+# PHASE 1: Setup test environment
 # ============================================================
 echo "Phase 1: Setting up test environment..."
 
 mkdir -p "$TEST_DIR"
 echo "test" > "$TEST_DIR/app.js"
 
-# IMPORTANT: Use larger window size for Claude's TUI to work properly
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "pm" -c "$TEST_DIR"
-
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
-
-echo "  - Waiting for Claude to start..."
-sleep 8
-
-# Handle trust prompt
-OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
-if echo "$OUTPUT" | grep -qi "trust"; then
-    echo "  - Trust prompt found, accepting..."
-    tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-    sleep 15
-else
-    echo "  - No trust prompt found, continuing..."
-    sleep 5
-fi
 
 echo "  ✓ Test environment ready"
 echo ""
 
 # ============================================================
-# PHASE 2: Initialize workflow through Claude
+# PHASE 2: Initialize workflow
 # ============================================================
-echo "Phase 2: Initializing workflow through Claude..."
+echo "Phase 2: Initializing workflow..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: $PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test polling guidance'"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test polling guidance"
 
 WORKFLOW_NAME=$(ls -d "$TEST_DIR/.workflow"/[0-9][0-9][0-9]-* 2>/dev/null | head -1 | xargs basename)
 WORKFLOW_PATH="$TEST_DIR/.workflow/$WORKFLOW_NAME"
@@ -96,14 +74,12 @@ echo "  - Workflow: $WORKFLOW_NAME"
 echo ""
 
 # ============================================================
-# PHASE 3: Save team structure through Claude
+# PHASE 3: Save team structure
 # ============================================================
-echo "Phase 3: Saving team structure through Claude..."
+echo "Phase 3: Saving team structure..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "Run this exact command in bash: source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' developer:developer:sonnet"
-sleep 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" Enter
-sleep 30
+source "$PROJECT_ROOT/bin/workflow-utils.sh"
+save_team_structure "$TEST_DIR" "developer:developer:sonnet"
 
 echo "  - Team structure saved"
 echo ""
