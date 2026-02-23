@@ -39,33 +39,45 @@ Read the PRD file using the Read tool.
 
 ## Step 2: Identify Available Agents
 
-First, check if team.yml exists in the workflow folder. This file defines the ACTUAL agents that will be created.
+First, check if agents.yml exists in the workflow folder. This file defines the ACTUAL agents that will be created.
 
-Read team.yml from workflow folder:
-- TEAM_FILE="$WORKFLOW_PATH/team.yml"
-- If team.yml exists, use ONLY the agents defined there for task assignment
-- If team.yml does NOT exist, fall back to standard agents (developer, qa, code-reviewer)
+Read agents.yml from workflow folder:
+- AGENTS_FILE="$WORKFLOW_PATH/agents.yml"
+- If agents.yml exists, use ONLY the agents defined in the `agents:` section for task assignment (skip the `pm:` section)
+- If agents.yml does NOT exist, fall back to standard agents (developer, qa, code-reviewer)
 
-**If team.yml exists**, extract agents:
+**If agents.yml exists**, extract agents from the `agents:` section:
 ```bash
-# Get agent names from team.yml
-grep "^  - name:" $WORKFLOW_PATH/team.yml | sed 's/.*name: //'
+# Get agent names from agents.yml (agents: section only, skip pm:)
+grep "^  - name:" $WORKFLOW_PATH/agents.yml | sed 's/.*name: //'
 ```
 
-The agents in team.yml have this structure:
+The agents in agents.yml have this structure:
 ```yaml
+pm:
+  name: pm
+  role: pm
+  session: "my-session"
+  window: 0
+  pane: 1
+  model: opus
+
 agents:
   - name: developer
     role: developer
+    session: ""
+    window: ""
     model: sonnet
   - name: qa
     role: qa
+    session: ""
+    window: ""
     model: sonnet
 ```
 
-CRITICAL: Only assign tasks to agents that exist in team.yml. If team.yml has only "developer" and "qa", do NOT create tasks for "code-reviewer".
+CRITICAL: Only assign tasks to agents that exist in agents.yml. If agents.yml has only "developer" and "qa", do NOT create tasks for "code-reviewer".
 
-**Standard agent roles reference** (use if team.yml doesn't exist):
+**Standard agent roles reference** (use if agents.yml doesn't exist):
 
 | Agent | Role | Can Modify Code | Typical Tasks |
 |-------|------|-----------------|---------------|
@@ -73,7 +85,7 @@ CRITICAL: Only assign tasks to agents that exist in team.yml. If team.yml has on
 | qa | Testing | NO | Write tests, verify functionality, report issues |
 | code-reviewer | Review | NO | Review code, check security, approve changes |
 
-Optional specialized agents (if mentioned in PRD or team.yml):
+Optional specialized agents (if mentioned in PRD or agents.yml):
 - backend-developer, frontend-developer, designer, devops
 
 ## Step 3: Analyze PRD and Create Tasks
@@ -170,9 +182,9 @@ After generating tasks.json, provide a clear summary:
 
 <constraints>
 - Always read the full PRD before creating tasks
-- CRITICAL: Read team.yml FIRST to know which agents are available
-- Only assign tasks to agents that exist in team.yml (or standard agents if no team.yml)
-- If team.yml has only developer and qa, do NOT create code-reviewer tasks
+- CRITICAL: Read agents.yml FIRST to know which agents are available
+- Only assign tasks to agents that exist in agents.yml (or standard agents if no agents.yml)
+- If agents.yml has only developer and qa, do NOT create code-reviewer tasks
 - Every implementation task should have a corresponding QA task (if qa agent exists)
 - Code changes should have a review task (if code-reviewer agent exists)
 - Use specific file paths when mentioned in PRD
