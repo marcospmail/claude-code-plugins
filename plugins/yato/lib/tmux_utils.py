@@ -690,6 +690,121 @@ def notify_pm(message: str, session: Optional[str] = None, workflow_status_file:
     return send_message(pm_target, message, _skip_suffix=True)
 
 
+def send_to_agent(agent_name: str, message: str, session: Optional[str] = None, workflow_status_file: Optional[str] = None) -> bool:
+    """
+    Send a message to a named agent by looking up its target from agents.yml.
+
+    Resolves the agent's session:window.pane from agents.yml and sends the message
+    via send_message() which auto-handles PM_TO_AGENTS_SUFFIX stacking.
+
+    Args:
+        agent_name: Agent name as defined in agents.yml
+        message: The message to send
+        session: Session name (auto-detected if not provided)
+        workflow_status_file: Path to workflow status.yml for workflow-level suffix
+
+    Returns:
+        True if successful, False otherwise
+    """
+    from pathlib import Path
+    import yaml
+
+    if session is None:
+        session = get_current_session()
+        if session is None:
+            print("Error: Not running in a tmux session and no session specified")
+            return False
+
+    # Find workflow path
+    workflow_name = None
+    try:
+        result = subprocess.run(
+            _tmux_cmd() + ["showenv", "WORKFLOW_NAME"],
+            capture_output=True, text=True, check=True,
+        )
+        output = result.stdout.strip()
+        if "=" in output:
+            workflow_name = output.split("=", 1)[1]
+    except subprocess.CalledProcessError:
+        pass
+
+    if not workflow_name:
+        print("Error: WORKFLOW_NAME not set in tmux environment")
+        return False
+
+    # Search upward from cwd for .workflow/ containing the workflow
+    project_root = None
+    current = Path.cwd()
+    while current != current.parent:
+        workflow_dir = current / ".workflow" / workflow_name
+        if workflow_dir.exists():
+            project_root = current
+            break
+        current = current.parent
+
+    # Fallback: try pane's working directory
+    if project_root is None:
+        try:
+            result = subprocess.run(
+                _tmux_cmd() + ["display-message", "-p", "#{pane_current_path}"],
+                capture_output=True, text=True, check=False,
+            )
+            pane_path = result.stdout.strip()
+            if pane_path:
+                current = Path(pane_path)
+                while current != current.parent:
+                    workflow_dir = current / ".workflow" / workflow_name
+                    if workflow_dir.exists():
+                        project_root = current
+                        break
+                    current = current.parent
+        except Exception:
+            pass
+
+    if project_root is None:
+        print(f"Error: No .workflow/{workflow_name} directory found")
+        return False
+
+    workflow_path = project_root / ".workflow" / workflow_name
+    agents_file = workflow_path / "agents.yml"
+
+    if not agents_file.exists():
+        print(f"Error: agents.yml not found at {agents_file}")
+        return False
+
+    # Look up agent target
+    with open(agents_file) as f:
+        data = yaml.safe_load(f)
+
+    agent_target = None
+    for agent in data.get("agents", []):
+        if agent.get("name") == agent_name:
+            agent_session = agent.get("session", session)
+            window = agent.get("window", "")
+            pane = agent.get("pane")
+            if pane is not None:
+                agent_target = f"{agent_session}:{window}.{pane}"
+            else:
+                agent_target = f"{agent_session}:{window}"
+            break
+
+    if not agent_target:
+        available = [f"  - {a.get('name', '?')} ({a.get('role', '?')}) at window {a.get('window', '?')}" for a in data.get("agents", [])]
+        print(f"Error: Agent '{agent_name}' not found in agents.yml")
+        if available:
+            print("Available agents:")
+            print("\n".join(available))
+        return False
+
+    # Auto-detect workflow_status_file if not provided
+    if workflow_status_file is None:
+        status_file = workflow_path / "status.yml"
+        if status_file.exists():
+            workflow_status_file = str(status_file)
+
+    return send_message(agent_target, message, workflow_status_file=workflow_status_file)
+
+
 if __name__ == "__main__":
     import sys
     import argparse
@@ -702,12 +817,19 @@ if __name__ == "__main__":
     send_parser.add_argument("target", help="Target (session:window or session:window.pane)")
     send_parser.add_argument("message", nargs="+", help="Message to send")
     send_parser.add_argument("--no-enter", action="store_true", help="Don't send Enter after message")
+    send_parser.add_argument("--skip-suffix", action="store_true", help="Skip appending PM_TO_AGENTS_SUFFIX")
 
     # notify command
     notify_parser = subparsers.add_parser("notify", help="Notify PM")
     notify_parser.add_argument("message", nargs="+", help="Message to send to PM")
     notify_parser.add_argument("--session", "-s", help="Session name (auto-detected if not provided)")
     notify_parser.add_argument("--workflow-status-file", help="Path to workflow status.yml for suffix")
+
+    # send-to-agent command
+    send_to_agent_parser = subparsers.add_parser("send-to-agent", help="Send message to named agent")
+    send_to_agent_parser.add_argument("agent_name", help="Agent name from agents.yml")
+    send_to_agent_parser.add_argument("message", nargs="+", help="Message to send")
+    send_to_agent_parser.add_argument("--session", "-s", help="Session name (auto-detected if not provided)")
 
     # restart-checkin-display command
     restart_parser = subparsers.add_parser("restart-checkin-display", help="Restart check-in display")
@@ -721,7 +843,7 @@ if __name__ == "__main__":
 
     if args.command == "send":
         message = " ".join(args.message)
-        success = send_message(args.target, message, enter=not args.no_enter)
+        success = send_message(args.target, message, enter=not args.no_enter, _skip_suffix=args.skip_suffix)
         if success:
             print(f"Message sent to {args.target}: {message}")
         else:
@@ -735,6 +857,14 @@ if __name__ == "__main__":
             print(f"Notification sent to PM ({session}:0.1): {message}")
         else:
             print("Failed to notify PM")
+            sys.exit(1)
+    elif args.command == "send-to-agent":
+        message = " ".join(args.message)
+        success = send_to_agent(args.agent_name, message, session=args.session)
+        if success:
+            print(f"Message sent to agent '{args.agent_name}': {message}")
+        else:
+            print(f"Failed to send message to agent '{args.agent_name}'")
             sys.exit(1)
     elif args.command == "restart-checkin-display":
         success = restart_checkin_display(target=args.target, yato_path=args.yato_path)
