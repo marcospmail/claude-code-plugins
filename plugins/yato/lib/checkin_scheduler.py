@@ -410,7 +410,17 @@ def run_daemon(
     checkin_file = Path(f".workflow/{workflow_name}/checkins.json")
     status_file = Path(f".workflow/{workflow_name}/status.yml")
     tasks_file = Path(f".workflow/{workflow_name}/tasks.json")
-    send_message_script = Path(yato_path) / "bin" / "send-message.sh"
+
+    # Import send_message from tmux_utils (daemon runs standalone, so use importlib)
+    try:
+        from lib.tmux_utils import send_message as _tmux_send_message
+    except ImportError:
+        import importlib.util
+        _path = os.path.join(os.path.dirname(__file__), "tmux_utils.py")
+        _spec = importlib.util.spec_from_file_location("tmux_utils", _path)
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        _tmux_send_message = _mod.send_message
 
     interval_seconds = interval_minutes * 60
     time_until_next_checkin = interval_seconds
@@ -545,15 +555,31 @@ def run_daemon(
             try:
                 config_file = Path(yato_path) / "config" / "defaults.conf"
                 if config_file.exists():
-                    import re as _re
-                    for line in config_file.read_text().splitlines():
-                        line = line.strip()
+                    lines = config_file.read_text().splitlines()
+                    i = 0
+                    while i < len(lines):
+                        line = lines[i].strip()
                         if line.startswith("CHECKIN_TO_PM_SUFFIX="):
                             raw = line.split("=", 1)[1].strip()
-                            if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'"):
-                                raw = raw[1:-1]
+                            if raw and raw[0] in ('"', "'"):
+                                quote_char = raw[0]
+                                if len(raw) >= 2 and raw[-1] == quote_char:
+                                    raw = raw[1:-1]
+                                else:
+                                    # Multiline: collect until closing quote
+                                    parts = [raw[1:]]
+                                    i += 1
+                                    while i < len(lines):
+                                        part = lines[i]
+                                        if part.rstrip().endswith(quote_char):
+                                            parts.append(part.rstrip()[:-1])
+                                            break
+                                        parts.append(part)
+                                        i += 1
+                                    raw = "\n".join(parts)
                             yato_suffix = raw
                             break
+                        i += 1
             except Exception:
                 pass
 
@@ -571,7 +597,7 @@ def run_daemon(
             if workflow_suffix:
                 msg = msg + "\n\n" + workflow_suffix
 
-            subprocess.run([str(send_message_script), target, msg], check=False)
+            _tmux_send_message(target, msg, _skip_suffix=True)
         except:
             pass
 
@@ -622,9 +648,7 @@ def run_daemon(
             if incomplete != 0:
                 # Send check-in message
                 send_message(
-                    f"Time for check-in! ({_task_info_str(incomplete)}). "
-                    "REMINDER: If you received any [DONE] or [BLOCKED] notifications from agents, "
-                    "update tasks.json immediately (change task status to 'completed' or 'blocked')."
+                    f"Time for check-in! ({_task_info_str(incomplete)})."
                 )
 
                 # Schedule next check-in

@@ -317,18 +317,18 @@ class Orchestrator:
         subprocess.run(_tmux_cmd() + ["select-pane", "-t", pm_target, "-T", "PM"], capture_output=True)
         subprocess.run(_tmux_cmd() + ["set-option", "-p", "-t", pm_target, "allow-set-title", "off"], capture_output=True)
 
-        # Create PM agent files (identity.yml, instructions.md, constraints.md, CLAUDE.md, agent-tasks.md)
+        # Create PM agent files (identity.yml, instructions.md, constraints.md, CLAUDE.md, agent-tasks.md, planning-briefing.md)
+        # Always run init-files to ensure the full set of files is generated via Jinja2 templates
         if workflow_name:
-            pm_agent_dir = project_dir / ".workflow" / workflow_name / "agents" / "pm"
-            if not pm_agent_dir.exists():
-                lib_dir = Path(__file__).parent
-                subprocess.run(
-                    ["uv", "run", "--directory", str(lib_dir.parent),
-                     "python", str(lib_dir / "agent_manager.py"),
-                     "init-files", "pm", "pm",
-                     "-p", str(project_dir), "-m", "opus"],
-                    capture_output=True
-                )
+            lib_dir = Path(__file__).parent
+            subprocess.run(
+                ["uv", "run", "--directory", str(lib_dir.parent),
+                 "python", str(lib_dir / "agent_manager.py"),
+                 "init-files", "pm", "pm",
+                 "-p", str(project_dir), "-m", "opus",
+                 "-w", workflow_name],
+                capture_output=True
+            )
 
         # Register PM agent - PM always uses Opus (pane 1, since pane 0 is check-in display)
         agent = self._register_agent_to_workflow(
@@ -394,38 +394,13 @@ class Orchestrator:
             f"Start now: Check for .workflow/prd.md first, then begin discovery questions!"
         )
 
-        # Append stacked suffixes (yato-level PM_TO_AGENTS_SUFFIX + workflow agent_message_suffix)
-        try:
-            from lib.config import get as get_config
-        except ImportError:
-            import importlib.util
-            _cfg_path = os.path.join(os.path.dirname(__file__), "config.py")
-            _spec = importlib.util.spec_from_file_location("config", _cfg_path)
-            _cfg = importlib.util.module_from_spec(_spec)
-            _spec.loader.exec_module(_cfg)
-            get_config = _cfg.get
-        _yato_suffix = get_config("PM_TO_AGENTS_SUFFIX")
-        _workflow_suffix = ""
+        # Send briefing via tmux_utils (handles suffix stacking internally)
+        _wf_status = None
         if self._project_path and self._workflow_name:
-            import yaml
             _sf = self._project_path / ".workflow" / self._workflow_name / "status.yml"
             if _sf.exists():
-                try:
-                    with open(_sf) as f:
-                        _data = yaml.safe_load(f)
-                    if _data and isinstance(_data, dict):
-                        _workflow_suffix = _data.get("agent_message_suffix", "")
-                except Exception:
-                    pass
-        # Stack both suffixes
-        if _yato_suffix:
-            briefing = briefing + "\n\n" + _yato_suffix
-        if _workflow_suffix:
-            briefing = briefing + "\n\n" + _workflow_suffix
-
-        # Use the send-message.sh script which handles tmux messaging reliably
-        send_script = self.bin_dir / "send-message.sh"
-        subprocess.run([str(send_script), pm_target, briefing], check=True)
+                _wf_status = str(_sf)
+        self.tmux.send_message(pm_target, briefing, workflow_status_file=_wf_status)
 
         return True
 

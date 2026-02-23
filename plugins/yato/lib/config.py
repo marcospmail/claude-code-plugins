@@ -44,13 +44,37 @@ def load_config(force_reload: bool = False) -> dict[str, str]:
     config_path = _get_config_path()
 
     if config_path.is_file():
-        for line in config_path.read_text().splitlines():
-            line = line.strip()
+        lines = config_path.read_text().splitlines()
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
             if not line or line.startswith("#"):
+                i += 1
                 continue
             match = _KV_PATTERN.match(line)
             if match:
-                config[match.group(1)] = _parse_value(match.group(2))
+                key = match.group(1)
+                raw = match.group(2).strip()
+                # Handle multiline quoted values (opening quote without closing on same line)
+                if raw and raw[0] in ('"', "'"):
+                    quote_char = raw[0]
+                    if len(raw) < 2 or raw[-1] != quote_char:
+                        # Multiline: collect until closing quote
+                        parts = [raw[1:]]
+                        i += 1
+                        while i < len(lines):
+                            part = lines[i]
+                            if part.rstrip().endswith(quote_char):
+                                parts.append(part.rstrip()[:-1])
+                                break
+                            parts.append(part)
+                            i += 1
+                        config[key] = "\n".join(parts)
+                    else:
+                        config[key] = raw[1:-1]
+                else:
+                    config[key] = raw
+            i += 1
 
     _config_cache = config
     return config

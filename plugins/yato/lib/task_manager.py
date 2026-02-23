@@ -132,13 +132,13 @@ class TaskManager:
         Returns:
             True if successful.
         """
-        # Validate agent exists in team.yml (warning only)
-        team_file = self.workflow_path / "team.yml"
-        if team_file.exists():
+        # Validate agent exists in agents.yml (warning only)
+        agents_file = self.workflow_path / "agents.yml"
+        if agents_file.exists():
             try:
-                content = team_file.read_text()
+                content = agents_file.read_text()
                 if f"name: {agent_name}" not in content:
-                    print(f"WARNING: Agent '{agent_name}' not found in team.yml")
+                    print(f"WARNING: Agent '{agent_name}' not found in agents.yml")
                     print("Continuing anyway (agent may be created later)...")
             except IOError:
                 pass

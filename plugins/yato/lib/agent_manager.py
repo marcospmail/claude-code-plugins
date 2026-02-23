@@ -378,7 +378,7 @@ class AgentManager:
 - NEVER skip updating tasks.json before modifying agent-tasks.md
 - NEVER write to agent-tasks.md without a corresponding entry in tasks.json
 
-**GOLDEN RULE: If it's not coordination/planning, DELEGATE IT to an agent via send-message.sh.**
+**GOLDEN RULE: If it's not coordination/planning, DELEGATE IT to an agent via /send-to-agent.**
 
 ## Required Actions
 - ALWAYS delegate implementation to agents
@@ -850,6 +850,7 @@ if __name__ == "__main__":
     init_parser.add_argument("role", help="Agent role")
     init_parser.add_argument("--project", "-p", default=".", help="Project path")
     init_parser.add_argument("--model", "-m", default="sonnet", help="Model")
+    init_parser.add_argument("--workflow", "-w", default=None, help="Workflow name (auto-detected if not provided)")
 
     # create command
     create_parser = subparsers.add_parser("create", help="Create agent with tmux window")
@@ -865,7 +866,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.command == "init-files":
-        init_agent_files(args.project, args.agent_name, args.role, args.model)
+        manager = AgentManager()
+        manager.init_agent_files(args.project, args.agent_name, args.role, args.model, args.workflow)
 
     elif args.command == "create":
         manager = AgentManager()
