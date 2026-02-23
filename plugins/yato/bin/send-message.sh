@@ -1,10 +1,8 @@
 #!/bin/bash
 
 # Send message to Claude agent in tmux window
-# Usage: send-claude-message.sh <session:window> <message>
-
-# Support isolated tmux socket (used by e2e tests)
-TMUX_FLAGS="${TMUX_SOCKET:+-L $TMUX_SOCKET}"
+# Usage: send-message.sh <session:window> <message>
+# Thin wrapper around tmux_utils.py send
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <session:window> <message>"
@@ -12,31 +10,7 @@ if [ $# -lt 2 ]; then
     exit 1
 fi
 
-WINDOW="$1"
-shift  # Remove first argument, rest is the message
-MESSAGE="$*"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+YATO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Default to pane 0 if no pane specified
-if [[ "$WINDOW" != *.* ]]; then
-    WINDOW="${WINDOW}.0"
-fi
-
-# First select the target pane to ensure it's active
-tmux $TMUX_FLAGS select-pane -t "$WINDOW" 2>/dev/null || true
-
-# Exit copy mode if active (prevents search mode trigger from / in paths)
-tmux $TMUX_FLAGS send-keys -t "$WINDOW" -X cancel 2>/dev/null || true
-
-# Wait briefly for UI
-sleep 0.5
-
-# Send the message as literal text (-l prevents key name interpretation)
-tmux $TMUX_FLAGS send-keys -l -t "$WINDOW" "$MESSAGE"
-
-# Brief delay to let TUI process the text before submitting
-sleep 0.5
-
-# Send Enter to submit
-tmux $TMUX_FLAGS send-keys -t "$WINDOW" Enter
-
-echo "Message sent to $WINDOW: $MESSAGE"
+TMUX_SOCKET="${TMUX_SOCKET}" uv run --project "$YATO_ROOT" python "$YATO_ROOT/lib/tmux_utils.py" send --skip-suffix "$@"

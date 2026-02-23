@@ -47,89 +47,8 @@ fi
 # Multiple workflows can run simultaneously in different tmux sessions
 # Each session has its own WORKFLOW_NAME env var - there is no single "current" workflow
 
-# Create PM instructions.md
-cat > "$WORKFLOW_PATH/agents/pm/instructions.md" <<'EOF'
-# PM INSTRUCTIONS - MUST FOLLOW
-
-## WHEN USER SAYS "continue"
-
-Your FIRST and ONLY action must be to delegate the next pending task.
-
-Run this bash command:
-```bash
-SESSION=$(tmux display-message -p '#S') && ${CLAUDE_PLUGIN_ROOT}/bin/send-message.sh "$SESSION:WINDOW" "TASK_DESCRIPTION"
-```
-
-Replace WINDOW and TASK_DESCRIPTION:
-- **WINDOW**: Look up in agents.yml by AGENT NAME (not role). Example:
-  ```bash
-  grep -A 4 "name: discoverer" .workflow/*/agents.yml | grep "window:" | awk '{print $2}'
-  ```
-  Agent names come from tasks.json "agent" field (e.g., "discoverer", "impl", "qa")
-- **TASK_DESCRIPTION**: The task details from tasks.json
-
-Then say: "Delegated [task] to [agent name] at window [window]"
-
-## FORBIDDEN - YOU WILL FAIL IF YOU DO THESE
-
-- DO NOT run mcp-cli commands
-- DO NOT use browser automation tools
-- DO NOT write or modify code
-- DO NOT run tests
-- DO NOT do ANY implementation work yourself
-
-These tools are for AGENTS, not for you. You only DELEGATE.
-
-## AFTER READING FILES
-
-1. Report what tasks are pending (from tasks.json)
-2. Report which agent handles each task (from agents.yml - shows agent windows)
-3. Wait for user to say "continue"
-
-## YOUR ROLE
-
-You are the PM. You COORDINATE and DELEGATE. You do NOT implement.
-
-When you see "continue":
-1. Run the send-message.sh command above
-2. Report that you delegated
-3. Do NOTHING else
-EOF
-
-# Create PM identity.yml (same format as agent template - session/window filled by orchestrator)
-cat > "$WORKFLOW_PATH/agents/pm/identity.yml" <<EOF
-name: PM
-role: pm
-model: opus
-window:
-session:
-workflow: $WORKFLOW_NAME
-# Values: true (developer), test-only (qa), false (reviewer/pm)
-can_modify_code: false
-EOF
-
-# Create PM constraints.md with actual PM constraints
-cat > "$WORKFLOW_PATH/agents/pm/constraints.md" <<'EOF'
-# PM Constraints
-
-## Forbidden Actions
-- You CANNOT modify any code files
-- Do NOT write implementation code
-- Do NOT run tests directly (delegate to QA agent)
-- Do NOT make git commits (delegate to agents)
-- NEVER call cancel-checkin.sh - the check-in loop stops AUTOMATICALLY when all tasks are completed
-  (only the USER can stop the loop early via /cancel-checkin if they choose to)
-
-## Required Actions
-- ALWAYS delegate implementation to agents
-- ALWAYS update tasks.json when tasks change status
-- ALWAYS provide specific, actionable feedback
-
-## Communication Rules
-- Keep messages concise and actionable
-- Include acceptance criteria in task assignments
-- Respond to agent check-ins promptly
-EOF
+# Create PM agent files (identity.yml, instructions.md, constraints.md, CLAUDE.md, etc.)
+_YATO_WORKFLOW_NAME="$WORKFLOW_NAME" bash "$SCRIPT_DIR/init-agent-files.sh" "$PROJECT_PATH" "pm" "pm" "opus"
 
 # Create project-level hooks directory (hook scripts used by yato plugin)
 mkdir -p "$PROJECT_PATH/.claude/hooks"
@@ -235,7 +154,7 @@ Examples:
   create-team.sh /path developer:developer:opus
   create-team.sh /path impl:developer:sonnet tester:qa:sonnet
 
-Then use send-message.sh to communicate with agents.
+Then use /send-to-agent to communicate with agents.
 ERRMSG
     exit 2
 fi
@@ -356,12 +275,7 @@ echo ""
 echo "Structure:"
 echo "  $WORKFLOW_PATH/"
 echo "  ├── status.yml (includes initial_request if provided)"
-echo "  ├── agents.yml (agent registry with PM + team locations)"
-echo "  └── agents/"
-echo "      └── pm/"
-echo "          ├── identity.yml"
-echo "          ├── instructions.md"
-echo "          └── constraints.md"
+echo "  └── agents.yml (agent registry with PM + team locations)"
 echo ""
 echo "Files to create:"
 echo "  - prd.md       (Product Requirements Document)"
