@@ -12,7 +12,7 @@ This module replaces workflow-utils.sh and provides functions for:
 - Creating workflow folders
 - Managing workflow state
 - Generating workflow slugs
-- Managing agents.yml and team.yml
+- Managing agents.yml
 """
 
 import glob as globmod
@@ -168,7 +168,12 @@ class WorkflowOps:
         Returns:
             Workflow folder name or None
         """
-        # Check direct environment variable first
+        # Check internal override first (set by save_team_structure to target correct workflow)
+        override = os.environ.get("_YATO_WORKFLOW_NAME")
+        if override:
+            return override
+
+        # Check direct environment variable
         env_workflow = os.environ.get("WORKFLOW_NAME")
         if env_workflow:
             return env_workflow
@@ -367,14 +372,21 @@ class WorkflowOps:
         if "agents" not in data:
             data["agents"] = []
 
-        # Add the new agent
-        data["agents"].append({
-            "name": agent_name,
-            "role": agent_role,
-            "session": session,
-            "window": window_number,
-            "model": model,
-        })
+        # Check if agent with same name already exists — update instead of duplicate
+        existing = next((a for a in data["agents"] if a.get("name") == agent_name), None)
+        if existing:
+            existing["session"] = session
+            existing["window"] = window_number
+            existing["role"] = agent_role
+            existing["model"] = model
+        else:
+            data["agents"].append({
+                "name": agent_name,
+                "role": agent_role,
+                "session": session,
+                "window": window_number,
+                "model": model,
+            })
 
         WorkflowOps._write_agents_yml(agents_file, data)
 
@@ -413,7 +425,9 @@ class WorkflowOps:
                         if key in agent:
                             val = agent[key]
                             prefix = "  - " if first else "    "
-                            if isinstance(val, str):
+                            if isinstance(val, str) and val == "":
+                                f.write(f"{prefix}{key}: \"\"\n")
+                            elif isinstance(val, str):
                                 f.write(f"{prefix}{key}: {val}\n")
                             else:
                                 f.write(f"{prefix}{key}: {val}\n")
@@ -426,7 +440,10 @@ class WorkflowOps:
         yato_path: Optional[str] = None,
     ) -> Optional[str]:
         """
-        Save team structure to team.yml and create agent files.
+        Save team structure to agents.yml and create agent files.
+
+        Reads existing agents.yml (preserving the PM entry), then appends
+        new agents with name, role, model and empty session/window fields.
 
         Args:
             project_path: Path to the project root
@@ -434,24 +451,43 @@ class WorkflowOps:
             yato_path: Path to yato installation (for init-agent-files.sh)
 
         Returns:
-            Path to team.yml or None
+            Path to agents.yml or None
         """
         workflow_path = WorkflowOps.get_current_workflow_path(project_path)
         if not workflow_path:
             print("Error: No current workflow")
             return None
 
-        team_file = workflow_path / "team.yml"
+        agents_file = workflow_path / "agents.yml"
 
-        # Create team.yml
-        team_data = {"agents": agents}
+        # Read existing agents.yml (preserves PM entry)
+        if agents_file.exists():
+            with open(agents_file, "r") as f:
+                data = yaml.safe_load(f)
+            if data is None:
+                data = {"agents": []}
+            if "agents" not in data:
+                data["agents"] = []
+        else:
+            data = {"agents": []}
 
-        with open(team_file, "w") as f:
-            f.write("# Team Structure\n")
-            f.write("# This file defines the agents that will be created for this workflow.\n")
-            f.write("# Used by /parse-prd-to-tasks to assign tasks to appropriate agents.\n")
-            f.write(f"# Created: {datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}\n\n")
-            yaml.dump(team_data, f, default_flow_style=False, allow_unicode=True)
+        # Add new agents with empty session/window (update if name already exists)
+        for agent in agents:
+            agent_name = agent.get("name", "")
+            existing = next((a for a in data["agents"] if a.get("name") == agent_name), None)
+            if existing:
+                existing["role"] = agent.get("role", "")
+                existing["model"] = agent.get("model", "sonnet")
+            else:
+                data["agents"].append({
+                    "name": agent_name,
+                    "role": agent.get("role", ""),
+                    "model": agent.get("model", "sonnet"),
+                    "session": "",
+                    "window": "",
+                })
+
+        WorkflowOps._write_agents_yml(agents_file, data)
 
         # Create agent files for each agent
         if yato_path is None:
@@ -459,6 +495,10 @@ class WorkflowOps:
 
         init_script = Path(yato_path) / "bin" / "init-agent-files.sh"
         if init_script.exists():
+            # Pass _YATO_WORKFLOW_NAME so init-agent-files.sh finds the right workflow
+            # (uses private var to avoid overriding tmux WORKFLOW_NAME in other contexts)
+            env = os.environ.copy()
+            env["_YATO_WORKFLOW_NAME"] = workflow_path.name
             for agent in agents:
                 subprocess.run([
                     "bash", str(init_script),
@@ -466,10 +506,10 @@ class WorkflowOps:
                     agent.get("name", ""),
                     agent.get("role", ""),
                     agent.get("model", "sonnet"),
-                ], check=False)
+                ], check=False, env=env)
 
-        print(f"Saved team structure to: {team_file}")
-        return str(team_file)
+        print(f"Saved team structure to: {agents_file}")
+        return str(agents_file)
 
     @staticmethod
     def update_status_yml(project_path: str, updates: Dict[str, Any]) -> bool:
