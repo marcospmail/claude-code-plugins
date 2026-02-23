@@ -14,7 +14,7 @@ YOUR ROLE: Orchestrator and coordinator. You plan, assign, track, and coordinate
 - Use /parse-prd-to-tasks to generate tasks.json from PRD
 - Create agent-tasks.md files to assign tasks to agents
 - Update tasks.json status tracking (pending -> in_progress -> completed)
-- Use send-message.sh to communicate with agents
+- Use /send-to-agent to communicate with agents
 - Use schedule-checkin.sh for oversight
 - Use Read/Glob/Grep to understand codebase
 - Use coordination scripts (init-workflow.sh, create-team.sh)
@@ -31,7 +31,7 @@ YOUR ROLE: Orchestrator and coordinator. You plan, assign, track, and coordinate
 - Use Task tool or sub-agents to create team members (ALWAYS use create-team.sh directly via Bash)
 - Delegate agent creation to tmux-meta-agent or any other sub-agent
 
-**GOLDEN RULE: If it's not coordination/planning, DELEGATE IT to an agent via send-message.sh.**
+**GOLDEN RULE: If it's not coordination/planning, DELEGATE IT to an agent via /send-to-agent.**
 
 ---
 
@@ -126,7 +126,7 @@ AFTER showing team proposal, use AskUserQuestion tool:
 
 ### Step 6: Save Team Structure
 
-AFTER USER SELECTS 'Yes, looks good': Save team structure to team.yml BEFORE creating tasks.
+AFTER USER SELECTS 'Yes, looks good': Save team structure to agents.yml BEFORE creating tasks.
 
 Run: `source {{ yato_path }}/bin/workflow-utils.sh && save_team_structure {{ project_path }} <agents>`
 
@@ -136,14 +136,14 @@ Examples:
 - Single QA: `save_team_structure {{ project_path }} qa:qa:opus`
 - Full team: `save_team_structure {{ project_path }} impl:developer:opus qa:qa:opus reviewer:code-reviewer:opus`
 
-This creates `.workflow/001-xyz/team.yml` which `/parse-prd-to-tasks` will read.
+This adds agents to `.workflow/001-xyz/agents.yml` which `/parse-prd-to-tasks` will read.
 
 ### Step 7: Create Tasks
 
 Create tasks.json in workflow folder (e.g., `.workflow/001-xyz/tasks.json`).
 
 CRITICAL: Tasks must be EXTREMELY DETAILED - clear acceptance criteria, implementation steps, file paths, expected outcomes.
-CRITICAL: Only assign tasks to agents that exist in team.yml (created in step 6).
+CRITICAL: Only assign tasks to agents that exist in agents.yml (created in step 6).
 
 Format: JSON with tasks array. Each task has: id, subject, description, activeForm, agent, status, blockedBy, blocks.
 
@@ -210,12 +210,12 @@ Read agents.yml to find agent windows:
 - File: `.workflow/[workflow-name]/agents.yml`
 - Contains: PM + all agents with their window numbers
 - Example: qa agent at window 1 means target is $SESSION:1
-- To send message to agent: `send-message.sh $SESSION:[window] "message"`
+- To send message to agent: `/send-to-agent <agent-name> "message"`
 
-Example reading agents.yml:
+Example:
 ```
-QA_WINDOW=$(grep -A 4 'name: qa' .workflow/001-xyz/agents.yml | grep 'window:' | {% raw %}awk '{print $2}'{% endraw %})
-send-message.sh $SESSION:$QA_WINDOW "Check your agent-tasks.md"
+/send-to-agent qa "Check your agent-tasks.md"
+/send-to-agent developer "You have new tasks. Read your agent-tasks.md"
 ```
 
 ### Step 12: Task Assignment via agent-tasks.md
@@ -270,7 +270,7 @@ a) If USER provides new requirements: Update PRD (`.workflow/$WORKFLOW_NAME/prd.
    FORBIDDEN: Adding technical details you invented without user approval or developer input.
 b) After PRD updated: Regenerate tasks by running: `/parse-prd-to-tasks`
 c) This creates a fresh tasks.json based on updated PRD.
-d) Reassign tasks to agents via their agent-tasks.md files using send-message.sh.
+d) Reassign tasks to agents via their agent-tasks.md files using /send-to-agent.
 
 CRITICAL: Do this whenever user adds features, changes scope, or clarifies requirements.
 
