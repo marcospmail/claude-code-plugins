@@ -73,14 +73,14 @@ tmux send-keys -t test-session:0.1 "yes, that team looks good" Enter
 sleep 5
 tmux capture-pane -t test-session:0.1 -p | tail -40
 
-# Verify team.yml created
-ls -la "$TEST_DIR/.workflow/001-*/team.yml"
-cat "$TEST_DIR/.workflow/001-*/team.yml"
+# Verify agents.yml created
+ls -la "$TEST_DIR/.workflow/001-*/agents.yml"
+cat "$TEST_DIR/.workflow/001-*/agents.yml"
 ```
 
 **What this tests:**
 - Team approval flow
-- team.yml file creation
+- agents.yml file creation
 - Correct agent structure format
 
 ### 4. Test Task Generation
@@ -90,12 +90,12 @@ cat "$TEST_DIR/.workflow/001-*/team.yml"
 WORKFLOW_DIR=$(ls -d "$TEST_DIR/.workflow/001-"* | head -1)
 cat "$WORKFLOW_DIR/tasks.json"
 
-# Verify tasks assigned to agents from team.yml
+# Verify tasks assigned to agents from agents.yml
 ```
 
 **What this tests:**
 - PRD to tasks conversion
-- Agent assignments match team.yml
+- Agent assignments match agents.yml
 - Task format (id, subject, description, activeForm, agent, status, blockedBy, blocks)
 
 ### 5. Test Agent Creation
@@ -161,10 +161,10 @@ WORKFLOW_DIR=$(ls -d "$TEST_DIR/.workflow/001-"* | head -1)
 # [ ] status.yml exists and contains initial_request
 cat "$WORKFLOW_DIR/status.yml"
 
-# [ ] team.yml created after user approves team
-cat "$WORKFLOW_DIR/team.yml"
+# [ ] agents.yml created after user approves team
+cat "$WORKFLOW_DIR/agents.yml"
 
-# [ ] tasks.json created with agents from team.yml
+# [ ] tasks.json created with agents from agents.yml
 cat "$WORKFLOW_DIR/tasks.json"
 
 # [ ] agents.yml populated after create-team.sh
@@ -198,8 +198,8 @@ tmux list-windows -t test-session
 ### Send Messages to Agents
 
 ```bash
-# Use send-message.sh to communicate
-bin/send-message.sh test-session:1 "Check your agent-tasks.md"
+# Use send-to-agent.sh to communicate
+bin/send-to-agent.sh developer "Check your agent-tasks.md"
 
 # Verify message received
 tmux capture-pane -t test-session:1 -p | tail -20
@@ -214,7 +214,7 @@ Reference these patterns from tests/e2e/:
 ```bash
 # Direct file checks for structure
 [[ -f "$WORKFLOW_DIR/status.yml" ]] && echo "✅ status.yml"
-[[ -f "$WORKFLOW_DIR/team.yml" ]] && echo "✅ team.yml"
+[[ -f "$WORKFLOW_DIR/agents.yml" ]] && echo "✅ agents.yml"
 grep -q "^pm:" "$WORKFLOW_DIR/agents.yml" && echo "✅ PM entry"
 ```
 
@@ -242,9 +242,8 @@ WORKFLOW=$(tmux showenv -t test WORKFLOW_NAME | cut -d= -f2)
 | File | What It Shows |
 |------|---------------|
 | `.workflow/001-*/status.yml` | Workflow state, session, check-in interval |
-| `.workflow/001-*/team.yml` | Proposed team structure (before agents created) |
+| `.workflow/001-*/agents.yml` | Agent registry (proposed team + runtime locations) |
 | `.workflow/001-*/tasks.json` | Generated tasks with agent assignments |
-| `.workflow/001-*/agents.yml` | Runtime agent registry (after agents created) |
 | `.workflow/001-*/prd.md` | Requirements document |
 
 ## Debugging Tips
@@ -259,7 +258,7 @@ tmux capture-pane -t test-session:0.1 -p -S -100 | grep "WORKFLOW:"
 tmux showenv -t test-session WORKFLOW_NAME
 ```
 
-### team.yml Not Created
+### agents.yml Not Created
 
 ```bash
 # PM should call save_team_structure after user approval
@@ -270,11 +269,11 @@ tmux capture-pane -t test-session:0.1 -p -S -200 | grep "save_team_structure"
 ### tasks.json Missing Agents
 
 ```bash
-# Verify team.yml exists first
-cat "$WORKFLOW_DIR/team.yml"
+# Verify agents.yml exists first
+cat "$WORKFLOW_DIR/agents.yml"
 
-# tasks.json agents MUST match team.yml agent names
-# PM should only assign tasks to agents defined in team.yml
+# tasks.json agents MUST match agents.yml agent names
+# PM should only assign tasks to agents defined in agents.yml
 ```
 
 </instructions>
