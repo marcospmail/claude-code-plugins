@@ -187,7 +187,7 @@ fi
 
 # Check developer window actually received the message
 sleep 2
-DEV_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p)
+DEV_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:1" -p -S -1000)
 if echo "$DEV_OUTPUT" | grep -Fq "$MSG1"; then
     pass "Message delivered to developer window (window 1)"
 else
@@ -214,7 +214,7 @@ while [[ $WAITED -lt $MAX_WAIT ]]; do
 done
 
 sleep 2
-QA_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:2" -p)
+QA_OUTPUT=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$SESSION_NAME:2" -p -S -1000)
 if echo "$QA_OUTPUT" | grep -Fq "$MSG1B"; then
     pass "Message delivered to qa window (window 2 pane 0)"
 else
