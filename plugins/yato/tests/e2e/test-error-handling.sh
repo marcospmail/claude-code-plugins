@@ -107,7 +107,7 @@ fi
 echo ""
 echo "Test 5: get_current_workflow with missing path..."
 
-MISSING_WF=$(unset TMUX && source "$PROJECT_ROOT/bin/workflow-utils.sh" && get_current_workflow /nonexistent/path 2>&1 || echo "")
+MISSING_WF=$(unset TMUX _YATO_WORKFLOW_NAME && source "$PROJECT_ROOT/bin/workflow-utils.sh" && get_current_workflow /nonexistent/path 2>&1 || echo "")
 MISSING_WF=$(echo "$MISSING_WF" | grep -v "DONE" || echo "")
 if [[ -z "$MISSING_WF" ]]; then
     pass "get_current_workflow returns empty for missing path"

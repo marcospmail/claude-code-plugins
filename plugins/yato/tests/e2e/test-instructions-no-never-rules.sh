@@ -67,8 +67,7 @@ echo ""
 # ============================================================
 echo "Phase 2: Running init-workflow.sh..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "$PROJECT_ROOT/bin/init-workflow.sh '$TEST_DIR' 'Test no never rules'" Enter
-sleep 5
+TMUX_SOCKET="$TMUX_SOCKET" bash "$PROJECT_ROOT/bin/init-workflow.sh" "$TEST_DIR" "Test no never rules"
 
 WORKFLOW_NAME=$(ls "$TEST_DIR/.workflow" 2>/dev/null | grep -E "^[0-9]{3}-" | head -1)
 WORKFLOW_PATH="$TEST_DIR/.workflow/$WORKFLOW_NAME"
@@ -86,21 +85,16 @@ echo ""
 # ============================================================
 echo "Phase 3: Creating developer agent via save_team_structure..."
 
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "source $PROJECT_ROOT/bin/workflow-utils.sh && save_team_structure '$TEST_DIR' dev:developer:sonnet" Enter
-sleep 5
+source "$PROJECT_ROOT/bin/workflow-utils.sh"
+save_team_structure "$TEST_DIR" "dev:developer:sonnet"
 
 echo "  - Developer agent created"
 echo ""
 
 # ============================================================
-# PHASE 4: Create PM agent via agent_manager.py (Python path)
+# PHASE 4: PM agent already created by init-workflow.sh
 # ============================================================
-echo "Phase 4: Creating PM agent via agent_manager.py..."
-
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "cd '$TEST_DIR' && WORKFLOW_NAME=$WORKFLOW_NAME uv run python $PROJECT_ROOT/lib/agent_manager.py init-files pm pm -p '$TEST_DIR'" Enter
-sleep 8
-
-echo "  - PM agent created"
+echo "Phase 4: PM agent already created by init-workflow.sh..."
 echo ""
 
 # ============================================================
