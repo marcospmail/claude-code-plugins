@@ -26,14 +26,6 @@ def _get_config_path() -> Path:
     return Path(__file__).parent.parent / "config" / "defaults.conf"
 
 
-def _parse_value(raw: str) -> str:
-    """Strip surrounding quotes from a value."""
-    raw = raw.strip()
-    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'"):
-        return raw[1:-1]
-    return raw
-
-
 def load_config(force_reload: bool = False) -> dict[str, str]:
     """Load and cache config from defaults.conf."""
     global _config_cache

@@ -606,65 +606,6 @@ class Orchestrator:
         }
         return model_map.get(role, "sonnet")  # Default to sonnet
 
-    def generate_agent_briefing(self, agent: Dict, project_context: Optional[Dict] = None) -> str:
-        """
-        Generate a dynamic briefing for an agent based on their config.
-
-        Args:
-            agent: Agent dictionary with role, focus, skills, briefing
-            project_context: Optional project context (PRD summary, tech stack)
-
-        Returns:
-            Generated briefing string
-        """
-        role = agent.get("role", "developer")
-        name = agent.get("name") or agent.get("agent_id", "Agent").split(":")[-1]
-        focus = agent.get("focus", "")
-        skills = agent.get("skills", [])
-        custom_briefing = agent.get("briefing", "")
-
-        # Base role instructions
-        role_instructions = {
-            "pm": "You are the Project Manager. Coordinate the team, ensure quality, verify all work, and report progress.",
-            "developer": "You are a Developer. Write clean, tested code. Commit every 30 minutes. Report progress to PM.",
-            "qa": "You are QA. Test thoroughly, find edge cases, verify features work. Report bugs clearly.",
-            "devops": "You are DevOps. Handle infrastructure, deployment, CI/CD. Keep systems running.",
-            "researcher": "You are a Researcher. Investigate options, evaluate technologies, provide recommendations."
-        }
-
-        lines = [f"You are {name}, a {role.upper()} on this project."]
-
-        # Add role-specific base instructions
-        if role in role_instructions:
-            lines.append(role_instructions[role])
-
-        # Add focus if specified
-        if focus:
-            lines.append(f"\nYour Focus: {focus}")
-
-        # Add skills if specified
-        if skills:
-            lines.append(f"Your Skills: {', '.join(skills)}")
-
-        # Add project context if available
-        if project_context:
-            if project_context.get("description"):
-                lines.append(f"\nProject: {project_context['description']}")
-            if project_context.get("tech_stack"):
-                lines.append(f"Tech Stack: {project_context['tech_stack']}")
-
-        # Add custom briefing if specified
-        if custom_briefing:
-            lines.append(f"\nSpecial Instructions:\n{custom_briefing}")
-
-        # Add communication instructions
-        lines.append("\nCommunication:")
-        lines.append("- Use notify-pm.sh to report: DONE, BLOCKED, HELP, STATUS, PROGRESS")
-        lines.append("- Commit code every 30 minutes")
-        lines.append("- Ask for clarification if requirements are unclear")
-
-        return "\n".join(lines)
-
     # ==================== Agent Operations ====================
 
     def start_claude_in_agents(self, project_path: str, agent_ids: Optional[List[str]] = None) -> Dict[str, bool]:
@@ -744,17 +685,6 @@ class Orchestrator:
         """Create a monitoring snapshot."""
         return self.tmux.create_monitoring_snapshot()
 
-    def get_team_status(self, project_path: str, num_lines: int = 20) -> Dict[str, str]:
-        """Get status of all team members (non-PM agents)."""
-        registry = self._get_registry(project_path)
-        if not registry:
-            return {}
-
-        team = registry.get_team()
-        status = {}
-        for agent in team:
-            status[agent.agent_id] = self.tmux.capture_agent_output(agent.agent_id, num_lines)
-        return status
 
 
 # ==================== CLI Interface ====================
