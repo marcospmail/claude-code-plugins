@@ -7,7 +7,7 @@ disable-model-invocation: false
 argument-hint: "[workflow-name or leave empty to list]"
 ---
 
-# YAWF Resume Workflow
+# Yato Resume Workflow
 
 <context>
 This skill resumes a previously created workflow. When users close their browser or terminal and come back later, they can use this skill to restore everything - the tmux session, PM agent, all developer/QA agents, and check-ins - exactly where they left off.

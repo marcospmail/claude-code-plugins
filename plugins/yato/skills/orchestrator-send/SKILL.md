@@ -10,7 +10,7 @@ disable-model-invocation: true
 You are sending a message to an orchestrator agent.
 
 ## Arguments
-- target: Target window in format session:window (e.g., myproject:1) (required)
+- target: Target agent — preferred format is global pane ID `%N` (e.g., `%5`); also accepts legacy `session:window` (e.g., `myproject:1`) (required)
 - message: Message to send to the agent (required)
 
 ## Steps

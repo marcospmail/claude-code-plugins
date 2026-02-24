@@ -10,7 +10,7 @@ disable-model-invocation: true
 You are reading the output from an orchestrator agent window.
 
 ## Arguments
-- target: Target window in format session:window (e.g., myproject:1) (required)
+- target: Target agent — preferred format is global pane ID `%N` (e.g., `%5`); also accepts legacy `session:window` (e.g., `myproject:1`) (required)
 - lines: Number of lines to capture (default 50) (optional)
 
 ## Steps

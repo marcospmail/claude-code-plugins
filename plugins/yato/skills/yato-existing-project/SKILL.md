@@ -7,7 +7,7 @@ disable-model-invocation: false
 argument-hint: "[what to build: description, URL, or PRD]"
 ---
 
-# YAWF Existing Project
+# Yato Existing Project
 
 <context>
 This skill helps you work on an existing codebase using Yato (Yet Another Tmux Orchestrator). It is a thin launcher: set up infrastructure (workflow folder + tmux session), then hand off to the PM agent which handles all discovery, analysis, and planning.
