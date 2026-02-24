@@ -264,9 +264,9 @@ create_agents_yml() {
 pm:
   name: pm
   role: pm
+  pane_id: ""
   session: "$session"
   window: 0
-  pane: 1
   model: opus
 
 agents: []
@@ -284,6 +284,7 @@ add_agent_to_yml() {
     local window_number="$4"
     local model="$5"
     local session="$6"
+    local pane_id="${7:-}"
 
     local workflow_path=$(get_current_workflow_path "$project_path" "$session")
     if [[ -z "$workflow_path" ]]; then
@@ -307,6 +308,7 @@ with open('$agents_file', 'r') as f:
     data = yaml.safe_load(f)
 for agent in data.get('agents', []):
     if agent.get('name') == '$agent_name':
+        agent['pane_id'] = '$pane_id'
         agent['session'] = '$session'
         agent['window'] = $window_number
         agent['role'] = '$agent_role'
@@ -319,7 +321,7 @@ with open('$agents_file', 'w') as f:
     if 'pm' in data:
         pm = data['pm']
         f.write('pm:\n')
-        for key in ['name', 'role', 'session', 'window', 'pane', 'model']:
+        for key in ['name', 'role', 'pane_id', 'session', 'window', 'model']:
             if key in pm:
                 val = pm[key]
                 if isinstance(val, str):
@@ -334,7 +336,7 @@ with open('$agents_file', 'w') as f:
         f.write('agents:\n')
         for agent in agents:
             first_key = True
-            for key in ['name', 'role', 'session', 'window', 'model']:
+            for key in ['name', 'role', 'pane_id', 'session', 'window', 'model']:
                 if key in agent:
                     val = agent[key]
                     prefix = '  - ' if first_key else '    '
@@ -356,6 +358,7 @@ with open('$agents_file', 'w') as f:
         sed -i '' "s/^agents: \[\]/agents:\\
   - name: $agent_name\\
     role: $agent_role\\
+    pane_id: \"$pane_id\"\\
     session: \"$session\"\\
     window: $window_number\\
     model: $model/" "$agents_file"
@@ -364,6 +367,7 @@ with open('$agents_file', 'w') as f:
         cat >> "$agents_file" <<EOF
   - name: $agent_name
     role: $agent_role
+    pane_id: "$pane_id"
     session: "$session"
     window: $window_number
     model: $model
@@ -422,16 +426,55 @@ save_team_structure() {
 
         # Check if agent already exists — skip append if so (update role/model in place)
         if grep -q "name: $agent_name$" "$agents_file"; then
-            # Agent already in agents.yml — update role and model via sed
-            local line_num=$(grep -n "name: $agent_name$" "$agents_file" | tail -1 | cut -d: -f1)
-            sed -i '' "$((line_num + 1))s/role: .*/role: $agent_role/" "$agents_file"
-            # model is 3 lines after name (name, role, session, window, model)
-            sed -i '' "$((line_num + 4))s/model: .*/model: $agent_model/" "$agents_file"
+            # Agent already in agents.yml — update role and model via Python for reliable YAML editing
+            python3 -c "
+import yaml
+with open('$agents_file', 'r') as f:
+    data = yaml.safe_load(f)
+for agent in data.get('agents', []):
+    if agent.get('name') == '$agent_name':
+        agent['role'] = '$agent_role'
+        agent['model'] = '$agent_model'
+        break
+with open('$agents_file', 'w') as f:
+    f.write('# Agent Registry\n')
+    f.write('# This file tracks all agents and their tmux locations\n\n')
+    if 'pm' in data:
+        pm = data['pm']
+        f.write('pm:\n')
+        for key in ['name', 'role', 'pane_id', 'session', 'window', 'model']:
+            if key in pm:
+                val = pm[key]
+                if isinstance(val, str):
+                    f.write(f'  {key}: \\\"{val}\\\"\n')
+                else:
+                    f.write(f'  {key}: {val}\n')
+        f.write('\n')
+    agents = data.get('agents', [])
+    if not agents:
+        f.write('agents: []\n')
+    else:
+        f.write('agents:\n')
+        for agent in agents:
+            first_key = True
+            for key in ['name', 'role', 'pane_id', 'session', 'window', 'model']:
+                if key in agent:
+                    val = agent[key]
+                    prefix = '  - ' if first_key else '    '
+                    if isinstance(val, str) and val == '':
+                        f.write(f'{prefix}{key}: \\\"\\\"\n')
+                    elif isinstance(val, str):
+                        f.write(f'{prefix}{key}: {val}\n')
+                    else:
+                        f.write(f'{prefix}{key}: {val}\n')
+                    first_key = False
+"
         else
-            # Append new agent to agents.yml with empty session/window
+            # Append new agent to agents.yml with empty pane_id/session/window
             cat >> "$agents_file" <<EOF
   - name: $agent_name
     role: $agent_role
+    pane_id: ""
     session: ""
     window: ""
     model: $agent_model

@@ -27,7 +27,7 @@ else
 fi
 
 # Get the pane ID this script is running in (must target this specific pane)
-MY_PANE=$(tmux $TMUX_FLAGS display-message -p '#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null)
+MY_PANE=$(tmux $TMUX_FLAGS display-message -p '#{pane_id}' 2>/dev/null)
 
 # Clear screen at start - wait briefly for shell prompt to finish
 sleep 0.2

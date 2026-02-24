@@ -1,6 +1,6 @@
 #!/bin/bash
 # notify-pm.sh - Send message to PM
-# PM is always at window 0, pane 1 (pane 0 is check-ins display)
+# PM pane_id is looked up from agents.yml automatically
 # Thin wrapper around tmux_utils.py notify
 #
 # Usage: notify-pm.sh "[DONE] Task completed"
