@@ -84,7 +84,8 @@ All commands run via `uv` from the yato directory:
 ```bash
 cd ${CLAUDE_PLUGIN_ROOT}
 
-# Send message to agent
+# Send message to agent (by pane ID or session:window)
+uv run python lib/tmux_utils.py send %5 "message"
 uv run python lib/tmux_utils.py send <session:window> "message"
 
 # Notify PM
@@ -283,14 +284,20 @@ Notification types: DONE, BLOCKED, HELP, STATUS, PROGRESS
 
 ### Orchestrator → Agent (low-level)
 ```bash
+uv run python lib/tmux_utils.py send %5 "Your message"
+# Or legacy format:
 uv run python lib/tmux_utils.py send session:window "Your message"
 ```
 
 ## Tmux Patterns
 
 ### Agent Target Format
-- Window-based: `session:window` (e.g., `myproject:1`)
-- Pane-based: `session:window.pane` (e.g., `myproject:0.1`)
+- **Preferred**: Global pane ID `%N` (e.g., `%5`, `%12`) - stable across window moves/swaps
+- Legacy window-based: `session:window` (e.g., `myproject:1`)
+- Legacy pane-based: `session:window.pane` (e.g., `myproject:0.1`)
+
+Agents are identified by their global tmux pane ID (`pane_id` field in agents.yml and identity.yml).
+This ID is assigned by tmux at pane creation and remains stable regardless of window reordering.
 
 ### Creating Windows with Correct Directory
 ```bash
