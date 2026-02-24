@@ -80,33 +80,32 @@ Agents are **dynamic** - the PM proposes a team based on your task, and you appr
 
 Yato comes with predefined roles (developer, qa, code-reviewer, devops, etc.) but also supports fully custom roles. A team can have multiple agents of the same role (e.g., two developers working on different parts of the codebase). Each agent gets a unique name like `frontend-dev`, `backend-dev`, or `qa-validator`.
 
-**Example agents.yml** (after team proposal, before deployment):
+**Example agents.yml** (proposed team, before deployment):
 ```yaml
 pm:
   name: pm
   role: pm
   session: "my-session"
   window: 0
-  pane: 1
+  pane_id: "%1"
   model: opus
 
 agents:
   - name: backend-dev
     role: developer
-    session: ""
-    window: ""
+    pane_id: ""
     model: sonnet
   - name: frontend-dev
     role: developer
-    session: ""
-    window: ""
+    pane_id: ""
     model: sonnet
   - name: qa
     role: qa
-    session: ""
-    window: ""
+    pane_id: ""
     model: sonnet
 ```
+
+After deployment, each agent's `pane_id` is populated with a global tmux pane ID (e.g., `%5`, `%12`). This ID is stable across window reordering and is the preferred targeting format for all agent communication.
 
 ### Agent Communication
 
@@ -172,7 +171,7 @@ project/.workflow/
 |------|---------|
 | **status.yml** | Workflow status, session name, check-in interval, message suffix configuration |
 | **prd.md** | Requirements document - what to build and why |
-| **codebase-analysis.md** | Automated analysis of relevant project areas for the task |
+| **codebase-analysis.md** | Automated analysis of relevant project areas for the task (created by PM when needed) |
 | **tasks.json** | All tasks with IDs, descriptions, agent assignments, status, and dependency chains (`blockedBy`/`blocks`) |
 | **agents.yml** | Agent registry - proposed team (name, role, model) and runtime locations (session, window) |
 | **checkins.json** | Check-in daemon state - schedule history and daemon PID |
