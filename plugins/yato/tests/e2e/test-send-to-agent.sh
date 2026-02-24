@@ -91,26 +91,37 @@ echo "Phase 1: Testing agent lookup from agents.yml..."
 mkdir -p "$TEST_DIR/.workflow/001-test-send"
 mkdir -p "$TEST_DIR/src"
 
-# Create agents.yml with PM at window 0 pane 1, developer at window 1
+# Create tmux session first so we can capture pane IDs
+#   Window 0: pane 0 = checkins, pane 1 = PM
+#   Window 1: developer agent
+#   Window 2: qa agent
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "pm-window" -c "$TEST_DIR"
+PM_PANE_ID=$(tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -v -p 50 -c "$TEST_DIR" -P -F '#{pane_id}')
+DEV_PANE_ID=$(tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -n "developer" -c "$TEST_DIR" -P -F '#{pane_id}')
+QA_PANE_ID=$(tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -n "qa" -c "$TEST_DIR" -P -F '#{pane_id}')
+sleep 2
+
+# Create agents.yml with pane_id fields (primary routing identifier)
 cat > "$TEST_DIR/.workflow/001-test-send/agents.yml" << AGENTS_EOF
 pm:
   name: PM
   role: pm
+  pane_id: "$PM_PANE_ID"
   session: $SESSION_NAME
   window: 0
-  pane: 1
   model: opus
 agents:
   - name: developer
     role: developer
+    pane_id: "$DEV_PANE_ID"
     session: $SESSION_NAME
     window: 1
     model: opus
   - name: qa
     role: qa
+    pane_id: "$QA_PANE_ID"
     session: $SESSION_NAME
     window: 2
-    pane: 0
     model: sonnet
 AGENTS_EOF
 
@@ -129,15 +140,7 @@ EOF
 echo '{"tasks": []}' > "$TEST_DIR/.workflow/001-test-send/tasks.json"
 echo "// test project" > "$TEST_DIR/index.js"
 
-# Create tmux session:
-#   Window 0: pane 0 = checkins, pane 1 = PM
-#   Window 1: developer agent
-#   Window 2: qa agent
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "pm-window" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -v -p 50 -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -n "developer" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -n "qa" -c "$TEST_DIR"
-sleep 2
+# Session already created above with pane IDs captured
 
 # Disable flow control in developer and qa windows
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "stty -ixon" Enter
@@ -460,18 +463,23 @@ else
     tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "stty -ixon" Enter
     sleep 1
 
-    # Update agents.yml with current session name
+    # Capture new pane IDs after session recreation
+    PM_PANE_ID_P5=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F '#{pane_index}:#{pane_id}' | grep '^1:' | cut -d: -f2)
+    DEV_PANE_ID_P5=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:1" -F '#{pane_id}' | head -1)
+
+    # Update agents.yml with pane_id fields
     cat > "$TEST_DIR/.workflow/001-test-send/agents.yml" << AGENTS2_EOF
 pm:
   name: PM
   role: pm
+  pane_id: "$PM_PANE_ID_P5"
   session: $SESSION_NAME
   window: 0
-  pane: 1
   model: opus
 agents:
   - name: developer
     role: developer
+    pane_id: "$DEV_PANE_ID_P5"
     session: $SESSION_NAME
     window: 1
     model: opus
