@@ -545,7 +545,6 @@ class AgentManager:
         project_path: Optional[str] = None,
         name: Optional[str] = None,
         model: str = "sonnet",
-        pm_window: Optional[str] = None,
         start_claude: bool = True,
         send_brief: bool = True,
     ) -> Optional[Dict[str, Any]]:
@@ -568,7 +567,6 @@ class AgentManager:
             project_path: Project path (working directory)
             name: Window name (defaults to role with smart numbering)
             model: Claude model (haiku, sonnet, opus)
-            pm_window: PM window this agent reports to
             start_claude: Whether to start Claude automatically
             send_brief: Whether to send briefing message
 
@@ -692,7 +690,6 @@ class AgentManager:
                 window_index=window_index,
                 project_path=project_path,
                 workflow_name=workflow_name,
-                pm_window=pm_window,
             )
 
         print("\nAgent created successfully!")
@@ -703,9 +700,6 @@ class AgentManager:
             print(f"  Window: {display_name}")
         if project_path:
             print(f"  Path: {project_path}")
-        if pm_window:
-            print(f"  Reports to: {pm_window}")
-
         return {
             "agent_id": agent_id,
             "role": role,
@@ -715,7 +709,6 @@ class AgentManager:
             "pane_id": pane_id,
             "project_path": project_path,
             "model": model,
-            "pm_window": pm_window,
         }
 
     def _send_agent_briefing(
@@ -727,7 +720,6 @@ class AgentManager:
         window_index: int,
         project_path: Optional[str],
         workflow_name: Optional[str],
-        pm_window: Optional[str],
     ) -> None:
         """Send briefing message to an agent."""
         # Get role config
@@ -814,7 +806,6 @@ Wait for PM to assign your first tasks via agent-tasks.md."""
                 project_path=project_path,
                 name=agent.get("name"),
                 model=agent.get("model", "sonnet"),
-                pm_window=f"{session}:0.1",  # PM is always at window 0, pane 1
             )
             if result:
                 created.append(result)
@@ -866,7 +857,6 @@ if __name__ == "__main__":
     create_parser.add_argument("--project", "-p", help="Project path")
     create_parser.add_argument("--name", "-n", help="Window name")
     create_parser.add_argument("--model", "-m", default=None, help="Model (default: role-dependent)")
-    create_parser.add_argument("--pm-window", help="PM window (session:window)")
     create_parser.add_argument("--no-start", action="store_true", help="Don't start Claude")
     create_parser.add_argument("--no-brief", action="store_true", help="Don't send briefing")
 
@@ -885,7 +875,6 @@ if __name__ == "__main__":
             project_path=args.project,
             name=args.name,
             model=model,
-            pm_window=args.pm_window,
             start_claude=not args.no_start,
             send_brief=not args.no_brief,
         )
