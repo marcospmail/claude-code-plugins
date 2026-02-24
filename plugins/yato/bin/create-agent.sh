@@ -16,15 +16,14 @@
 # Options:
 #   -p, --path      Project path (working directory for the agent)
 #   -n, --name      Window name (defaults to Claude-<Role>)
-#   --pm-window     PM window this agent reports to (format: session:window)
 #   --no-start      Don't start Claude automatically
 #   --no-brief      Don't send briefing message
 #   -h, --help      Show this help message
 #
 # Examples:
-#   ./create-agent.sh myproject developer -p ~/projects/myapp --pm-window myproject:1
+#   ./create-agent.sh myproject developer -p ~/projects/myapp
 #   ./create-agent.sh myproject pm -p ~/projects/myapp
-#   ./create-agent.sh myproject qa --pm-window myproject:1
+#   ./create-agent.sh myproject qa
 
 set -e
 
@@ -45,7 +44,6 @@ SESSION=""
 ROLE=""
 PROJECT_PATH=""
 WINDOW_NAME=""
-PM_WINDOW=""
 MODEL=""
 START_CLAUDE=true
 SEND_BRIEF=true
@@ -68,15 +66,14 @@ Options:
   -p, --path      Project path (working directory)
   -n, --name      Window name (default: <Role>)
   -m, --model     Claude model to use (opus, sonnet, haiku)
-  --pm-window     PM window this agent reports to (session:window)
   --no-start      Don't start Claude automatically
   --no-brief      Don't send briefing message
   -h, --help      Show this help
 
 Examples:
-  $(basename "$0") myproject developer -p ~/projects/myapp --pm-window myproject:0
-  $(basename "$0") myproject backend-dev -p ~/projects/myapp --pm-window myproject:0
-  $(basename "$0") myproject code-reviewer -m opus -p ~/projects/myapp --pm-window myproject:0
+  $(basename "$0") myproject developer -p ~/projects/myapp
+  $(basename "$0") myproject backend-dev -p ~/projects/myapp
+  $(basename "$0") myproject code-reviewer -m opus -p ~/projects/myapp
 EOF
 }
 
@@ -93,10 +90,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         -n|--name)
             WINDOW_NAME="$2"
-            shift 2
-            ;;
-        --pm-window)
-            PM_WINDOW="$2"
             shift 2
             ;;
         -m|--model)
@@ -459,7 +452,7 @@ if [[ "$SEND_BRIEF" == true ]] && [[ "$START_CLAUDE" == true ]]; then
             sed "s|{PROJECT_PATH}|${PROJECT_PATH:-$(pwd)}|g" | \
             sed "s|{SESSION_NAME}|$SESSION|g" | \
             sed "s|{ORCHESTRATOR_PATH}|$PROJECT_ROOT|g" | \
-            sed "s|{PM_WINDOW}|${PM_WINDOW:-not assigned}|g")
+            )
 
         # Read can_modify_code from identity.yml if it exists
         # Use AGENT_DIR set earlier, with fallback for safety
@@ -543,7 +536,6 @@ echo "  Agent ID: $AGENT_ID"
 echo "  Role: $ROLE"
 echo "  Window: $WINDOW_NAME"
 [[ -n "$PROJECT_PATH" ]] && echo "  Path: $PROJECT_PATH"
-[[ -n "$PM_WINDOW" ]] && echo "  Reports to: $PM_WINDOW"
 echo ""
 echo "To interact with this agent:"
 echo "  tmux select-window -t $AGENT_ID"

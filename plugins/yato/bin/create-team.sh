@@ -82,9 +82,6 @@ echo "Session: $SESSION"
 [[ -n "$CURRENT_WORKFLOW" ]] && echo "Workflow: $CURRENT_WORKFLOW"
 echo ""
 
-# PM is always at 0.1
-PM_WINDOW="$SESSION:0.1"
-
 # Track created agents
 CREATED_AGENTS=()
 
@@ -130,8 +127,7 @@ create_agent() {
     local output=$("$SCRIPT_DIR/create-agent.sh" "$SESSION" "$role" \
         -n "$name" \
         -m "$model" \
-        -p "$PROJECT_PATH" \
-        --pm-window "$PM_WINDOW" 2>&1)
+        -p "$PROJECT_PATH" 2>&1)
 
     local exit_code=$?
     echo "$output" | grep -E "(Agent ID|Error|Created window|Starting Claude)"
