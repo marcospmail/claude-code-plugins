@@ -181,41 +181,10 @@ class TmuxOrchestrator:
         except (ValueError, IndexError):
             return None
 
-    def create_pane(self, target: str, path: Optional[str] = None, vertical: bool = True) -> Optional[str]:
-        """
-        Create a new pane by splitting an existing pane.
-
-        Args:
-            target: Target pane to split (e.g., "session:0.0" or "%5")
-            path: Working directory for the new pane
-            vertical: If True, split vertically (-v), else horizontally (-h)
-
-        Returns:
-            The global pane ID (e.g., "%12") or None on failure
-        """
-        split_flag = "-v" if vertical else "-h"
-        cmd = _tmux_cmd() + ["split-window", split_flag, "-t", target, "-P", "-F", "#{pane_id}"]
-        if path:
-            cmd.extend(["-c", path])
-
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            return None
-
-        return result.stdout.strip()
-
     def set_pane_title(self, target: str, title: str) -> bool:
         """Set a title for a pane (requires pane-border-format to show)."""
         # Select the pane and set its title
         cmd = _tmux_cmd() + ["select-pane", "-t", target, "-T", title]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        return result.returncode == 0
-
-    def tile_panes(self, target: str) -> bool:
-        """Arrange all panes in a window in a tiled layout."""
-        # Get the window part of target (session:window)
-        window_target = target.rsplit(".", 1)[0] if "." in target else target
-        cmd = _tmux_cmd() + ["select-layout", "-t", window_target, "tiled"]
         result = subprocess.run(cmd, capture_output=True, text=True)
         return result.returncode == 0
 
@@ -504,18 +473,6 @@ class TmuxOrchestrator:
             status["sessions"].append(session_data)
 
         return status
-
-    def find_window_by_name(self, window_name: str) -> List[Tuple[str, int]]:
-        """Find windows by name across all sessions."""
-        sessions = self.get_tmux_sessions()
-        matches = []
-
-        for session in sessions:
-            for window in session.windows:
-                if window_name.lower() in window.window_name.lower():
-                    matches.append((session.name, window.window_index))
-
-        return matches
 
     def create_monitoring_snapshot(self) -> str:
         """Create a comprehensive snapshot for Claude analysis."""
