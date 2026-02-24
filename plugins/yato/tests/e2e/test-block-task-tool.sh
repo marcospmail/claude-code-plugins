@@ -56,7 +56,7 @@ run_hook_in_pane() {
     rm -f "$OUTPUT_FILE"
 
     tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:$pane" \
-        "echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"test\",\"subagent_type\":\"general-purpose\"}}' | HOOK_CWD='$TEST_DIR' uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+        "echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"test\",\"subagent_type\":\"general-purpose\"}}' | HOOK_CWD='$TEST_DIR' WORKFLOW_NAME=001-test-workflow TMUX_SOCKET='$TMUX_SOCKET' uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
     local waited=0
     while [[ $waited -lt $MAX_WAIT ]]; do
@@ -101,32 +101,43 @@ mkdir -p "$TEST_DIR/.workflow/001-test-workflow/agents/pm"
 mkdir -p "$TEST_DIR/.workflow/001-test-workflow/agents/developer"
 mkdir -p "$TEST_DIR/.workflow/001-test-workflow/agents/qa"
 
-# Create agents.yml
+# Create tmux session first to capture pane IDs
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-workflow
+PM_PANE_ID=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F '#{pane_id}' | head -1)
+DEV_PANE_ID=$(tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" -P -F '#{pane_id}' 2>/dev/null)
+QA_PANE_ID=$(tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" -P -F '#{pane_id}' 2>/dev/null)
+tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" 2>/dev/null
+sleep 2
+
+# Create agents.yml with pane_id fields
 cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << EOF
 pm:
   name: pm
   role: pm
+  pane_id: "$PM_PANE_ID"
   session: $SESSION_NAME
   window: 0
-  pane: 0
 agents:
   - name: developer
     role: developer
+    pane_id: "$DEV_PANE_ID"
     session: $SESSION_NAME
     window: 1
   - name: qa
     role: qa
+    pane_id: "$QA_PANE_ID"
     session: $SESSION_NAME
     window: 2
 EOF
 
-# Create identity.yml files with session/window (same format as agent template)
+# Create identity.yml files with pane_id (used by role detection)
 cat > "$TEST_DIR/.workflow/001-test-workflow/agents/pm/identity.yml" << EOF
 name: PM
 role: pm
 model: opus
+pane_id: "$PM_PANE_ID"
 window: 0
-session: $SESSION_NAME
 workflow: 001-test-workflow
 can_modify_code: false
 EOF
@@ -135,8 +146,8 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/agents/developer/identity.yml" << E
 name: developer
 role: developer
 model: sonnet
+pane_id: "$DEV_PANE_ID"
 window: 1
-session: $SESSION_NAME
 workflow: 001-test-workflow
 can_modify_code: true
 EOF
@@ -145,22 +156,14 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/agents/qa/identity.yml" << EOF
 name: qa
 role: qa
 model: sonnet
+pane_id: "$QA_PANE_ID"
 window: 2
-session: $SESSION_NAME
 workflow: 001-test-workflow
 can_modify_code: test-only
 EOF
 
-# Create tmux session: PM at window 0, developer at window 1, QA at window 2, unmatched at window 3
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
-tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-workflow
-tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" 2>/dev/null
-tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" 2>/dev/null
-tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" 2>/dev/null
-sleep 2
-
 if [[ -f "$TEST_DIR/.workflow/001-test-workflow/agents.yml" ]]; then
-    pass "Created test environment with agents.yml and identity.yml files"
+    pass "Created test environment with pane_id-based agents.yml and identity.yml files"
 else
     fail "Failed to create test environment"
     exit 1
@@ -291,15 +294,15 @@ echo ""
 # ============================================================
 echo "Phase 8: Testing graceful degradation without agents.yml..."
 
-# Create a separate test dir without agents.yml but with PM identity
+# Create a separate test dir without agents.yml but with PM identity (using pane_id)
 NO_AGENTS_DIR="/tmp/e2e-test-no-agents-$TEST_ID"
 mkdir -p "$NO_AGENTS_DIR/.workflow/001-test/agents/pm"
 cat > "$NO_AGENTS_DIR/.workflow/001-test/agents/pm/identity.yml" << EOF
 name: PM
 role: pm
 model: opus
+pane_id: "$PM_PANE_ID"
 window: 0
-session: $SESSION_NAME
 workflow: 001-test
 can_modify_code: false
 EOF
@@ -307,7 +310,7 @@ EOF
 rm -f "$OUTPUT_FILE"
 
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" \
-    "echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"test\",\"subagent_type\":\"general-purpose\"}}' | HOOK_CWD='$NO_AGENTS_DIR' WORKFLOW_NAME=001-test uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"test\",\"subagent_type\":\"general-purpose\"}}' | HOOK_CWD='$NO_AGENTS_DIR' WORKFLOW_NAME=001-test TMUX_SOCKET='$TMUX_SOCKET' uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do

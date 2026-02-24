@@ -149,10 +149,10 @@ else
     fail "PM should be at window 0"
 fi
 
-if grep -q "pane: 1" "$AGENTS_YML" 2>/dev/null; then
-    pass "PM pane is 1"
+if grep -q "pane_id:" "$AGENTS_YML" 2>/dev/null; then
+    pass "PM has pane_id field"
 else
-    fail "PM should be at pane 1"
+    fail "PM should have pane_id field"
 fi
 
 # Test PM agent folder
@@ -177,11 +177,11 @@ else
     fail "PM instructions.md not found"
 fi
 
-# Test PM identity has session and window fields (for role detection)
-if grep -q "session:" "$PM_DIR/identity.yml" 2>/dev/null && grep -q "window:" "$PM_DIR/identity.yml" 2>/dev/null; then
-    pass "PM identity.yml has session and window fields"
+# Test PM identity has pane_id and window fields (for role detection)
+if grep -q "pane_id:" "$PM_DIR/identity.yml" 2>/dev/null && grep -q "window:" "$PM_DIR/identity.yml" 2>/dev/null; then
+    pass "PM identity.yml has pane_id and window fields"
 else
-    fail "PM identity.yml should have session and window fields"
+    fail "PM identity.yml should have pane_id and window fields"
 fi
 
 # ============================================================

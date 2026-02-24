@@ -108,14 +108,33 @@ echo "Session: $SESSION_NAME"
 echo ""
 
 # Create tmux session mimicking real Yato layout:
-#   Window 0: pane 0 = checkin display, pane 1 = PM (notify_pm target)
+#   Window 0: pane 0 = checkin display, pane 1 = PM (identified by pane_id)
 #   Window 1: Agent (receiver for PM->agent messages)
 # Note: No Claude window needed — commands run directly via run_python()
 echo "Starting tmux session..."
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "pm-window" -c "$TEST_DIR"
-# Split window 0 to create pane 0 and pane 1 (PM pane at 0.1)
-tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -h -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "agent" -c "$TEST_DIR"
+# Split window 0 to create PM pane and capture its pane_id
+PM_PANE_ID=$(tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -h -c "$TEST_DIR" -P -F '#{pane_id}')
+AGENT_PANE_ID=$(tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "agent" -c "$TEST_DIR" -P -F '#{pane_id}')
+
+# Create agents.yml with pane_id for new routing
+cat > "$TEST_DIR/.workflow/001-test-dual-suffix/agents.yml" << EOF
+pm:
+  name: PM
+  role: pm
+  pane_id: "$PM_PANE_ID"
+  session: $SESSION_NAME
+  window: 0
+  model: opus
+agents:
+  - name: agent
+    role: developer
+    pane_id: "$AGENT_PANE_ID"
+    session: $SESSION_NAME
+    window: 1
+    model: sonnet
+EOF
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-dual-suffix
 
 # Disable flow control in PM pane (0.1) and Agent window (1)
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.1" "stty -ixon" Enter
