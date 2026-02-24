@@ -156,7 +156,6 @@ class WorkflowRegistry:
             session_name=session,
             window_index=window,
             role=entry.get("role", "developer"),
-            pm_window=None,
             project_path=str(self.workflow_path.parent.parent),  # Back to project root
             status="active",
             name=entry.get("name"),
@@ -349,15 +348,6 @@ class WorkflowRegistry:
 
         return agents
 
-    def get_session_name(self) -> Optional[str]:
-        """Get the session name from PM entry."""
-        pm = self.get_pm()
-        return pm.session_name if pm else None
-
-
-def get_workflow_registry(project_path: str, workflow_name: Optional[str] = None) -> Optional[WorkflowRegistry]:
-    """Convenience function to get a WorkflowRegistry."""
-    return WorkflowRegistry.from_project(Path(project_path), workflow_name)
 
 
 if __name__ == "__main__":

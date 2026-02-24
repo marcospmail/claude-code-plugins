@@ -255,61 +255,6 @@ class ClaudeControl:
 
         return 0
 
-    def cmd_create(self, args: argparse.Namespace) -> int:
-        """Create and register a new agent."""
-        session = args.session
-        role = args.role
-        name = args.name or role.title()
-        path = args.path
-        pm_window = args.pm_window
-        model = args.model or "sonnet"
-
-        # Check session exists
-        if not self.tmux.session_exists(session):
-            print(f"Error: Session '{session}' does not exist")
-            print(f"Create it with: tmux new-session -d -s {session}")
-            return 1
-
-        # Create window
-        window_index = self.tmux.create_window(session, name, path)
-        if window_index is None:
-            print(f"Error: Failed to create window in session '{session}'")
-            return 1
-
-        # Register agent in workflow if available
-        if self.registry:
-            agent = Agent(
-                session_name=session,
-                window_index=window_index,
-                role=role,
-                pm_window=pm_window,
-                project_path=path,
-                name=name,
-                model=model
-            )
-            self.registry.add_agent(agent)
-            print(f"Created and registered agent: {agent.agent_id}")
-        else:
-            print(f"Created window: {session}:{window_index}")
-            print(f"Warning: No workflow found, agent not registered")
-
-        print(f"  Role: {role}")
-        print(f"  Window: {name}")
-        print(f"  Model: {model}")
-        if pm_window:
-            print(f"  Reports to: {pm_window}")
-        if path:
-            print(f"  Path: {path}")
-
-        # Start Claude if requested
-        if args.start_claude:
-            target = f"{session}:{window_index}"
-            print(f"Starting Claude in {target}...")
-            claude_cmd = f"claude --dangerously-skip-permissions --model {model}"
-            self.tmux.send_keys(target, claude_cmd, send_enter=True)
-
-        return 0
-
     def cmd_register(self, args: argparse.Namespace) -> int:
         """Register an existing window or pane as an agent."""
         if not self.registry:
@@ -428,16 +373,6 @@ def main():
     read_parser.add_argument("target", help="Target (session:window)")
     read_parser.add_argument("-n", "--lines", type=int, default=50, help="Number of lines to capture")
 
-    # create command
-    create_parser = subparsers.add_parser("create", help="Create a new agent window")
-    create_parser.add_argument("session", help="Session name")
-    create_parser.add_argument("role", help="Agent role (pm, developer, qa, etc.)")
-    create_parser.add_argument("-n", "--name", help="Agent name (default: role)")
-    create_parser.add_argument("--path", help="Working directory path")
-    create_parser.add_argument("-m", "--model", help="Claude model (opus, sonnet, haiku)")
-    create_parser.add_argument("--pm-window", help="PM window this agent reports to")
-    create_parser.add_argument("--start-claude", action="store_true", help="Start Claude after creating")
-
     # register command
     register_parser = subparsers.add_parser("register", help="Register existing window as agent")
     register_parser.add_argument("target", help="Target (session:window)")
@@ -474,7 +409,6 @@ def main():
         "list": controller.cmd_list,
         "send": controller.cmd_send,
         "read": controller.cmd_read,
-        "create": controller.cmd_create,
         "register": controller.cmd_register,
         "unregister": controller.cmd_unregister,
         "team": controller.cmd_team,
