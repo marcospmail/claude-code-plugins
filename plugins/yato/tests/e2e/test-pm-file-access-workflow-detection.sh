@@ -80,30 +80,38 @@ mkdir -p "$TEST_DIR/.workflow/001-test-workflow/agents/pm"
 mkdir -p "$TEST_DIR/.workflow/001-test-workflow/agents/developer"
 mkdir -p "$TEST_DIR/src"
 
-# Create agents.yml: PM at window 0 pane 0, developer at window 1
+# Create tmux session first so we can capture pane IDs for identity.yml
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-workflow
+
+# Capture the default pane ID (window 0 pane 0 = PM for initial test)
+PM_PANE_ID=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F '#{pane_id}' | head -1)
+
+# Create agents.yml with pane_id (primary routing identifier)
 cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << EOF
 pm:
   name: PM
   role: pm
+  pane_id: "$PM_PANE_ID"
   session: $SESSION_NAME
   window: 0
-  pane: 0
   model: opus
 agents:
   - name: developer
     role: developer
+    pane_id: ""
     session: $SESSION_NAME
     window: 1
     model: opus
 EOF
 
-# Create identity.yml files with session/window (used by role detection)
+# Create identity.yml files with pane_id (used by role detection)
 cat > "$TEST_DIR/.workflow/001-test-workflow/agents/pm/identity.yml" << EOF
 name: PM
 role: pm
 model: opus
+pane_id: "$PM_PANE_ID"
 window: 0
-session: $SESSION_NAME
 workflow: 001-test-workflow
 can_modify_code: false
 EOF
@@ -112,8 +120,8 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/agents/developer/identity.yml" << E
 name: developer
 role: developer
 model: opus
+pane_id:
 window: 1
-session: $SESSION_NAME
 workflow: 001-test-workflow
 can_modify_code: true
 EOF
@@ -133,20 +141,14 @@ pass "Test directory created at $TEST_DIR"
 echo ""
 
 # ============================================================
-# Phase 3: PM detected via agents.yml from PM's tmux pane
+# Phase 3: PM detected via pane_id from PM's tmux pane
 # ============================================================
-echo "Phase 3: Testing PM detected via agents.yml..."
-
-# Create a tmux session - default is window 0 pane 0 (matching PM in agents.yml)
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
-
-# Set WORKFLOW_NAME in tmux env (this IS set in real yato sessions)
-tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-workflow
+echo "Phase 3: Testing PM detected via pane_id..."
 
 # Run the hook from inside the tmux pane (window 0 pane 0 = PM)
 # Run hook from inside the tmux pane - detection comes from agents.yml pane matching
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" \
-    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | WORKFLOW_NAME=001-test-workflow TMUX_SOCKET='$TMUX_SOCKET' uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 # Wait for hook to complete
 MAX_WAIT=30
@@ -183,32 +185,43 @@ echo ""
 # ============================================================
 echo "Phase 3b: Testing PM detection at pane 1 (production layout)..."
 
-# Update agents.yml to match production: PM at window 0 pane 1
+# Split window 0 to create pane 1 (production layout: pane 0 = checkins, pane 1 = PM)
+PM_PANE_1_ID=$(tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -c "$TEST_DIR" -P -F '#{pane_id}' 2>/dev/null)
+sleep 2
+
+# Update agents.yml and identity.yml with the new PM pane_id
 cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << EOF
 pm:
   name: PM
   role: pm
+  pane_id: "$PM_PANE_1_ID"
   session: $SESSION_NAME
   window: 0
-  pane: 1
   model: opus
 agents:
   - name: developer
     role: developer
+    pane_id: ""
     session: $SESSION_NAME
     window: 1
     model: opus
 EOF
 
-# Split window 0 to create pane 1 (production layout: pane 0 = checkins, pane 1 = PM)
-tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -c "$TEST_DIR" 2>/dev/null
-sleep 2
+cat > "$TEST_DIR/.workflow/001-test-workflow/agents/pm/identity.yml" << EOF
+name: PM
+role: pm
+model: opus
+pane_id: "$PM_PANE_1_ID"
+window: 0
+workflow: 001-test-workflow
+can_modify_code: false
+EOF
 
 rm -f "$OUTPUT_FILE"
 
 # Run hook from pane 1 of window 0 (PM's actual pane in production)
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.1" \
-    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | WORKFLOW_NAME=001-test-workflow TMUX_SOCKET='$TMUX_SOCKET' uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -230,11 +243,11 @@ else
     fail "Hook did not produce output (timeout)"
 fi
 
-# Verify pane 0 of window 0 is ALSO detected as PM (detection is window-level, not pane-level)
+# Verify pane 0 of window 0 is NOT detected as PM (pane_id detection is pane-specific, not window-level)
 rm -f "$OUTPUT_FILE"
 
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.0" \
-    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | WORKFLOW_NAME=001-test-workflow TMUX_SOCKET='$TMUX_SOCKET' uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -247,37 +260,49 @@ done
 
 if [[ -f "$OUTPUT_FILE" ]]; then
     HOOK_OUTPUT=$(cat "$OUTPUT_FILE")
-    if echo "$HOOK_OUTPUT" | grep -q '"block"'; then
-        pass "Pane 0 of window 0 also detected as PM (window-level detection)"
+    if echo "$HOOK_OUTPUT" | grep -q '"continue": true\|"continue":true'; then
+        pass "Pane 0 of window 0 NOT detected as PM (pane_id is pane-specific)"
     else
-        fail "Pane 0 of window 0 should also be PM since detection is window-level (got: $HOOK_OUTPUT)"
+        fail "Pane 0 should not match PM since pane_id detection is pane-specific (got: $HOOK_OUTPUT)"
     fi
 else
     fail "Hook did not produce output (timeout)"
 fi
-
-# Restore original agents.yml for subsequent tests (PM at pane 0 for simplicity)
-cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << EOF
-pm:
-  name: PM
-  role: pm
-  session: $SESSION_NAME
-  window: 0
-  pane: 0
-  model: opus
-agents:
-  - name: developer
-    role: developer
-    session: $SESSION_NAME
-    window: 1
-    model: opus
-EOF
 
 # Kill session and recreate clean (with single pane) for remaining tests
 tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
 sleep 1
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-workflow
+
+# Update PM identity.yml with new pane_id after session recreation
+PM_PANE_RECREATED=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F '#{pane_id}' | head -1)
+cat > "$TEST_DIR/.workflow/001-test-workflow/agents/pm/identity.yml" << EOF
+name: PM
+role: pm
+model: opus
+pane_id: "$PM_PANE_RECREATED"
+window: 0
+workflow: 001-test-workflow
+can_modify_code: false
+EOF
+
+cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << EOF
+pm:
+  name: PM
+  role: pm
+  pane_id: "$PM_PANE_RECREATED"
+  session: $SESSION_NAME
+  window: 0
+  model: opus
+agents:
+  - name: developer
+    role: developer
+    pane_id: ""
+    session: $SESSION_NAME
+    window: 1
+    model: opus
+EOF
 
 echo ""
 
@@ -289,7 +314,7 @@ echo "Phase 4: Testing PM allowed to edit workflow files via agents.yml..."
 rm -f "$OUTPUT_FILE"
 
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" \
-    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/tasks.json\"}}' | WORKFLOW_NAME=001-test-workflow TMUX_SOCKET='$TMUX_SOCKET' uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -315,7 +340,7 @@ fi
 rm -f "$OUTPUT_FILE"
 
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" \
-    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/prd.md\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/.workflow/001-test-workflow/prd.md\"}}' | WORKFLOW_NAME=001-test-workflow TMUX_SOCKET='$TMUX_SOCKET' uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -342,18 +367,29 @@ echo ""
 # ============================================================
 # Phase 5: Developer detected from developer's tmux window
 # ============================================================
-echo "Phase 5: Testing developer detected via agents.yml from window 1..."
+echo "Phase 5: Testing developer detected via pane_id from window 1..."
 
-# Create window 1 (developer's window in agents.yml)
-tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" 2>/dev/null
+# Create window 1 and capture its pane_id
+DEV_PANE_ID=$(tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" -P -F '#{pane_id}' 2>/dev/null)
 sleep 3
+
+# Update developer identity.yml with actual pane_id
+cat > "$TEST_DIR/.workflow/001-test-workflow/agents/developer/identity.yml" << EOF
+name: developer
+role: developer
+model: opus
+pane_id: "$DEV_PANE_ID"
+window: 1
+workflow: 001-test-workflow
+can_modify_code: true
+EOF
 
 rm -f "$OUTPUT_FILE"
 
 # Run hook from window 1 (which maps to developer in agents.yml)
 # Developer should be allowed to edit any file
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" \
-    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | WORKFLOW_NAME=001-test-workflow TMUX_SOCKET='$TMUX_SOCKET' uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -389,7 +425,7 @@ sleep 3
 rm -f "$OUTPUT_FILE"
 
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:2" \
-    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+    "echo '{\"tool_input\":{\"file_path\":\"$TEST_DIR/src/main.py\"}}' | WORKFLOW_NAME=001-test-workflow TMUX_SOCKET='$TMUX_SOCKET' uv run --directory '$PROJECT_ROOT' python '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1 && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
@@ -462,6 +498,34 @@ if [[ "$RESTORE_CACHE" == true ]]; then
 
     # Set WORKFLOW_NAME in tmux env (standard in yato sessions)
     tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-workflow
+
+    # Capture fresh PM pane_id and update identity.yml + agents.yml
+    PM_PANE_P7=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F '#{pane_id}' | head -1)
+    cat > "$TEST_DIR/.workflow/001-test-workflow/agents/pm/identity.yml" << IDEOF
+name: PM
+role: pm
+model: opus
+pane_id: "$PM_PANE_P7"
+window: 0
+workflow: 001-test-workflow
+can_modify_code: false
+IDEOF
+    cat > "$TEST_DIR/.workflow/001-test-workflow/agents.yml" << AGEOF
+pm:
+  name: PM
+  role: pm
+  pane_id: "$PM_PANE_P7"
+  session: $SESSION_NAME
+  window: 0
+  model: opus
+agents:
+  - name: developer
+    role: developer
+    pane_id: ""
+    session: $SESSION_NAME
+    window: 1
+    model: opus
+AGEOF
 
     # Unset CLAUDECODE to allow nested Claude launch (when test runs from within Claude Code)
     tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "unset CLAUDECODE && export WORKFLOW_NAME=001-test-workflow && claude --dangerously-skip-permissions" Enter 2>/dev/null

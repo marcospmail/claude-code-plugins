@@ -53,7 +53,7 @@ run_hook_in_pane() {
     rm -f "$OUTPUT_FILE"
 
     tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:$pane" \
-        "echo '$command_json' | HOOK_CWD='$TEST_DIR' bash '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1; echo EXIT_CODE=\$? >> '$OUTPUT_FILE' && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
+        "echo '$command_json' | HOOK_CWD='$TEST_DIR' WORKFLOW_NAME=001-test-workflow TMUX_SOCKET='$TMUX_SOCKET' bash '$HOOK_SCRIPT' > '$OUTPUT_FILE' 2>&1; echo EXIT_CODE=\$? >> '$OUTPUT_FILE' && echo HOOK_DONE >> '$OUTPUT_FILE'" Enter 2>/dev/null
 
     local waited=0
     while [[ $waited -lt $MAX_WAIT ]]; do
@@ -102,13 +102,22 @@ mkdir -p "$TEST_DIR/.workflow/001-test-workflow/agents/pm"
 mkdir -p "$TEST_DIR/.workflow/001-test-workflow/agents/developer"
 mkdir -p "$TEST_DIR/.workflow/001-test-workflow/agents/qa"
 
-# Create identity.yml files with session/window for role detection
+# Create tmux session first to capture pane IDs for identity.yml
+tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-workflow
+PM_PANE_ID=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F '#{pane_id}' | head -1)
+DEV_PANE_ID=$(tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" -P -F '#{pane_id}' 2>/dev/null)
+QA_PANE_ID=$(tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" -P -F '#{pane_id}' 2>/dev/null)
+tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" 2>/dev/null
+sleep 2
+
+# Create identity.yml files with pane_id for role detection
 cat > "$TEST_DIR/.workflow/001-test-workflow/agents/pm/identity.yml" << EOF
 name: PM
 role: pm
 model: opus
+pane_id: "$PM_PANE_ID"
 window: 0
-session: $SESSION_NAME
 workflow: 001-test-workflow
 can_modify_code: false
 EOF
@@ -117,8 +126,8 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/agents/developer/identity.yml" << E
 name: developer
 role: developer
 model: sonnet
+pane_id: "$DEV_PANE_ID"
 window: 1
-session: $SESSION_NAME
 workflow: 001-test-workflow
 can_modify_code: true
 EOF
@@ -127,21 +136,13 @@ cat > "$TEST_DIR/.workflow/001-test-workflow/agents/qa/identity.yml" << EOF
 name: qa
 role: qa
 model: sonnet
+pane_id: "$QA_PANE_ID"
 window: 2
-session: $SESSION_NAME
 workflow: 001-test-workflow
 can_modify_code: test-only
 EOF
 
-# Create tmux session: PM at window 0, developer at 1, QA at 2, user at 3
-tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
-tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-workflow
-tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" 2>/dev/null
-tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" 2>/dev/null
-tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" 2>/dev/null
-sleep 2
-
-pass "Created test environment with identity.yml files and tmux windows"
+pass "Created test environment with pane_id-based identity.yml files and tmux windows"
 echo ""
 
 # Cancel-checkin command JSON (matches the pattern the hook looks for)
