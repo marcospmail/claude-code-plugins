@@ -80,17 +80,40 @@ echo "test" > "$TEST_DIR/app.js"
 
 # Create tmux session: window 0 with PM pane layout, window 1 for agent
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "pm-checkins" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -v -p 50 -c "$TEST_DIR"
+PM_PANE_ID=$(tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -v -p 50 -c "$TEST_DIR" -P -F '#{pane_id}')
 
-# Pane 0 = check-ins display, Pane 1 = PM
+# Pane 0 = check-ins display, Pane 1 = PM (identified by pane_id)
 echo "  - Session: $SESSION_NAME"
-echo "  - Window 0: pane 0 (checkins), pane 1 (PM)"
+echo "  - Window 0: pane 0 (checkins), pane 1 (PM, pane_id=$PM_PANE_ID)"
 
 # Create agent window (simulating a developer agent)
-tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "developer" -c "$TEST_DIR"
-echo "  - Window 1: developer agent"
+DEV_PANE_ID=$(tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "developer" -c "$TEST_DIR" -P -F '#{pane_id}')
+echo "  - Window 1: developer agent (pane_id=$DEV_PANE_ID)"
 
 sleep 2
+
+# Create workflow dir with agents.yml so notify_pm can find PM pane_id
+mkdir -p "$TEST_DIR/.workflow/001-test-notify"
+cat > "$TEST_DIR/.workflow/001-test-notify/agents.yml" << EOF
+pm:
+  name: PM
+  role: pm
+  pane_id: "$PM_PANE_ID"
+  session: $SESSION_NAME
+  window: 0
+  model: opus
+agents:
+  - name: developer
+    role: developer
+    pane_id: "$DEV_PANE_ID"
+    session: $SESSION_NAME
+    window: 1
+    model: sonnet
+EOF
+cat > "$TEST_DIR/.workflow/001-test-notify/status.yml" << EOF
+status: in-progress
+EOF
+tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-notify
 
 echo "  ✓ Test environment ready"
 echo ""

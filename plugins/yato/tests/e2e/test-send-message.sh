@@ -42,15 +42,17 @@ echo "Phase 1: Setting up test environment..."
 mkdir -p "$TEST_DIR"
 
 # Create a target session with multiple windows for receiving messages
+# Capture pane IDs for %N format testing
 tmux -L "$TMUX_SOCKET" new-session -d -s "$MSG_SESSION" -x 120 -y 40 -n "window0" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-window -d -t "$MSG_SESSION" -n "window1" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" new-window -d -t "$MSG_SESSION" -n "window2" -c "$TEST_DIR"
+PANE_ID_0=$(tmux -L "$TMUX_SOCKET" list-panes -t "$MSG_SESSION:0" -F '#{pane_id}' | head -1)
+PANE_ID_1=$(tmux -L "$TMUX_SOCKET" new-window -d -t "$MSG_SESSION" -n "window1" -c "$TEST_DIR" -P -F '#{pane_id}')
+PANE_ID_2=$(tmux -L "$TMUX_SOCKET" new-window -d -t "$MSG_SESSION" -n "window2" -c "$TEST_DIR" -P -F '#{pane_id}')
 
 # Wait for all shells to fully initialize (zsh plugins, cloud credentials, git status)
 sleep 5
 
 if tmux -L "$TMUX_SOCKET" has-session -t "$MSG_SESSION" 2>/dev/null; then
-    pass "Target session created with 3 windows"
+    pass "Target session created with 3 windows (pane IDs: $PANE_ID_0, $PANE_ID_1, $PANE_ID_2)"
 else
     fail "Failed to create target session"
     exit 1
@@ -153,6 +155,32 @@ if echo "$OUTPUT_SPECIAL" | grep -q "chars &"; then
     pass "Special characters handled correctly"
 else
     fail "Special characters not handled properly"
+fi
+
+# ============================================================
+# PHASE 7: Test with %N pane ID format (new global pane ID routing)
+# ============================================================
+echo ""
+echo "Phase 7: Testing send_message with %N pane ID format..."
+
+MSG_PANE_ID="TEST_PANE_ID_MSG_$$"
+
+TMUX_SOCKET="$TMUX_SOCKET" "$BIN_DIR/send-message.sh" "$PANE_ID_1" "$MSG_PANE_ID" 2>/dev/null
+sleep 2
+
+OUTPUT_PANE=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$PANE_ID_1" -p -S -50 2>/dev/null)
+if echo "$OUTPUT_PANE" | grep -q "$MSG_PANE_ID"; then
+    pass "Message delivered via %N pane ID ($PANE_ID_1)"
+else
+    fail "Message not found when sent via %N pane ID ($PANE_ID_1)"
+fi
+
+# Verify pane ID message didn't go to other windows
+OUTPUT_CHECK=$(tmux -L "$TMUX_SOCKET" capture-pane -t "$PANE_ID_0" -p -S -50 2>/dev/null)
+if echo "$OUTPUT_CHECK" | grep -q "$MSG_PANE_ID"; then
+    fail "Pane ID message leaked to window 0"
+else
+    pass "Pane ID message isolated from window 0"
 fi
 
 # ============================================================
