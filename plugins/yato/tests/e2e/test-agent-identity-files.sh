@@ -129,11 +129,11 @@ if [[ -f "$PM_IDENTITY" ]]; then
         fail "PM identity missing model field"
     fi
 
-    # Test 4: PM has session and window fields (for role detection)
-    if grep -q "session:" "$PM_IDENTITY" && grep -q "window:" "$PM_IDENTITY"; then
-        pass "PM identity has session and window fields"
+    # Test 4: PM has pane_id and window fields (for role detection)
+    if grep -q "pane_id:" "$PM_IDENTITY" && grep -q "window:" "$PM_IDENTITY"; then
+        pass "PM identity has pane_id and window fields"
     else
-        fail "PM identity should have session and window fields"
+        fail "PM identity should have pane_id and window fields"
     fi
 else
     fail "PM identity.yml not found at $PM_IDENTITY"

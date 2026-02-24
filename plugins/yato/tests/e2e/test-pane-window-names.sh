@@ -190,6 +190,19 @@ else
     fail "Expected at least 3 windows, got: $WINDOW_COUNT"
 fi
 
+# Verify agent identity files have pane_id (from create-agent.sh pane_id capture)
+DEV_IDENTITY="$AGENT_TEST_DIR/.workflow/$WORKFLOW_NAME/agents/developer/identity.yml"
+if [[ -f "$DEV_IDENTITY" ]]; then
+    DEV_PANE_VAL=$(grep "^pane_id:" "$DEV_IDENTITY" 2>/dev/null | sed 's/pane_id: *//' | tr -d '"')
+    if [[ "$DEV_PANE_VAL" == %* ]]; then
+        pass "Developer identity.yml has pane_id: $DEV_PANE_VAL"
+    else
+        fail "Developer identity.yml should have pane_id starting with %, got: '$DEV_PANE_VAL'"
+    fi
+else
+    fail "Developer identity.yml not found at $DEV_IDENTITY"
+fi
+
 # Clean up agent test session
 tmux -L "$TMUX_SOCKET" kill-session -t "$AGENT_SESSION" 2>/dev/null || true
 rm -rf "$AGENT_TEST_DIR" 2>/dev/null || true
