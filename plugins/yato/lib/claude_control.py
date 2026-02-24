@@ -330,14 +330,12 @@ class ClaudeControl:
         window_part = parts[1]
 
         # Check if pane is included (e.g., "0.1")
-        pane_index = None
         if "." in window_part:
             window_str, pane_str = window_part.split(".", 1)
             try:
                 window = int(window_str)
-                pane_index = int(pane_str)
             except ValueError:
-                print(f"Error: Window and pane must be numbers")
+                print(f"Error: Window must be a number")
                 return 1
         else:
             try:
@@ -352,7 +350,6 @@ class ClaudeControl:
             role=role,
             name=name,
             model=model,
-            pane_index=pane_index
         )
         self.registry.add_agent(agent)
 
