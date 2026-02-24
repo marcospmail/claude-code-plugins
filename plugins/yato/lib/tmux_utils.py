@@ -12,12 +12,25 @@ This module focuses on pure tmux operations only.
 """
 
 import os
+import re
 import subprocess
 import json
 import time
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
+
+
+def validate_pane_id(pane_id: str) -> bool:
+    """Validate that a pane_id matches the expected %N format.
+
+    Args:
+        pane_id: String to validate (e.g., "%5", "%12")
+
+    Returns:
+        True if valid %N format, False otherwise
+    """
+    return bool(re.match(r'^%\d+$', pane_id))
 
 
 def _build_message_with_suffixes(message: str, yato_suffix: str, workflow_suffix: str) -> str:
@@ -144,9 +157,13 @@ class TmuxOrchestrator:
         result = subprocess.run(cmd, capture_output=True)
         return result.returncode == 0
 
-    def create_window(self, session: str, name: str, path: Optional[str] = None) -> Optional[int]:
-        """Create a new window in a session, returning the window index."""
-        cmd = _tmux_cmd() + ["new-window", "-d", "-t", session, "-n", name, "-P", "-F", "#{window_index}"]
+    def create_window(self, session: str, name: str, path: Optional[str] = None) -> Optional[Dict[str, str]]:
+        """Create a new window in a session, returning window index and pane_id.
+
+        Returns:
+            Dict with 'window_index' (int) and 'pane_id' (str like '%5'), or None on failure.
+        """
+        cmd = _tmux_cmd() + ["new-window", "-d", "-t", session, "-n", name, "-P", "-F", "#{window_index}:#{pane_id}"]
         if path:
             cmd.extend(["-c", path])
 
@@ -155,8 +172,13 @@ class TmuxOrchestrator:
             return None
 
         try:
-            return int(result.stdout.strip())
-        except ValueError:
+            output = result.stdout.strip()
+            parts = output.split(":", 1)
+            return {
+                "window_index": int(parts[0]),
+                "pane_id": parts[1] if len(parts) > 1 else "",
+            }
+        except (ValueError, IndexError):
             return None
 
     def create_pane(self, target: str, path: Optional[str] = None, vertical: bool = True) -> Optional[str]:
@@ -164,15 +186,15 @@ class TmuxOrchestrator:
         Create a new pane by splitting an existing pane.
 
         Args:
-            target: Target pane to split (e.g., "session:0.0")
+            target: Target pane to split (e.g., "session:0.0" or "%5")
             path: Working directory for the new pane
             vertical: If True, split vertically (-v), else horizontally (-h)
 
         Returns:
-            The new pane ID (e.g., "session:0.1") or None on failure
+            The global pane ID (e.g., "%12") or None on failure
         """
         split_flag = "-v" if vertical else "-h"
-        cmd = _tmux_cmd() + ["split-window", split_flag, "-t", target, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"]
+        cmd = _tmux_cmd() + ["split-window", split_flag, "-t", target, "-P", "-F", "#{pane_id}"]
         if path:
             cmd.extend(["-c", path])
 
@@ -214,8 +236,12 @@ class TmuxOrchestrator:
     def capture_agent_output(self, agent_id: str, num_lines: int = 50) -> str:
         """Capture output from an agent target.
 
-        Supports both window format (session:window) and pane format (session:window.pane).
+        Supports %N pane ID, window format (session:window), and pane format (session:window.pane).
         """
+        # Handle %N pane ID format
+        if agent_id.startswith("%"):
+            return self._capture_pane_content(agent_id, num_lines)
+
         if ":" not in agent_id:
             return f"Invalid agent_id format: {agent_id}"
 
@@ -266,10 +292,10 @@ class TmuxOrchestrator:
 
     def send_message(self, target: str, message: str, enter: bool = True, workflow_status_file: str = None, _skip_suffix: bool = False) -> bool:
         """
-        Send a message to a tmux target (session:window or session:window.pane).
+        Send a message to a tmux target (%N pane ID, session:window, or session:window.pane).
 
         This is the primary message sending function, matching send-message.sh behavior:
-        1. Default to pane 0 if no pane specified
+        1. Use target directly if it's a %N pane ID, otherwise default to pane 0
         2. Select the target pane to ensure it's active
         3. Exit copy mode if active (prevents search mode trigger from / in paths)
         4. Wait briefly for UI
@@ -277,7 +303,7 @@ class TmuxOrchestrator:
         6. Send Enter immediately to submit (no delay to avoid TUI state changes)
 
         Args:
-            target: Target in format "session:window" or "session:window.pane"
+            target: Target in format "%N" (pane ID), "session:window", or "session:window.pane"
             message: The message text to send
             enter: Whether to send Enter after the message (default True)
             workflow_status_file: Path to workflow status.yml for per-project agent_message_suffix
@@ -289,9 +315,10 @@ class TmuxOrchestrator:
         try:
             tmux = _tmux_cmd()
 
-            # Step 1: Default to pane 0 if no pane specified
-            if "." not in target:
-                target = f"{target}.0"
+            # Step 1: Use target directly if %N pane ID, otherwise default to pane 0
+            if not target.startswith("%"):
+                if "." not in target:
+                    target = f"{target}.0"
 
             # Step 2: Select the target pane to ensure it's active
             subprocess.run(
@@ -397,8 +424,12 @@ class TmuxOrchestrator:
     def send_message_to_agent(self, agent_id: str, message: str, confirm: bool = False) -> bool:
         """Send a message to an agent target.
 
-        Supports both window format (session:window) and pane format (session:window.pane).
+        Supports %N pane ID, window format (session:window), and pane format (session:window.pane).
         """
+        # Handle %N pane ID format
+        if agent_id.startswith("%"):
+            return self._send_to_pane(agent_id, message, confirm)
+
         if ":" not in agent_id:
             print(f"Invalid agent_id format: {agent_id}")
             return False
@@ -407,7 +438,6 @@ class TmuxOrchestrator:
 
         # Check if target includes a pane (e.g., "0.1")
         if "." in target:
-            # Use tmux send-keys directly with the full target
             return self._send_to_pane(agent_id, message, confirm)
 
         try:
@@ -541,7 +571,7 @@ def send_message(target: str, message: str, enter: bool = True, workflow_status_
     This is a convenience function that wraps TmuxOrchestrator.send_message().
 
     Args:
-        target: Target in format "session:window" or "session:window.pane"
+        target: Target in format "%N" (pane ID), "session:window", or "session:window.pane"
         message: The message text to send
         enter: Whether to send Enter after the message (default True)
         workflow_status_file: Path to workflow status.yml for per-project agent_message_suffix
@@ -633,7 +663,7 @@ def notify_pm(message: str, session: Optional[str] = None, workflow_status_file:
     """
     Send a notification message to the Project Manager.
 
-    PM is always at window 0, pane 1 (pane 0 is the check-ins display).
+    Looks up PM pane_id from agents.yml. Falls back to session:0.1 if not found.
 
     Appends stacked suffixes (yato-level AGENTS_TO_PM_SUFFIX + workflow-level
     agent_to_pm_message_suffix) before sending.
@@ -659,7 +689,7 @@ def notify_pm(message: str, session: Optional[str] = None, workflow_status_file:
             print("Error: Not running in a tmux session and no session specified")
             return False
 
-    # Build message with agent→PM suffixes
+    # Build message with agent->PM suffixes
     try:
         from lib.config import get as get_config
     except ImportError:
@@ -684,10 +714,62 @@ def notify_pm(message: str, session: Optional[str] = None, workflow_status_file:
 
     message = _build_message_with_suffixes(message, yato_suffix, workflow_suffix)
 
-    # PM is always at window 0, pane 1
+    # Look up PM pane_id from agents.yml
+    pm_target = _lookup_pm_pane_id(session, workflow_status_file)
+
     # Use _skip_suffix=True since we already handled suffixes above
-    pm_target = f"{session}:0.1"
     return send_message(pm_target, message, _skip_suffix=True)
+
+
+def _lookup_pm_pane_id(session: str, workflow_status_file: Optional[str] = None) -> str:
+    """Look up PM pane_id from agents.yml. Falls back to session:0.1."""
+    from pathlib import Path
+    import yaml
+
+    # Try to find workflow path from workflow_status_file
+    workflow_path = None
+    if workflow_status_file:
+        workflow_path = Path(workflow_status_file).parent
+    else:
+        # Try WORKFLOW_NAME from tmux env
+        workflow_name = None
+        try:
+            result = subprocess.run(
+                _tmux_cmd() + ["showenv", "WORKFLOW_NAME"],
+                capture_output=True, text=True, check=True,
+            )
+            output = result.stdout.strip()
+            if "=" in output:
+                workflow_name = output.split("=", 1)[1]
+        except subprocess.CalledProcessError:
+            pass
+
+        if workflow_name:
+            # Search upward from cwd for .workflow/
+            current = Path.cwd()
+            while current != current.parent:
+                candidate = current / ".workflow" / workflow_name
+                if candidate.exists():
+                    workflow_path = candidate
+                    break
+                current = current.parent
+
+    if workflow_path:
+        agents_file = workflow_path / "agents.yml"
+        if agents_file.exists():
+            try:
+                with open(agents_file) as f:
+                    data = yaml.safe_load(f)
+                if data and isinstance(data, dict):
+                    pm_data = data.get("pm", {})
+                    pm_pane_id = pm_data.get("pane_id")
+                    if pm_pane_id and validate_pane_id(str(pm_pane_id)):
+                        return str(pm_pane_id)
+            except Exception:
+                pass
+
+    # Fallback: session:0.1
+    return f"{session}:0.1"
 
 
 def send_to_agent(agent_name: str, message: str, session: Optional[str] = None, workflow_status_file: Optional[str] = None) -> bool:
@@ -779,12 +861,14 @@ def send_to_agent(agent_name: str, message: str, session: Optional[str] = None, 
     agent_target = None
     for agent in data.get("agents", []):
         if agent.get("name") == agent_name:
-            agent_session = agent.get("session", session)
-            window = agent.get("window", "")
-            pane = agent.get("pane")
-            if pane is not None:
-                agent_target = f"{agent_session}:{window}.{pane}"
+            # Prefer pane_id (global tmux pane ID like "%12")
+            pane_id = agent.get("pane_id")
+            if pane_id and validate_pane_id(str(pane_id)):
+                agent_target = str(pane_id)
             else:
+                # Fallback to session:window
+                agent_session = agent.get("session", session)
+                window = agent.get("window", "")
                 agent_target = f"{agent_session}:{window}"
             break
 
@@ -853,8 +937,7 @@ if __name__ == "__main__":
         message = " ".join(args.message)
         success = notify_pm(message, session=args.session, workflow_status_file=args.workflow_status_file)
         if success:
-            session = args.session or get_current_session()
-            print(f"Notification sent to PM ({session}:0.1): {message}")
+            print(f"Notification sent to PM: {message}")
         else:
             print("Failed to notify PM")
             sys.exit(1)
