@@ -124,8 +124,8 @@ def detect_role(project_root: Optional[Path] = None, file_path: Optional[str] = 
     """
     Detect the current agent's role by scanning identity.yml files.
 
-    Finds identity.yml files in .workflow/*/agents/*/, reads session + window
-    from each, and matches against the current tmux session + window.
+    Primary: matches pane_id from identity.yml against TMUX_PANE env var.
+    Fallback: matches session + window (for legacy identity.yml without pane_id).
 
     Args:
         project_root: Project root path (if already known)
@@ -151,12 +151,12 @@ def detect_role(project_root: Optional[Path] = None, file_path: Optional[str] = 
     if not workflow_dir.exists():
         return None
 
-    # Get current tmux session and window
+    # Get current tmux pane ID from environment (set by tmux automatically)
+    current_pane_id = os.environ.get("TMUX_PANE")
+
+    # Get current tmux session and window (for legacy fallback)
     current_session = _get_tmux_session_name()
     current_window, current_pane = _get_tmux_window_pane()
-
-    if not current_session or current_window is None:
-        return None
 
     # Determine which workflow to scan
     workflow_name = _get_workflow_name()
@@ -188,16 +188,27 @@ def detect_role(project_root: Optional[Path] = None, file_path: Optional[str] = 
                 if not data or not isinstance(data, dict):
                     continue
 
-                identity_session = data.get("session", "")
-                identity_window = _safe_int(data.get("window"))
                 role = data.get("role", "")
-
-                if not identity_session or identity_window is None or not role:
+                if not role:
                     continue
 
-                # Match session name and window index
-                if str(identity_session) == str(current_session) and identity_window == current_window:
-                    return role.lower()
+                # Primary: match pane_id against TMUX_PANE
+                identity_pane_id = data.get("pane_id")
+                if identity_pane_id and current_pane_id:
+                    if str(identity_pane_id) == str(current_pane_id):
+                        return role.lower()
+                    continue  # pane_id set but doesn't match - skip legacy check
+
+                # Legacy fallback: match session + window
+                identity_session = data.get("session", "")
+                identity_window = _safe_int(data.get("window"))
+
+                if not identity_session or identity_window is None:
+                    continue
+
+                if current_session and current_window is not None:
+                    if str(identity_session) == str(current_session) and identity_window == current_window:
+                        return role.lower()
 
             except Exception:
                 continue
