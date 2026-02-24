@@ -93,13 +93,13 @@ case "$ROLE" in
         ;;
 esac
 
-# Create identity.yml (window field empty - will be filled by create-agent.sh)
+# Create identity.yml (pane_id and window fields empty - will be filled by create-agent.sh)
 cat > "$AGENT_DIR/identity.yml" <<EOF
 name: ${AGENT_NAME}
 role: ${ROLE}
 model: ${MODEL}
+pane_id:
 window:
-session:
 workflow: ${WORKFLOW_NAME}
 can_modify_code: ${CAN_MODIFY_CODE}
 EOF
@@ -166,7 +166,7 @@ ${RESPONSIBILITIES}
 
 ## Communication
 - Notify PM using: notify-pm.sh "[STATUS] message"
-- PM is always at window 0, pane 1 - notify-pm.sh handles this automatically
+- notify-pm.sh auto-detects PM location from agents.yml
 - Check agent-tasks.md for your assigned tasks
 
 ### How to Communicate:
@@ -325,7 +325,7 @@ ${PM_STEP}
 
 ## Quick Reference
 
-- Your PM: Window 0, Pane 1
+- Your PM: See agents.yml for PM pane_id
 - Project: ${PROJECT_PATH}
 - Workflow: ${WORKFLOW_NAME}
 EOF

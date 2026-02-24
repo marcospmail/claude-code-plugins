@@ -168,25 +168,27 @@ fi
 echo "Creating window '$WINDOW_NAME' in session '$SESSION'..."
 
 if [[ -n "$PROJECT_PATH" ]]; then
-    WINDOW_INDEX=$(tmux $TMUX_FLAGS new-window -d -t "$SESSION" -n "$WINDOW_NAME" -c "$PROJECT_PATH" -P -F "#{window_index}")
+    WINDOW_OUTPUT=$(tmux $TMUX_FLAGS new-window -d -t "$SESSION" -n "$WINDOW_NAME" -c "$PROJECT_PATH" -P -F "#{window_index}:#{pane_id}")
 else
-    WINDOW_INDEX=$(tmux $TMUX_FLAGS new-window -d -t "$SESSION" -n "$WINDOW_NAME" -P -F "#{window_index}")
+    WINDOW_OUTPUT=$(tmux $TMUX_FLAGS new-window -d -t "$SESSION" -n "$WINDOW_NAME" -P -F "#{window_index}:#{pane_id}")
 fi
 
-if [[ -z "$WINDOW_INDEX" ]]; then
+if [[ -z "$WINDOW_OUTPUT" ]]; then
     echo "Error: Failed to create window"
     exit 1
 fi
 
+WINDOW_INDEX="${WINDOW_OUTPUT%%:*}"
+PANE_ID="${WINDOW_OUTPUT#*:}"
 AGENT_ID="$SESSION:$WINDOW_INDEX"
-echo "Created window: $AGENT_ID"
+echo "Created window: $AGENT_ID (pane_id: $PANE_ID)"
 
 # Register the agent in workflow agents.yml (uses workflow-utils.sh which was sourced earlier)
 echo "Registering agent in workflow..."
 if [[ -n "$PROJECT_PATH" ]]; then
     # Use lowercase window name as agent name (e.g., "developer", "qa-1")
     AGENT_NAME=$(echo "$WINDOW_NAME" | tr '[:upper:]' '[:lower:]')
-    add_agent_to_yml "$PROJECT_PATH" "$AGENT_NAME" "$ROLE" "$WINDOW_INDEX" "${MODEL:-sonnet}" "$SESSION"
+    add_agent_to_yml "$PROJECT_PATH" "$AGENT_NAME" "$ROLE" "$WINDOW_INDEX" "${MODEL:-sonnet}" "$SESSION" "$PANE_ID"
 fi
 
 # Create or update agent identity file
@@ -207,10 +209,10 @@ if [[ -n "$PROJECT_PATH" ]]; then
     # Check if agent files were pre-created by init-agent-files.sh
     IDENTITY_FILE="$AGENT_DIR/identity.yml"
     if [[ -f "$IDENTITY_FILE" ]]; then
-        # Files exist - just update window and session in identity.yml
-        echo "Updating existing agent files with window info..."
+        # Files exist - just update pane_id and window in identity.yml
+        echo "Updating existing agent files with pane_id and window info..."
+        sed -i '' "s/^pane_id:.*/pane_id: \"${PANE_ID}\"/" "$IDENTITY_FILE"
         sed -i '' "s/^window:.*/window: ${WINDOW_INDEX}/" "$IDENTITY_FILE"
-        sed -i '' "s/^session:.*/session: ${SESSION}/" "$IDENTITY_FILE"
         echo "Updated identity file: $IDENTITY_FILE"
     else
         # Files don't exist - create everything (backward compatibility)
@@ -253,13 +255,13 @@ if [[ -n "$PROJECT_PATH" ]]; then
                 ;;
         esac
 
-        # Create identity.yml (new window-based format)
+        # Create identity.yml (pane_id-based format)
         cat > "$AGENT_DIR/identity.yml" <<EOF
 name: ${WINDOW_NAME}
 role: ${ROLE}
 model: ${MODEL:-sonnet}
+pane_id: "${PANE_ID}"
 window: ${WINDOW_INDEX}
-session: ${SESSION}
 workflow: ${WORKFLOW_NAME:-default}
 can_modify_code: ${CAN_MODIFY_CODE}
 EOF
@@ -325,7 +327,7 @@ esac)
 
 ## Communication
 - Notify PM using: notify-pm.sh "[STATUS] message"
-- PM is always at window 0, pane 1 - notify-pm.sh handles this automatically
+- notify-pm.sh auto-detects PM location from agents.yml
 - Check agent-tasks.md for your assigned tasks
 
 ### How to Communicate:
@@ -412,7 +414,7 @@ This file contains references to all your configuration and task files. Read the
 
 ## Quick Reference
 
-- Your PM: ${PM_WINDOW:-Will be assigned}
+- Your PM: See agents.yml for PM pane_id
 - Project: ${PROJECT_PATH:-Not set}
 - Workflow: Run 'tmux showenv WORKFLOW_NAME' to see active workflow
 EOF
