@@ -309,8 +309,8 @@ class AgentManager:
             "name": agent_name,
             "role": role,
             "model": model,
+            "pane_id": "",
             "window": "",
-            "session": "",
             "workflow_name": workflow_name,
             "can_modify_code": can_modify_str,
         })
@@ -597,13 +597,14 @@ class AgentManager:
         has_session = result.returncode == 0
 
         window_index = 0
+        pane_id = ""
         agent_id = f"{session}:0"
 
         if has_session:
             # Create agent window
             print(f"Creating window '{display_name}' in session '{session}'...")
 
-            cmd = _tmux_cmd() + ["new-window", "-d", "-t", session, "-n", display_name, "-P", "-F", "#{window_index}"]
+            cmd = _tmux_cmd() + ["new-window", "-d", "-t", session, "-n", display_name, "-P", "-F", "#{window_index}:#{pane_id}"]
             if project_path:
                 cmd.extend(["-c", project_path])
 
@@ -612,9 +613,12 @@ class AgentManager:
                 print(f"Error: Failed to create window: {result.stderr}")
                 return None
 
-            window_index = int(result.stdout.strip())
-            agent_id = f"{session}:{window_index}"
-            print(f"Created window: {agent_id}")
+            output = result.stdout.strip()
+            parts = output.split(":", 1)
+            window_index = int(parts[0])
+            pane_id = parts[1] if len(parts) > 1 else ""
+            agent_id = pane_id or f"{session}:{window_index}"
+            print(f"Created window: {session}:{window_index} (pane_id: {pane_id})")
         else:
             print(f"Session '{session}' not found - creating files and registry only (no tmux window)")
 
@@ -629,7 +633,7 @@ class AgentManager:
         # Register in agents.yml
         if project_path and workflow_name:
             WorkflowOps.add_agent_to_yml(
-                project_path, agent_name, role, window_index, model, session
+                project_path, agent_name, role, window_index, model, session, pane_id
             )
 
         # Update agent identity file with window info
@@ -643,25 +647,27 @@ class AgentManager:
             identity_file = agent_dir / "identity.yml"
             if identity_file.exists():
                 if has_session:
-                    print("Updating existing agent files with window info...")
+                    print("Updating existing agent files with pane_id and window info...")
                     content = identity_file.read_text()
+                    content = re.sub(r'^(pane_id:).*$', f'\\1 "{pane_id}"', content, flags=re.MULTILINE)
                     content = re.sub(r'^(window:).*$', f'\\1 {window_index}', content, flags=re.MULTILINE)
-                    content = re.sub(r'^(session:).*$', f'\\1 {session}', content, flags=re.MULTILINE)
                     identity_file.write_text(content)
                     print(f"Updated identity file: {identity_file}")
             else:
                 # Files don't exist - create them
                 self.init_agent_files(project_path, agent_name, role, model, workflow_name)
-                # Update with window info if we have a session
+                # Update with pane_id and window info if we have a session
                 if has_session:
                     identity_file = agent_dir / "identity.yml"
                     if identity_file.exists():
                         content = identity_file.read_text()
+                        content = re.sub(r'^(pane_id:).*$', f'\\1 "{pane_id}"', content, flags=re.MULTILINE)
                         content = re.sub(r'^(window:).*$', f'\\1 {window_index}', content, flags=re.MULTILINE)
-                        content = re.sub(r'^(session:).*$', f'\\1 {session}', content, flags=re.MULTILINE)
                         identity_file.write_text(content)
 
         # Start Claude (only if session exists)
+        # Use pane_id as target for reliable targeting
+        tmux_target = pane_id or f"{session}:{window_index}"
         if start_claude and has_session:
             print("Starting Claude with bypass permissions...")
             claude_cmd = "claude --dangerously-skip-permissions"
@@ -670,7 +676,7 @@ class AgentManager:
                 print(f"Using model: {model}")
 
             subprocess.run(
-                _tmux_cmd() + ["send-keys", "-t", agent_id, claude_cmd, "Enter"],
+                _tmux_cmd() + ["send-keys", "-t", tmux_target, claude_cmd, "Enter"],
                 check=True,
             )
             time.sleep(5)  # Wait for Claude to start
@@ -706,6 +712,7 @@ class AgentManager:
             "name": agent_name,
             "session": session,
             "window_index": window_index,
+            "pane_id": pane_id,
             "project_path": project_path,
             "model": model,
             "pm_window": pm_window,

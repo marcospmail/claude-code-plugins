@@ -29,21 +29,21 @@ class Agent:
         skills: Optional[List[str]] = None,
         briefing: Optional[str] = None,
         model: Optional[str] = None,  # haiku, sonnet, opus
-        pane_index: Optional[int] = None  # For pane-based deployment
+        pane_id: Optional[str] = None  # Global tmux pane ID (e.g., "%5")
     ):
         self.session_name = session_name
         self.window_index = window_index
-        self.pane_index = pane_index  # None for window-based, int for pane-based
+        self.pane_id = pane_id  # Global tmux pane ID (e.g., "%5", "%12")
         self.role = role
-        self.pm_window = pm_window  # Format: "session:window" or "session:window.pane"
+        self.pm_window = pm_window
         self.project_path = project_path
         self.status = status  # active, paused, terminated
         self.created_at = created_at or datetime.now().isoformat()
-        # Generate agent_id including pane if specified
+        # Generate agent_id: prefer pane_id, fallback to session:window
         if agent_id:
             self.agent_id = agent_id
-        elif pane_index is not None:
-            self.agent_id = f"{session_name}:{window_index}.{pane_index}"
+        elif pane_id:
+            self.agent_id = pane_id
         else:
             self.agent_id = f"{session_name}:{window_index}"
         # Dynamic agent fields for custom personas
@@ -56,8 +56,8 @@ class Agent:
     @property
     def target(self) -> str:
         """Return the tmux target string for this agent."""
-        if self.pane_index is not None:
-            return f"{self.session_name}:{self.window_index}.{self.pane_index}"
+        if self.pane_id:
+            return self.pane_id
         return f"{self.session_name}:{self.window_index}"
 
     def to_dict(self) -> Dict[str, Any]:
@@ -72,9 +72,9 @@ class Agent:
             "status": self.status,
             "created_at": self.created_at
         }
-        # Include pane_index if set
-        if self.pane_index is not None:
-            data["pane_index"] = self.pane_index
+        # Include pane_id if set
+        if self.pane_id is not None:
+            data["pane_id"] = self.pane_id
         # Include dynamic fields if set
         if self.name:
             data["name"] = self.name
@@ -106,7 +106,7 @@ class Agent:
             skills=data.get("skills"),
             briefing=data.get("briefing"),
             model=data.get("model"),
-            pane_index=data.get("pane_index")
+            pane_id=data.get("pane_id")
         )
 
     @classmethod
@@ -118,15 +118,15 @@ class Agent:
         ```yaml
         name: developer
         role: developer
-        session: "myproject"
-        window: 1
-        pane: 0  # optional
+        pane_id: "%12"
+        session: "myproject"  # display-only metadata
+        window: 1             # display-only metadata
         model: sonnet
         ```
         """
         session = data.get("session", "")
         window = data.get("window", 0)
-        pane = data.get("pane")
+        pane_id = data.get("pane_id")
 
         return cls(
             session_name=session,
@@ -136,7 +136,7 @@ class Agent:
             status="active",
             name=data.get("name"),
             model=data.get("model"),
-            pane_index=pane
+            pane_id=pane_id
         )
 
     def to_yaml_dict(self) -> Dict[str, Any]:
@@ -144,12 +144,11 @@ class Agent:
         entry = {
             "name": self.name or self.role,
             "role": self.role,
+            "pane_id": self.pane_id or "",
             "session": self.session_name,
             "window": self.window_index,
             "model": self.model or "sonnet"
         }
-        if self.pane_index is not None:
-            entry["pane"] = self.pane_index
         return entry
 
     def __repr__(self) -> str:
