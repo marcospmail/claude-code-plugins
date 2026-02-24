@@ -158,8 +158,11 @@ if [[ "$PANE_COUNT" -lt 2 ]]; then
     tmux set-option -p -t "$SESSION:0.1" allow-set-title off
 fi
 
-CHECKINS_PANE="$SESSION:0.0"
-PM_PANE="$SESSION:0.1"
+# Capture global pane IDs for check-ins and PM
+CHECKINS_PANE_ID=$(tmux display-message -t "$SESSION:0.0" -p '#{pane_id}' 2>/dev/null)
+PM_PANE_ID=$(tmux display-message -t "$SESSION:0.1" -p '#{pane_id}' 2>/dev/null)
+CHECKINS_PANE="${CHECKINS_PANE_ID:-$SESSION:0.0}"
+PM_PANE="${PM_PANE_ID:-$SESSION:0.1}"
 
 echo "  Check-ins: $SESSION:0.0"
 echo "  PM: $PM_PANE"
@@ -238,6 +241,7 @@ echo ""
 echo "Restoring agent windows..."
 
 declare -a AGENT_IDS
+declare -a AGENT_PANE_IDS
 
 for i in "${!AGENT_NAMES[@]}"; do
     agent_name="${AGENT_NAMES[$i]}"
@@ -248,28 +252,39 @@ for i in "${!AGENT_NAMES[@]}"; do
     echo "  Creating window $agent_window for: $agent_name ($agent_role, $agent_model)"
 
     # Create new window for this agent with specific window name
-    # Use -t SESSION:WINDOW_NUM to create at specific index, or just create and rename
-    AGENT_WINDOW=$(tmux new-window -t "$SESSION" -n "$agent_name" -c "$PROJECT_PATH" -P -F "#{session_name}:#{window_index}" 2>&1)
+    # Capture both window index and global pane ID
+    WINDOW_OUTPUT=$(tmux new-window -t "$SESSION" -n "$agent_name" -c "$PROJECT_PATH" -P -F "#{session_name}:#{window_index}:#{pane_id}" 2>&1)
 
-    if [[ $? -ne 0 ]] || [[ -z "$AGENT_WINDOW" ]]; then
+    if [[ $? -ne 0 ]] || [[ -z "$WINDOW_OUTPUT" ]]; then
         echo "    Warning: Could not create window for $agent_name"
         AGENT_IDS+=("")
+        AGENT_PANE_IDS+=("")
         continue
     fi
 
+    # Parse output: session:window_index:pane_id
+    AGENT_WINDOW="${WINDOW_OUTPUT%:*}"  # session:window_index
+    AGENT_PANE_ID="${WINDOW_OUTPUT##*:}"  # %N pane ID
+
     # Start Claude with correct model and bypass permissions
     sleep 0.3
-    tmux send-keys -t "$AGENT_WINDOW" "claude --dangerously-skip-permissions --model $agent_model" Enter
+    tmux send-keys -t "$AGENT_PANE_ID" "claude --dangerously-skip-permissions --model $agent_model" Enter
 
-    # Store agent ID (window-based)
+    # Store agent ID and pane ID
     AGENT_IDS+=("$AGENT_WINDOW")
+    AGENT_PANE_IDS+=("$AGENT_PANE_ID")
 
-    # Update identity.yml with new agent_id and pm_window (if exists)
+    # Update identity.yml with new pane_id and window info
     AGENTS_DIR="$WORKFLOW_PATH/agents"
-    IDENTITY_FILE="$AGENTS_DIR/$agent_role/identity.yml"
+    # Try by agent name first, then by role
+    IDENTITY_FILE="$AGENTS_DIR/$agent_name/identity.yml"
+    if [[ ! -f "$IDENTITY_FILE" ]]; then
+        IDENTITY_FILE="$AGENTS_DIR/$agent_role/identity.yml"
+    fi
     if [[ -f "$IDENTITY_FILE" ]]; then
-        sed -i '' "s|^agent_id:.*|agent_id: $AGENT_WINDOW|" "$IDENTITY_FILE"
-        sed -i '' "s|^pm_window:.*|pm_window: $PM_PANE|" "$IDENTITY_FILE"
+        sed -i '' "s|^pane_id:.*|pane_id: \"$AGENT_PANE_ID\"|" "$IDENTITY_FILE"
+        new_window="${AGENT_WINDOW##*:}"
+        sed -i '' "s|^window:.*|window: $new_window|" "$IDENTITY_FILE"
     fi
 done
 
@@ -308,28 +323,51 @@ tmux send-keys -t "$PM_PANE" "claude --dangerously-skip-permissions --model opus
 echo "Waiting for Claude instances to initialize..."
 sleep 3
 
-# Update agents.yml with new window numbers
+# Update agents.yml with new pane_ids and window numbers
 echo ""
-echo "Updating agents.yml with new window numbers..."
+echo "Updating agents.yml with new pane IDs..."
+
+# Update PM pane_id first
+uv run python -c "
+import re
+with open('$AGENTS_FILE', 'r') as f:
+    content = f.read()
+lines = content.split('\\n')
+in_pm = False
+result = []
+for line in lines:
+    if line.startswith('pm:'):
+        in_pm = True
+    elif in_pm and line.strip().startswith('pane_id:'):
+        line = re.sub(r'pane_id: .*', 'pane_id: \"$PM_PANE\"', line)
+    elif in_pm and not line.startswith(' '):
+        in_pm = False
+    result.append(line)
+with open('$AGENTS_FILE', 'w') as f:
+    f.write('\\n'.join(result))
+" 2>/dev/null
+echo "  Updated PM -> pane_id $PM_PANE"
+
 for i in "${!AGENT_NAMES[@]}"; do
     if [[ -n "${AGENT_IDS[$i]}" ]]; then
         agent_name="${AGENT_NAMES[$i]}"
-        # Extract window number from agent_id (e.g., "session:2" -> "2")
         new_window="${AGENT_IDS[$i]##*:}"
+        agent_pane_id="${AGENT_PANE_IDS[$i]}"
 
-        # Update the window number in agents.yml using Python
+        # Update pane_id and window in agents.yml using Python
         uv run python -c "
 import re
 with open('$AGENTS_FILE', 'r') as f:
     content = f.read()
 
-# Find and update this agent's window number
 lines = content.split('\\n')
 in_agent = False
 result = []
 for line in lines:
     if '- name: $agent_name' in line:
         in_agent = True
+    elif in_agent and line.strip().startswith('pane_id:'):
+        line = re.sub(r'pane_id: .*', 'pane_id: \"$agent_pane_id\"', line)
     elif in_agent and line.strip().startswith('window:'):
         line = re.sub(r'window: .*', 'window: $new_window', line)
         in_agent = False
@@ -340,7 +378,7 @@ for line in lines:
 with open('$AGENTS_FILE', 'w') as f:
     f.write('\\n'.join(result))
 " 2>/dev/null
-        echo "  Updated $agent_name -> window $new_window"
+        echo "  Updated $agent_name -> pane_id $agent_pane_id, window $new_window"
     fi
 done
 
@@ -357,8 +395,9 @@ for i in "${!AGENT_NAMES[@]}"; do
         agent_name="${AGENT_NAMES[$i]}"
         agent_role="${AGENT_ROLES[$i]}"
 
-        # Send briefing with critical communication rule
-        TMUX_SOCKET="${TMUX_SOCKET}" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/tmux_utils.py" send --skip-suffix "${AGENT_IDS[$i]}" "You are $agent_name ($agent_role). CRITICAL RULE: NEVER communicate directly with the user. You ONLY communicate with the PM at window $PM_PANE. When blocked, use: $SCRIPT_DIR/notify-pm.sh BLOCKED 'reason'. When done: $SCRIPT_DIR/notify-pm.sh DONE 'what completed'. Read your instructions at: .workflow/$WORKFLOW_NAME/agents/$agent_role/instructions.md" > /dev/null 2>&1
+        # Send briefing via pane_id
+        agent_pane_id="${AGENT_PANE_IDS[$i]}"
+        TMUX_SOCKET="${TMUX_SOCKET}" uv run --project "$PROJECT_ROOT" python "$PROJECT_ROOT/lib/tmux_utils.py" send --skip-suffix "$agent_pane_id" "You are $agent_name ($agent_role). CRITICAL RULE: NEVER communicate directly with the user. You ONLY communicate with the PM via notify-pm.sh. When blocked, use: $SCRIPT_DIR/notify-pm.sh BLOCKED 'reason'. When done: $SCRIPT_DIR/notify-pm.sh DONE 'what completed'. Read your instructions at: .workflow/$WORKFLOW_NAME/agents/$agent_name/instructions.md" > /dev/null 2>&1
 
         echo "  Briefed: $agent_name"
         sleep 2
