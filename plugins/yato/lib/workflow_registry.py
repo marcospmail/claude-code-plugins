@@ -34,14 +34,15 @@ class WorkflowRegistry:
     pm:
       name: pm
       role: pm
+      pane_id: "%5"
       session: "myproject"
       window: 0
-      pane: 1
       model: opus
 
     agents:
       - name: developer
         role: developer
+        pane_id: "%12"
         session: "myproject"
         window: 1
         model: sonnet
@@ -149,18 +150,18 @@ class WorkflowRegistry:
         """Convert a YAML entry to an Agent object."""
         session = entry.get("session", "")
         window = entry.get("window", 0)
-        pane = entry.get("pane")
+        pane_id = entry.get("pane_id")
 
         return Agent(
             session_name=session,
             window_index=window,
             role=entry.get("role", "developer"),
-            pm_window=None if is_pm else f"{session}:0.1",  # PM is always at 0.1
+            pm_window=None,
             project_path=str(self.workflow_path.parent.parent),  # Back to project root
             status="active",
             name=entry.get("name"),
             model=entry.get("model"),
-            pane_index=pane
+            pane_id=pane_id
         )
 
     def _agent_to_yml_entry(self, agent: Agent) -> Dict[str, Any]:
@@ -168,12 +169,11 @@ class WorkflowRegistry:
         entry = {
             "name": agent.name or agent.role,
             "role": agent.role,
+            "pane_id": agent.pane_id or "",
             "session": agent.session_name,
             "window": agent.window_index,
             "model": agent.model or "sonnet"
         }
-        if agent.pane_index is not None:
-            entry["pane"] = agent.pane_index
         return entry
 
     def get_pm(self) -> Optional[Agent]:
@@ -205,14 +205,35 @@ class WorkflowRegistry:
 
         return None
 
-    def get_agent_by_target(self, session: str, window: int, pane: Optional[int] = None) -> Optional[Agent]:
+    def get_agent_by_pane_id(self, pane_id: str) -> Optional[Agent]:
         """
-        Get an agent by tmux target.
+        Get an agent by tmux pane ID.
+
+        Args:
+            pane_id: Global tmux pane ID (e.g., "%5")
+        """
+        data = self._load_agents_yml()
+
+        # Check PM
+        pm_data = data.get("pm")
+        if pm_data and pm_data.get("pane_id") == pane_id:
+            return self._agent_from_yml_entry(pm_data, is_pm=True)
+
+        # Check other agents
+        for entry in data.get("agents", []):
+            if entry.get("pane_id") == pane_id:
+                return self._agent_from_yml_entry(entry)
+
+        return None
+
+    def get_agent_by_target(self, session: str, window: int, pane_id: Optional[str] = None) -> Optional[Agent]:
+        """
+        Get an agent by tmux target (legacy session:window matching).
 
         Args:
             session: Session name
             window: Window index
-            pane: Optional pane index
+            pane_id: Optional pane ID to match
         """
         data = self._load_agents_yml()
 
@@ -221,14 +242,14 @@ class WorkflowRegistry:
         if pm_data:
             if (pm_data.get("session") == session and
                 pm_data.get("window") == window and
-                (pane is None or pm_data.get("pane") == pane)):
+                (pane_id is None or pm_data.get("pane_id") == pane_id)):
                 return self._agent_from_yml_entry(pm_data, is_pm=True)
 
         # Check other agents
         for entry in data.get("agents", []):
             if (entry.get("session") == session and
                 entry.get("window") == window and
-                (pane is None or entry.get("pane") == pane)):
+                (pane_id is None or entry.get("pane_id") == pane_id)):
                 return self._agent_from_yml_entry(entry)
 
         return None

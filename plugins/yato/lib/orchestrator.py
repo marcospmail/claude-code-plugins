@@ -79,7 +79,7 @@ class Orchestrator:
         role: str,
         name: Optional[str] = None,
         model: Optional[str] = None,
-        pane_index: Optional[int] = None
+        pane_id: Optional[str] = None
     ) -> Optional[Agent]:
         """Register an agent to the workflow's agents.yml file."""
         registry = self._get_registry(project_path)
@@ -93,7 +93,7 @@ class Orchestrator:
             project_path=project_path,
             name=name or role,
             model=model,
-            pane_index=pane_index
+            pane_id=pane_id
         )
         registry.add_agent(agent, is_pm=(role == "pm"))
         return agent
@@ -140,28 +140,30 @@ class Orchestrator:
 
         # Create PM if requested
         if with_pm:
-            pm_window = self.tmux.create_window(session_name, "Claude-PM", project_path)
-            if pm_window is not None:
+            win_result = self.tmux.create_window(session_name, "Claude-PM", project_path)
+            if win_result is not None:
                 agent = self._register_agent_to_workflow(
                     project_path=project_path,
                     session_name=session_name,
-                    window_index=pm_window,
+                    window_index=win_result["window_index"],
                     role="pm",
-                    name="PM"
+                    name="PM",
+                    pane_id=win_result["pane_id"]
                 )
                 if agent:
                     result["agents"].append(agent.to_dict())
 
         # Create developer if requested
         if with_developer:
-            dev_window = self.tmux.create_window(session_name, "Claude-Developer", project_path)
-            if dev_window is not None:
+            win_result = self.tmux.create_window(session_name, "Claude-Developer", project_path)
+            if win_result is not None:
                 agent = self._register_agent_to_workflow(
                     project_path=project_path,
                     session_name=session_name,
-                    window_index=dev_window,
+                    window_index=win_result["window_index"],
                     role="developer",
-                    name="Developer"
+                    name="Developer",
+                    pane_id=win_result["pane_id"]
                 )
                 if agent:
                     result["agents"].append(agent.to_dict())
@@ -291,16 +293,25 @@ class Orchestrator:
         # Split vertically for Check-ins on top (small pane)
         # -c ensures the new pane starts in project directory (needed for relative paths)
         # -l 10 gives 8-9 usable lines after accounting for pane border
+        # The split pushes the original pane down; the new pane (check-ins) is on top.
+        # We capture the pane_id of the original pane (PM) after the split.
         subprocess.run(_tmux_cmd() + [
             "split-window", "-t", f"{session_name}:0.0",
             "-v", "-b", "-l", "10",
             "-c", str(project_dir),
-            "-P", "-F", "#{pane_index}"
+            "-P", "-F", "#{pane_id}"
         ], capture_output=True)
         # Now: pane 0 = Check-ins, pane 1 = PM
 
+        # Capture PM pane_id (pane 1 after the split)
+        pm_pane_id_result = subprocess.run(
+            _tmux_cmd() + ["display-message", "-t", f"{session_name}:0.1", "-p", "#{pane_id}"],
+            capture_output=True, text=True
+        )
+        pm_pane_id = pm_pane_id_result.stdout.strip() if pm_pane_id_result.returncode == 0 else None
+
         checkin_pane = f"{session_name}:0.0"
-        pm_target = f"{session_name}:0.1"
+        pm_target = pm_pane_id or f"{session_name}:0.1"
 
         # Set up check-in status pane (uses relative paths from project directory)
         subprocess.run(_tmux_cmd() + ["select-pane", "-t", checkin_pane, "-T", "Check-ins"], capture_output=True)
@@ -330,7 +341,7 @@ class Orchestrator:
                 capture_output=True
             )
 
-        # Register PM agent - PM always uses Opus (pane 1, since pane 0 is check-in display)
+        # Register PM agent - PM always uses Opus
         agent = self._register_agent_to_workflow(
             project_path=str(project_dir),
             session_name=session_name,
@@ -338,18 +349,19 @@ class Orchestrator:
             role="pm",
             name="PM",
             model="opus",  # PM always uses Opus
-            pane_index=1
+            pane_id=pm_pane_id
         )
         if agent:
             result["agents"].append(agent.to_dict())
         result["pm_target"] = pm_target
 
-        # Update PM identity.yml with session/window info (same as agent_manager does for agents)
+        # Update PM identity.yml with pane_id and window info
         pm_identity = project_dir / ".workflow" / (workflow_name or "") / "agents" / "pm" / "identity.yml"
         if pm_identity.exists():
             content = pm_identity.read_text()
             content = re.sub(r'^(window:).*$', '\\1 0', content, flags=re.MULTILINE)
-            content = re.sub(r'^(session:).*$', f'\\1 {session_name}', content, flags=re.MULTILINE)
+            if pm_pane_id:
+                content = re.sub(r'^(pane_id:).*$', f'\\1 "{pm_pane_id}"', content, flags=re.MULTILINE)
             pm_identity.write_text(content)
 
         # Update status.yml with the correct session name (the workflow session,
@@ -417,15 +429,16 @@ class Orchestrator:
             if config.get("role") == "pm":
                 name = config.get("name", "Claude-PM")
                 model = config.get("model") or self._get_default_model("pm")
-                window = self.tmux.create_window(session_name, name, project_path)
-                if window is not None:
+                win_result = self.tmux.create_window(session_name, name, project_path)
+                if win_result is not None:
                     agent = self._register_agent_to_workflow(
                         project_path=project_path,
                         session_name=session_name,
-                        window_index=window,
+                        window_index=win_result["window_index"],
                         role="pm",
                         name=name,
-                        model=model
+                        model=model,
+                        pane_id=win_result["pane_id"]
                     )
                     if agent:
                         result["agents"].append(agent.to_dict())
@@ -439,15 +452,16 @@ class Orchestrator:
 
             name = config.get("name", f"Claude-{role.title()}")
             model = config.get("model") or self._get_default_model(role)
-            window = self.tmux.create_window(session_name, name, project_path)
-            if window is not None:
+            win_result = self.tmux.create_window(session_name, name, project_path)
+            if win_result is not None:
                 agent = self._register_agent_to_workflow(
                     project_path=project_path,
                     session_name=session_name,
-                    window_index=window,
+                    window_index=win_result["window_index"],
                     role=role,
                     name=name,
-                    model=model
+                    model=model,
+                    pane_id=win_result["pane_id"]
                 )
                 if agent:
                     result["agents"].append(agent.to_dict())
@@ -475,8 +489,13 @@ class Orchestrator:
         subprocess.run(_tmux_cmd() + ["set-option", "-t", session_name, "pane-border-format", " #{pane_title} "], capture_output=True)
 
         # First pane is window 0, pane 0 - this will be the PM (left side)
-        pm_pane = f"{session_name}:0.0"
-        pane_targets = [pm_pane]
+        # Get the pane_id of pane 0
+        pm_pane_result = subprocess.run(
+            _tmux_cmd() + ["display-message", "-t", f"{session_name}:0.0", "-p", "#{pane_id}"],
+            capture_output=True, text=True
+        )
+        pm_pane_id = pm_pane_result.stdout.strip() if pm_pane_result.returncode == 0 else f"{session_name}:0.0"
+        pane_targets = [pm_pane_id]
 
         # Count non-PM agents
         other_agents = [c for c in team_config if c.get("role") != "pm"]
@@ -484,7 +503,7 @@ class Orchestrator:
         if other_agents:
             # Create right side by splitting horizontally from PM pane
             # -h = horizontal split (creates pane to the right)
-            cmd = _tmux_cmd() + ["split-window", "-h", "-t", pm_pane, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"]
+            cmd = _tmux_cmd() + ["split-window", "-h", "-t", pm_pane_id, "-P", "-F", "#{pane_id}"]
             if project_path:
                 cmd.extend(["-c", project_path])
             result_split = subprocess.run(cmd, capture_output=True, text=True)
@@ -496,7 +515,7 @@ class Orchestrator:
                 # Stack additional agents vertically on the right side
                 for i in range(1, len(other_agents)):
                     # -v = vertical split (creates pane below)
-                    cmd = _tmux_cmd() + ["split-window", "-v", "-t", right_pane, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"]
+                    cmd = _tmux_cmd() + ["split-window", "-v", "-t", right_pane, "-P", "-F", "#{pane_id}"]
                     if project_path:
                         cmd.extend(["-c", project_path])
                     result_split = subprocess.run(cmd, capture_output=True, text=True)
@@ -517,21 +536,14 @@ class Orchestrator:
                     # Set pane title
                     self.tmux.set_pane_title(target, name)
 
-                    # Parse window and pane index from target
-                    parts = target.split(":")
-                    session = parts[0]
-                    win_pane = parts[1].split(".")
-                    window_idx = int(win_pane[0])
-                    pane_index = int(win_pane[1])
-
                     agent = self._register_agent_to_workflow(
                         project_path=project_path,
-                        session_name=session,
-                        window_index=window_idx,
+                        session_name=session_name,
+                        window_index=0,
                         role="pm",
                         name=name,
                         model=model,
-                        pane_index=pane_index
+                        pane_id=target
                     )
                     if agent:
                         result["agents"].append(agent.to_dict())
@@ -552,21 +564,14 @@ class Orchestrator:
                 # Set pane title
                 self.tmux.set_pane_title(target, name)
 
-                # Parse window and pane index from target
-                parts = target.split(":")
-                session = parts[0]
-                win_pane = parts[1].split(".")
-                window_idx = int(win_pane[0])
-                pane_index = int(win_pane[1])
-
                 agent = self._register_agent_to_workflow(
                     project_path=project_path,
-                    session_name=session,
-                    window_index=window_idx,
+                    session_name=session_name,
+                    window_index=0,
                     role=role,
                     name=name,
                     model=model,
-                    pane_index=pane_index
+                    pane_id=target
                 )
                 if agent:
                     result["agents"].append(agent.to_dict())

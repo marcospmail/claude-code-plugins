@@ -317,9 +317,9 @@ class WorkflowOps:
             "pm": {
                 "name": "pm",
                 "role": "pm",
+                "pane_id": "",
                 "session": session,
                 "window": 0,
-                "pane": 1,
                 "model": "opus",
             },
             "agents": [],
@@ -338,6 +338,7 @@ class WorkflowOps:
         window_number: int,
         model: str,
         session: str,
+        pane_id: str = "",
     ) -> bool:
         """
         Add an agent to agents.yml.
@@ -349,6 +350,7 @@ class WorkflowOps:
             window_number: Tmux window number
             model: Model to use (haiku, sonnet, opus)
             session: Tmux session name
+            pane_id: Global tmux pane ID (e.g., "%12")
 
         Returns:
             True if successful, False otherwise
@@ -375,6 +377,7 @@ class WorkflowOps:
         # Check if agent with same name already exists — update instead of duplicate
         existing = next((a for a in data["agents"] if a.get("name") == agent_name), None)
         if existing:
+            existing["pane_id"] = pane_id
             existing["session"] = session
             existing["window"] = window_number
             existing["role"] = agent_role
@@ -383,6 +386,7 @@ class WorkflowOps:
             data["agents"].append({
                 "name": agent_name,
                 "role": agent_role,
+                "pane_id": pane_id,
                 "session": session,
                 "window": window_number,
                 "model": model,
@@ -404,7 +408,7 @@ class WorkflowOps:
             if "pm" in data:
                 pm = data["pm"]
                 f.write("pm:\n")
-                for key in ["name", "role", "session", "window", "pane", "model"]:
+                for key in ["name", "role", "pane_id", "session", "window", "model"]:
                     if key in pm:
                         val = pm[key]
                         if isinstance(val, str):
@@ -421,7 +425,7 @@ class WorkflowOps:
                 f.write("agents:\n")
                 for agent in agents:
                     first = True
-                    for key in ["name", "role", "session", "window", "model"]:
+                    for key in ["name", "role", "pane_id", "session", "window", "model"]:
                         if key in agent:
                             val = agent[key]
                             prefix = "  - " if first else "    "
