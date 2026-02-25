@@ -276,7 +276,7 @@ class TestRenameAgent:
         assert not (tmp_workflow / "agents" / "qa").exists()
         # Check identity.yml updated
         content = (tmp_workflow / "agents" / "qa-1" / "identity.yml").read_text()
-        assert "name: qa-1" in content
+        assert 'name: "qa-1"' in content
 
 
 # ==================== create_agent ====================
@@ -589,7 +589,7 @@ class TestRenameAgentDiskRename:
         assert not old_dir.exists()
         assert (new_dir / "instructions.md").exists()
         identity_content = (new_dir / "identity.yml").read_text()
-        assert "name: dev-1" in identity_content
+        assert 'name: "dev-1"' in identity_content
 
 
 # ==================== create_agent project path warning ====================
