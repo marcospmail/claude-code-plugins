@@ -432,7 +432,7 @@ class WorkflowOps:
                             if isinstance(val, str) and val == "":
                                 f.write(f"{prefix}{key}: \"\"\n")
                             elif isinstance(val, str):
-                                f.write(f"{prefix}{key}: {val}\n")
+                                f.write(f'{prefix}{key}: "{val}"\n')
                             else:
                                 f.write(f"{prefix}{key}: {val}\n")
                             first = False

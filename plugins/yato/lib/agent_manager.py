@@ -537,7 +537,12 @@ class AgentManager:
             identity_file = new_dir / "identity.yml"
             if identity_file.exists():
                 content = identity_file.read_text()
-                content = content.replace(f"name: {old_name}", f"name: {new_name}")
+                content = re.sub(
+                    rf'^name:\s*"?{re.escape(old_name)}"?',
+                    f'name: "{new_name}"',
+                    content,
+                    flags=re.MULTILINE,
+                )
                 identity_file.write_text(content)
 
     def create_agent(
