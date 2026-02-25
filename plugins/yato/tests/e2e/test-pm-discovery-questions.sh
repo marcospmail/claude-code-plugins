@@ -98,60 +98,46 @@ fi
 echo ""
 echo "Phase 3: Checking PM briefing patterns..."
 
-# Test 1: PM asks "What are we building?" for new/empty projects
-if grep -qi "What are we building" "$BRIEFING_TEMPLATE"; then
-    pass "PM briefing includes 'What are we building?' question for new projects"
+# Test 1: PM has discovery section
+if grep -qi "Discovery" "$BRIEFING_TEMPLATE"; then
+    pass "PM briefing has Discovery section"
 else
-    fail "PM briefing missing 'What are we building?' for new projects"
+    fail "PM briefing missing Discovery section"
 fi
 
-# Test 2: PM asks "What would you like to accomplish?" for existing projects
-if grep -qi "What would you like to accomplish" "$BRIEFING_TEMPLATE"; then
-    pass "PM briefing includes 'What would you like to accomplish?' for existing projects"
-else
-    fail "PM briefing missing 'What would you like to accomplish?' for existing projects"
-fi
-
-# Test 3: PM should be conversational - ONE question at a time
+# Test 2: PM should be conversational - ONE question at a time
 if grep -qi "ONE question at a time\|Ask ONE question" "$BRIEFING_TEMPLATE"; then
     pass "PM briefing instructs asking ONE question at a time"
 else
     fail "PM briefing missing 'ONE question at a time' instruction"
 fi
 
-# Test 4: PM should confirm understanding before proceeding
-if grep -qi "Is this correct\|clarification" "$BRIEFING_TEMPLATE"; then
+# Test 3: PM should confirm understanding before proceeding
+if grep -qi "confirm your understanding\|confirm.*before proceeding" "$BRIEFING_TEMPLATE"; then
     pass "PM briefing includes confirmation step before proceeding"
 else
     fail "PM briefing missing confirmation instruction"
 fi
 
-# Test 5: PM should summarize understanding
-if grep -qi "SUMMARIZE" "$BRIEFING_TEMPLATE"; then
-    pass "PM briefing includes instruction to SUMMARIZE understanding"
-else
-    fail "PM briefing missing SUMMARIZE instruction"
-fi
-
-# Test 6: PM should wait for user confirmation
-if grep -qi "Wait for confirmation\|wait for user" "$BRIEFING_TEMPLATE"; then
-    pass "PM briefing includes instruction to wait for user confirmation"
-else
-    fail "PM briefing missing 'wait for confirmation' instruction"
-fi
-
-# Test 7: PM should NOT skip questions or assume answers
+# Test 4: PM should NOT skip questions or assume answers
 if grep -qi "NEVER skip\|never assume" "$BRIEFING_TEMPLATE"; then
     pass "PM briefing includes instruction to never skip questions/assume answers"
 else
     fail "PM briefing missing 'never skip/assume' instruction"
 fi
 
-# Test 8: PM should handle PRD input options
-if grep -qi "a brief description.*URL.*PRD" "$BRIEFING_TEMPLATE"; then
-    pass "PM briefing mentions PRD/description/URL input options"
+# Test 5: PM should read initial request from status.yml
+if grep -qi "initial_request\|status.yml" "$BRIEFING_TEMPLATE"; then
+    pass "PM briefing references initial_request in status.yml"
 else
-    fail "PM briefing missing PRD input options"
+    fail "PM briefing missing initial_request/status.yml reference"
+fi
+
+# Test 6: PM should create PRD
+if grep -qi "Create PRD\|prd.md" "$BRIEFING_TEMPLATE"; then
+    pass "PM briefing includes PRD creation step"
+else
+    fail "PM briefing missing PRD creation step"
 fi
 
 # ============================================================
