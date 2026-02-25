@@ -278,10 +278,10 @@ else
     fail "planning-briefing.md missing title"
 fi
 
-if grep -q "What are we building" "$PM_BRIEFING" 2>/dev/null; then
-    pass "planning-briefing.md has discovery questions"
+if grep -q "Discovery" "$PM_BRIEFING" 2>/dev/null; then
+    pass "planning-briefing.md has discovery section"
 else
-    fail "planning-briefing.md missing discovery questions"
+    fail "planning-briefing.md missing discovery section"
 fi
 
 if grep -q "TEAM TEMPLATE SELECTION" "$PM_BRIEFING" 2>/dev/null; then
