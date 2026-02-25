@@ -419,12 +419,10 @@ class TestAddAgentToYml:
         )
         assert result is True
 
-        # _write_agents_yml writes agent pane_id unquoted (%10), which is not
-        # parseable by yaml.safe_load. Check raw text content instead.
         content = (wf / "agents.yml").read_text()
-        assert "name: developer" in content
-        assert "pane_id: %10" in content
-        assert "role: developer" in content
+        assert 'name: "developer"' in content
+        assert 'pane_id: "%10"' in content
+        assert 'role: "developer"' in content
 
     def test_updates_existing_agent(self, monkeypatch, tmp_project):
         monkeypatch.setenv("WORKFLOW_NAME", "001-test")
@@ -436,12 +434,11 @@ class TestAddAgentToYml:
         WorkflowOps.add_agent_to_yml(str(tmp_project), "dev", "developer", 1, "sonnet", "sess")
         WorkflowOps.add_agent_to_yml(str(tmp_project), "dev", "developer", 2, "opus", "sess", pane_id="%20")
 
-        # _write_agents_yml writes unquoted pane_id; check raw content
         content = (wf / "agents.yml").read_text()
         # Should only have one agent entry (updated, not duplicated)
-        assert content.count("name: dev") == 1
+        assert content.count('name: "dev"') == 1
         assert "window: 2" in content
-        assert "model: opus" in content
+        assert 'model: "opus"' in content
 
     def test_auto_creates_agents_yml(self, monkeypatch, tmp_project):
         monkeypatch.setenv("WORKFLOW_NAME", "001-test")
