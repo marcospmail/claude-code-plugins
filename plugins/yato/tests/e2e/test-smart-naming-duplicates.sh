@@ -95,25 +95,25 @@ else
     fail "agents.yml not found at $AGENTS_YML"
 fi
 
-if grep -q "name: developer$" "$AGENTS_YML" 2>/dev/null; then
+if grep -q 'name: "developer"' "$AGENTS_YML" 2>/dev/null; then
     pass "agents.yml: developer (no suffix)"
 else
     fail "agents.yml should have 'developer' not 'developer-1'"
 fi
 
-if grep -q "name: qa-1$" "$AGENTS_YML" 2>/dev/null; then
+if grep -q 'name: "qa-1"' "$AGENTS_YML" 2>/dev/null; then
     pass "agents.yml: qa-1"
 else
     fail "agents.yml should have 'qa-1'"
 fi
 
-if grep -q "name: qa-2$" "$AGENTS_YML" 2>/dev/null; then
+if grep -q 'name: "qa-2"' "$AGENTS_YML" 2>/dev/null; then
     pass "agents.yml: qa-2"
 else
     fail "agents.yml should have 'qa-2'"
 fi
 
-if grep -q "name: code-reviewer$" "$AGENTS_YML" 2>/dev/null; then
+if grep -q 'name: "code-reviewer"' "$AGENTS_YML" 2>/dev/null; then
     pass "agents.yml: code-reviewer (no suffix)"
 else
     fail "agents.yml should have 'code-reviewer' not 'code-reviewer-1'"
@@ -157,14 +157,16 @@ fi
 echo ""
 echo "Phase 6: Verifying model assignments..."
 
-CR_MODEL=$(grep -A 5 "name: code-reviewer$" "$AGENTS_YML" 2>/dev/null | grep "model:" | awk '{print $2}')
+CR_MODEL=$(grep -A 5 'name: "code-reviewer"' "$AGENTS_YML" 2>/dev/null | grep "model:" | awk '{print $2}')
+CR_MODEL=$(echo "$CR_MODEL" | tr -d '"')
 if [[ "$CR_MODEL" == "opus" ]]; then
     pass "code-reviewer uses opus model"
 else
     fail "code-reviewer should use opus, got: $CR_MODEL"
 fi
 
-DEV_MODEL=$(grep -A 5 "name: developer$" "$AGENTS_YML" 2>/dev/null | grep "model:" | awk '{print $2}')
+DEV_MODEL=$(grep -A 5 'name: "developer"' "$AGENTS_YML" 2>/dev/null | grep "model:" | awk '{print $2}')
+DEV_MODEL=$(echo "$DEV_MODEL" | tr -d '"')
 if [[ "$DEV_MODEL" == "sonnet" ]]; then
     pass "developer uses sonnet model"
 else
