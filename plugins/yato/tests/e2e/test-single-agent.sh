@@ -82,7 +82,7 @@ else
 fi
 
 # Check the agent is named 'qa' (not 'qa-1')
-if grep -q "name: qa$" "$AGENTS_YML" 2>/dev/null; then
+if grep -q 'name: "qa"' "$AGENTS_YML" 2>/dev/null; then
     pass "Single QA named 'qa' (no number suffix)"
 else
     fail "Single QA should be named 'qa' not 'qa-1'"
