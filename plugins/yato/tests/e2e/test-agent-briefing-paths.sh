@@ -106,14 +106,14 @@ else
 fi
 
 # Test 3: identity.yml has correct name field
-if grep -q "^name: discoverer$" "$WORKFLOW_PATH/agents/discoverer/identity.yml" 2>/dev/null; then
+if grep -q '^name: "discoverer"$' "$WORKFLOW_PATH/agents/discoverer/identity.yml" 2>/dev/null; then
     pass "identity.yml name: discoverer"
 else
     fail "identity.yml has wrong name"
 fi
 
 # Test 4: identity.yml has correct role field
-if grep -q "^role: qa$" "$WORKFLOW_PATH/agents/discoverer/identity.yml" 2>/dev/null; then
+if grep -q '^role: "qa"$' "$WORKFLOW_PATH/agents/discoverer/identity.yml" 2>/dev/null; then
     pass "identity.yml role: qa (custom name with qa role)"
 else
     fail "identity.yml has wrong role"
@@ -155,14 +155,14 @@ echo ""
 echo "Phase 6: Verifying agents.yml structure..."
 
 # Test 8: agents.yml has discoverer entry
-if grep -q "name: discoverer$" "$WORKFLOW_PATH/agents.yml" 2>/dev/null; then
+if grep -q 'name: "discoverer"' "$WORKFLOW_PATH/agents.yml" 2>/dev/null; then
     pass "agents.yml has agent: discoverer"
 else
     fail "agents.yml missing discoverer"
 fi
 
 # Test 9: agents.yml shows qa role for discoverer
-if grep -A 4 "name: discoverer$" "$WORKFLOW_PATH/agents.yml" 2>/dev/null | grep -q "role: qa"; then
+if grep -A 4 'name: "discoverer"' "$WORKFLOW_PATH/agents.yml" 2>/dev/null | grep -q "role: qa"; then
     pass "agents.yml shows discoverer role: qa"
 else
     fail "agents.yml has wrong role for discoverer"
