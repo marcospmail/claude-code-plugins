@@ -1,7 +1,7 @@
 #!/bin/bash
-# test-pm-file-access-guard.sh
+# test-pm-file-edit-guard.sh
 #
-# E2E Test: PreToolUse hook that restricts PM file access
+# E2E Test: PreToolUse hook that restricts PM file edit
 #
 # This test verifies:
 # 1. Hook is registered in hooks.json
@@ -42,7 +42,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/pm-file-access-guard.py"
+HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/pm-file-edit-guard.py"
 HOOKS_JSON="$PROJECT_ROOT/hooks/hooks.json"
 
 # Helper: run hook from a tmux pane and capture output
@@ -80,8 +80,8 @@ else
     exit 1
 fi
 
-if jq -e '.hooks.PreToolUse[0].hooks[] | select(.command | contains("pm-file-access-guard.py"))' "$HOOKS_JSON" >/dev/null 2>&1; then
-    pass "PreToolUse hook configured for pm-file-access-guard.py"
+if jq -e '.hooks.PreToolUse[0].hooks[] | select(.command | contains("pm-file-edit-guard.py"))' "$HOOKS_JSON" >/dev/null 2>&1; then
+    pass "PreToolUse hook configured for pm-file-edit-guard.py"
 else
     fail "PreToolUse hook not configured correctly in hooks.json"
     exit 1

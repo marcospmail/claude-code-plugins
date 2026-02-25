@@ -1,5 +1,5 @@
 #!/bin/bash
-# test-block-task-tool.sh
+# test-block-task-guard.sh
 #
 # E2E Test: PreToolUse hook that blocks agents from using the Task sub-agent tool
 #
@@ -19,7 +19,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TEST_NAME="block-task-tool"
+TEST_NAME="block-task-guard"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 SESSION_NAME="e2e-task-block-$TEST_ID"
@@ -46,7 +46,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/block-task-tool.py"
+HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/block-task-guard.py"
 HOOKS_JSON="$PROJECT_ROOT/hooks/hooks.json"
 
 # Helper: run hook from a tmux pane and capture output
@@ -83,7 +83,7 @@ else
     exit 1
 fi
 
-if jq -e '.hooks.PreToolUse[] | select(.matcher == "Task") | .hooks[] | select(.command | contains("block-task-tool.py"))' "$HOOKS_JSON" >/dev/null 2>&1; then
+if jq -e '.hooks.PreToolUse[] | select(.matcher == "Task") | .hooks[] | select(.command | contains("block-task-guard.py"))' "$HOOKS_JSON" >/dev/null 2>&1; then
     pass "PreToolUse hook configured with matcher 'Task'"
 else
     fail "PreToolUse hook not configured correctly in hooks.json"

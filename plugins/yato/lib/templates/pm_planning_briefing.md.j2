@@ -28,7 +28,7 @@ YOUR ROLE: Orchestrator and coordinator. You plan, assign, track, and coordinate
 - Update PRD with technical details you invented (only use user-provided requirements)
 - Use Write/Edit/Bash tools for implementation work
 - Use TodoWrite tool (forbidden - use workflow tasks.json instead)
-- Use Task tool or sub-agents to create team members (ALWAYS use create-team.sh directly via Bash)
+- Use Task tool or sub-agents to CREATE TEAM MEMBERS (ALWAYS use create-team.sh directly via Bash). Task tool IS allowed for other purposes (e.g., Explorer agents for codebase analysis).
 - Delegate agent creation to tmux-meta-agent or any other sub-agent
 
 **GOLDEN RULE: If it's not coordination/planning, DELEGATE IT to an agent via /send-to-agent.**
@@ -37,31 +37,31 @@ YOUR ROLE: Orchestrator and coordinator. You plan, assign, track, and coordinate
 
 ## Workflow Steps
 
-### Step 1: Check for Existing Workflow Context
+### Step 1: Read Workflow Context
 
-a) Get workflow name from tmux env: `WORKFLOW_NAME=$(tmux showenv WORKFLOW_NAME 2>/dev/null | cut -d= -f2)`
-   - If WORKFLOW_NAME is set: Read `.workflow/$WORKFLOW_NAME/prd.md` and `.workflow/$WORKFLOW_NAME/status.yml`
-     * Check `initial_request` field in status.yml - this is the user's original request.
-     * SUMMARIZE what you understand from existing context, then ALWAYS ask:
-       'Based on your request, here's my understanding: [summary]. Is this correct? Any changes or clarifications?'
-     * Wait for confirmation before proceeding. Never skip this confirmation step.
-   - If WORKFLOW_NAME is NOT set: Analyze the project directory, then:
-     * If EMPTY/NEW PROJECT: Ask 'What are we building?' and inform user they can provide: a brief description, a URL to a file/line, a link to a PRD, or paste a full PRD.
-     * If EXISTING PROJECT: Summarize what you found, then ask 'What would you like to accomplish?' and inform user they can provide: a brief description, a URL to a file/line, a link to a PRD, or paste a full PRD.
+Get workflow name and read the initial request:
+```
+WORKFLOW_NAME=$(tmux showenv WORKFLOW_NAME 2>/dev/null | cut -d= -f2)
+```
+Read `.workflow/$WORKFLOW_NAME/status.yml` and check the `initial_request` field — this is what the user wants done.
 
-### Step 2: Create Workflow Folder
+{% if is_existing_project %}
+### Step 2: Codebase Exploration
 
-AFTER getting user's initial request: Create workflow folder IMMEDIATELY.
+BEFORE asking any questions, explore the codebase to understand what exists. Use the Task tool with `subagent_type=Explore` to analyze:
+- Project structure (directories, key files, entry points)
+- Existing patterns, conventions, and architecture
+- Relevant code related to the user's request
+- Existing tests, CI/CD, dependencies
 
-Run: `{{ yato_path }}/bin/init-workflow.sh {{ project_path }} "<short-3-5-word-title>"`
+MANDATORY: Write the analysis to `.workflow/$WORKFLOW_NAME/codebase-analysis.md` in the workflow folder using the Write tool. This file is used by agents later and MUST exist before proceeding to Step 3.
 
-Example: `init-workflow.sh {{ project_path }} "Add user authentication"`
-
-This creates: `.workflow/001-add-user-auth/` and sets it as current. ALL subsequent files go in this workflow folder!
+This ensures your follow-up questions are INFORMED by the actual codebase, not generic.
+{% endif %}
 
 ### Step 3: Discovery
 
-ONLY if PRD incomplete: Ask follow-up questions ONE at a time to fill gaps. Once you have enough detail for a complete PRD, stop asking.
+ONLY if PRD incomplete: Ask follow-up questions ONE at a time to fill gaps. Use insights from codebase-analysis.md to ask SPECIFIC, informed questions. Once you have enough detail for a complete PRD, stop asking.
 
 ### Step 4: Create PRD
 
@@ -283,4 +283,4 @@ Only the USER can stop early via /cancel-checkin skill if they choose to.
 
 ---
 
-**Start now: Check for .workflow/prd.md first, then begin discovery questions!**
+**Start now: Read status.yml for the initial request, explore the codebase, then begin informed discovery!**

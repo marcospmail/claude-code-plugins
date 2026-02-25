@@ -226,7 +226,8 @@ class Orchestrator:
         self,
         session_name: str,
         project_path: str,
-        workflow_name: Optional[str] = None
+        workflow_name: Optional[str] = None,
+        is_existing_project: bool = False
     ) -> Dict:
         """
         Deploy only a PM agent in planning mode.
@@ -332,14 +333,16 @@ class Orchestrator:
         # Always run init-files to ensure the full set of files is generated via Jinja2 templates
         if workflow_name:
             lib_dir = Path(__file__).parent
-            subprocess.run(
-                ["uv", "run", "--directory", str(lib_dir.parent),
-                 "python", str(lib_dir / "agent_manager.py"),
-                 "init-files", "pm", "pm",
-                 "-p", str(project_dir), "-m", "opus",
-                 "-w", workflow_name],
-                capture_output=True
-            )
+            init_cmd = [
+                "uv", "run", "--directory", str(lib_dir.parent),
+                "python", str(lib_dir / "agent_manager.py"),
+                "init-files", "pm", "pm",
+                "-p", str(project_dir), "-m", "opus",
+                "-w", workflow_name,
+            ]
+            if is_existing_project:
+                init_cmd.append("--existing")
+            subprocess.run(init_cmd, capture_output=True)
 
         # Register PM agent - PM always uses Opus
         agent = self._register_agent_to_workflow(
@@ -403,16 +406,17 @@ class Orchestrator:
             f"  4. constraints.md - what you cannot do\n"
             f"  5. planning-briefing.md - your complete planning workflow\n\n"
             f"After reading all files, begin the workflow in planning-briefing.md.\n"
-            f"Start now: Check for .workflow/prd.md first, then begin discovery questions!"
+            f"Start now: Read status.yml for the initial request, explore the codebase, then begin informed discovery!"
         )
 
-        # Send briefing via tmux_utils (handles suffix stacking internally)
+        # Send briefing directly to PM pane (orchestrator knows the target)
+        # skip_suffix because this is a system briefing, not an agent notification
         _wf_status = None
         if self._project_path and self._workflow_name:
             _sf = self._project_path / ".workflow" / self._workflow_name / "status.yml"
             if _sf.exists():
                 _wf_status = str(_sf)
-        self.tmux.send_message(pm_target, briefing, workflow_status_file=_wf_status)
+        self.tmux.send_message(pm_target, briefing, workflow_status_file=_wf_status, _skip_suffix=True)
 
         return True
 
@@ -821,7 +825,8 @@ def cmd_deploy_pm(args: argparse.Namespace) -> int:
     result = orchestrator.deploy_pm_only(
         session_name=args.session,
         project_path=project_path,
-        workflow_name=args.workflow
+        workflow_name=args.workflow,
+        is_existing_project=args.existing
     )
 
     if "error" in result:
@@ -876,6 +881,7 @@ def main():
     deploy_pm_parser.add_argument("session", help="Session name")
     deploy_pm_parser.add_argument("-p", "--path", help="Project path")
     deploy_pm_parser.add_argument("-w", "--workflow", help="Workflow name (e.g., 001-add-feature)")
+    deploy_pm_parser.add_argument("--existing", action="store_true", help="Existing project (enables codebase exploration)")
 
     # start command
     start_parser = subparsers.add_parser("start", help="Start Claude in agents")

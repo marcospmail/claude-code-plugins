@@ -63,7 +63,7 @@ def _get_workflow_name():
 
 
 def find_workflow_path():
-    """Find the current workflow path (same pattern as block-task-tool.py)."""
+    """Find the current workflow path (same pattern as block-task-guard.py)."""
     project_root = find_project_root_from_cwd()
     if not project_root:
         return None

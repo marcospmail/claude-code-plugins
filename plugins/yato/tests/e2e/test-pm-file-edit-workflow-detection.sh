@@ -1,9 +1,9 @@
 #!/bin/bash
-# test-pm-file-access-workflow-detection.sh
+# test-pm-file-edit-workflow-detection.sh
 #
-# E2E Test: PM file access guard via workflow-based role detection (agents.yml)
+# E2E Test: PM file edit guard via workflow-based role detection (agents.yml)
 #
-# This test verifies that the pm-file-access-guard hook detects the PM role
+# This test verifies that the pm-file-edit-guard hook detects the PM role
 # by matching the current tmux window/pane against agents.yml.
 #
 # This is the detection path in production: Claude Code runs in a
@@ -41,8 +41,8 @@ fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 cleanup() {
     echo ""; echo "Cleaning up..."
     # Restore cached hooks if we replaced them
-    if [[ -n "$CACHE_HOOK_DIR" && -f "$CACHE_HOOK_DIR/pm-file-access-guard.py.bak" ]]; then
-        mv "$CACHE_HOOK_DIR/pm-file-access-guard.py.bak" "$CACHE_HOOK_DIR/pm-file-access-guard.py"
+    if [[ -n "$CACHE_HOOK_DIR" && -f "$CACHE_HOOK_DIR/pm-file-edit-guard.py.bak" ]]; then
+        mv "$CACHE_HOOK_DIR/pm-file-edit-guard.py.bak" "$CACHE_HOOK_DIR/pm-file-edit-guard.py"
     fi
     if [[ -n "$CACHE_HOOK_DIR" && -f "$CACHE_HOOK_DIR/role_detection.py.bak" ]]; then
         mv "$CACHE_HOOK_DIR/role_detection.py.bak" "$CACHE_HOOK_DIR/role_detection.py"
@@ -55,7 +55,7 @@ cleanup() {
 CACHE_HOOK_DIR=""
 trap cleanup EXIT
 
-HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/pm-file-access-guard.py"
+HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/pm-file-edit-guard.py"
 
 # ============================================================
 # Phase 1: Verify hook script exists
@@ -470,9 +470,9 @@ except Exception:
     pass
 " 2>/dev/null)
 CACHE_HOOK_DIR="${CACHE_INSTALL_PATH:+$CACHE_INSTALL_PATH/hooks/scripts}"
-if [[ -n "$CACHE_HOOK_DIR" && -f "$CACHE_HOOK_DIR/pm-file-access-guard.py" ]]; then
-    cp "$CACHE_HOOK_DIR/pm-file-access-guard.py" "$CACHE_HOOK_DIR/pm-file-access-guard.py.bak"
-    cp "$HOOK_SCRIPT" "$CACHE_HOOK_DIR/pm-file-access-guard.py"
+if [[ -n "$CACHE_HOOK_DIR" && -f "$CACHE_HOOK_DIR/pm-file-edit-guard.py" ]]; then
+    cp "$CACHE_HOOK_DIR/pm-file-edit-guard.py" "$CACHE_HOOK_DIR/pm-file-edit-guard.py.bak"
+    cp "$HOOK_SCRIPT" "$CACHE_HOOK_DIR/pm-file-edit-guard.py"
     # Also copy the shared role_detection module
     ROLE_DETECTION_SRC="$PROJECT_ROOT/hooks/scripts/role_detection.py"
     if [[ -f "$ROLE_DETECTION_SRC" ]]; then
@@ -589,8 +589,8 @@ AGEOF
     fi
 
     # Restore the original cached hooks
-    if [[ -f "$CACHE_HOOK_DIR/pm-file-access-guard.py.bak" ]]; then
-        mv "$CACHE_HOOK_DIR/pm-file-access-guard.py.bak" "$CACHE_HOOK_DIR/pm-file-access-guard.py"
+    if [[ -f "$CACHE_HOOK_DIR/pm-file-edit-guard.py.bak" ]]; then
+        mv "$CACHE_HOOK_DIR/pm-file-edit-guard.py.bak" "$CACHE_HOOK_DIR/pm-file-edit-guard.py"
     fi
     if [[ -f "$CACHE_HOOK_DIR/role_detection.py.bak" ]]; then
         mv "$CACHE_HOOK_DIR/role_detection.py.bak" "$CACHE_HOOK_DIR/role_detection.py"

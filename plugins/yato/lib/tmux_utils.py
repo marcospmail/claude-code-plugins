@@ -616,7 +616,7 @@ def restart_checkin_display(target: Optional[str] = None, yato_path: Optional[st
         return False
 
 
-def notify_pm(message: str, session: Optional[str] = None, workflow_status_file: Optional[str] = None) -> bool:
+def notify_pm(message: str, session: Optional[str] = None, workflow_status_file: Optional[str] = None, skip_suffix: bool = False) -> bool:
     """
     Send a notification message to the Project Manager.
 
@@ -636,6 +636,7 @@ def notify_pm(message: str, session: Optional[str] = None, workflow_status_file:
         message: The notification message (can include prefix like [DONE])
         session: Session name (auto-detected if not provided)
         workflow_status_file: Path to workflow status.yml for workflow-level suffix
+        skip_suffix: If True, skip appending AGENTS_TO_PM_SUFFIX and workflow suffix
 
     Returns:
         True if successful, False otherwise
@@ -669,7 +670,8 @@ def notify_pm(message: str, session: Optional[str] = None, workflow_status_file:
             if data and isinstance(data, dict):
                 workflow_suffix = data.get("agent_to_pm_message_suffix", "")
 
-    message = _build_message_with_suffixes(message, yato_suffix, workflow_suffix)
+    if not skip_suffix:
+        message = _build_message_with_suffixes(message, yato_suffix, workflow_suffix)
 
     # Look up PM pane_id from agents.yml
     pm_target = _lookup_pm_pane_id(session, workflow_status_file)

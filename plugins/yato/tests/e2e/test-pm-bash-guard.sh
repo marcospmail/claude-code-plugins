@@ -1,5 +1,5 @@
 #!/bin/bash
-# test-pm-bash-blocklist.sh
+# test-pm-bash-guard.sh
 #
 # E2E Test: PreToolUse hook that restricts PM from file-modifying Bash commands
 #
@@ -18,7 +18,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TEST_NAME="pm-bash-blocklist"
+TEST_NAME="pm-bash-guard"
 TEST_ID="$$"
 TEST_DIR="/tmp/e2e-test-$TEST_NAME-$TEST_ID"
 SESSION_NAME="e2e-bash-allow-$TEST_ID"
@@ -47,7 +47,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/pm-bash-blocklist.py"
+HOOK_SCRIPT="$PROJECT_ROOT/hooks/scripts/pm-bash-guard.py"
 HOOKS_JSON="$PROJECT_ROOT/hooks/hooks.json"
 
 # Helper: run hook from a tmux pane with a given command and capture output
@@ -93,8 +93,8 @@ else
     exit 1
 fi
 
-if jq -e '.hooks.PreToolUse[] | select(.matcher == "Bash") | .hooks[] | select(.command | contains("pm-bash-blocklist.py"))' "$HOOKS_JSON" >/dev/null 2>&1; then
-    pass "PreToolUse hook configured for pm-bash-blocklist.py with Bash matcher"
+if jq -e '.hooks.PreToolUse[] | select(.matcher == "Bash") | .hooks[] | select(.command | contains("pm-bash-guard.py"))' "$HOOKS_JSON" >/dev/null 2>&1; then
+    pass "PreToolUse hook configured for pm-bash-guard.py with Bash matcher"
 else
     fail "PreToolUse hook not configured correctly in hooks.json"
     exit 1

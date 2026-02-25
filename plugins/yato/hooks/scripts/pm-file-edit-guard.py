@@ -36,6 +36,7 @@ PM_ALLOWED_PATTERNS = [
     ".workflow/*/status.yml",
     ".workflow/*/agents.yml",
     ".workflow/*/checkins.json",
+    ".workflow/*/codebase-analysis.md",
     # Agent configuration files
     ".workflow/*/agents/*/identity.yml",
     ".workflow/*/agents/*/instructions.md",

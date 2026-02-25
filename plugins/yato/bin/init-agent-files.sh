@@ -240,7 +240,7 @@ if [[ "$ROLE" == "pm" ]]; then
 - Do NOT run tests directly (delegate to QA agent)
 - Do NOT make git commits (delegate to agents)
 - Do NOT use TodoWrite tool (forbidden - use workflow tasks.json instead)
-- Do NOT use Task tool or sub-agents to create team members (ALWAYS use create-team.sh directly via Bash)
+- Do NOT use Task tool or sub-agents to CREATE TEAM MEMBERS (ALWAYS use create-team.sh directly via Bash). Task tool IS allowed for other purposes (e.g., Explorer agents for codebase analysis).
 - Do NOT make technical implementation decisions without delegating
 - Do NOT update PRD with technical details you invented (only use user-provided requirements)
 - Do NOT use Write/Edit/Bash tools for implementation work

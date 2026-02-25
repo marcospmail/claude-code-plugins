@@ -257,6 +257,7 @@ class AgentManager:
         role: str,
         model: str = "sonnet",
         workflow_name: Optional[str] = None,
+        is_existing_project: bool = False,
     ) -> Optional[str]:
         """
         Create agent configuration files (without tmux window).
@@ -369,7 +370,7 @@ class AgentManager:
 - Do NOT run tests directly (delegate to QA agent)
 - Do NOT make git commits (delegate to agents)
 - Do NOT use TodoWrite tool (forbidden - use workflow tasks.json instead)
-- Do NOT use Task tool or sub-agents to create team members (ALWAYS use create-team.sh directly via Bash)
+- Do NOT use Task tool or sub-agents to CREATE TEAM MEMBERS (ALWAYS use create-team.sh directly via Bash). Task tool IS allowed for other purposes (e.g., Explorer agents for codebase analysis).
 - Do NOT make technical implementation decisions without delegating
 - Do NOT update PRD with technical details you invented (only use user-provided requirements)
 - Do NOT use Write/Edit/Bash tools for implementation work
@@ -418,6 +419,7 @@ class AgentManager:
             briefing_content = self._render_template("pm_planning_briefing.md.j2", {
                 "yato_path": str(self.yato_path),
                 "project_path": project_path,
+                "is_existing_project": is_existing_project,
             })
             (agent_dir / "planning-briefing.md").write_text(briefing_content)
 
@@ -849,6 +851,7 @@ if __name__ == "__main__":
     init_parser.add_argument("--project", "-p", default=".", help="Project path")
     init_parser.add_argument("--model", "-m", default="sonnet", help="Model")
     init_parser.add_argument("--workflow", "-w", default=None, help="Workflow name (auto-detected if not provided)")
+    init_parser.add_argument("--existing", action="store_true", help="Existing project (enables codebase exploration)")
 
     # create command
     create_parser = subparsers.add_parser("create", help="Create agent with tmux window")
@@ -864,7 +867,7 @@ if __name__ == "__main__":
 
     if args.command == "init-files":
         manager = AgentManager()
-        manager.init_agent_files(args.project, args.agent_name, args.role, args.model, args.workflow)
+        manager.init_agent_files(args.project, args.agent_name, args.role, args.model, args.workflow, is_existing_project=args.existing)
 
     elif args.command == "create":
         manager = AgentManager()

@@ -89,7 +89,7 @@ Session name format: `{project}_{workflow}` (e.g., `my-project_001-add-feature`)
 
 ```bash
 SESSION_NAME="${PROJECT_SLUG}_${WORKFLOW_NAME}"
-uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME"
+uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orchestrator.py deploy-pm "$SESSION_NAME" -p "$PROJECT_PATH" -w "$WORKFLOW_NAME" --existing
 ```
 
 ## Step 6: Connect or Give Attach Command

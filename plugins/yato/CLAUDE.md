@@ -324,7 +324,22 @@ echo "=== Next ==="
 ## Development
 
 ### Running Tests
+
 ```bash
+# Run all unit tests (666 tests)
+bin/run-tests.sh
+
+# Run with coverage report
+bin/run-tests.sh --cov
+
+# Run specific module tests
+bin/run-tests.sh --module tmux_utils
+bin/run-tests.sh --module checkin_scheduler
+
+# Or directly via uv
+uv run pytest tests/unit/ -v
+uv run pytest tests/unit/ --cov=lib --cov-report=term-missing
+
 # E2E tests
 bash tests/e2e/run-all-tests.sh
 ```
