@@ -114,7 +114,7 @@ if [[ -f "$PM_IDENTITY" ]]; then
     pass "PM identity.yml exists"
 
     # Test 2: PM model is opus
-    PM_MODEL=$(grep "model:" "$PM_IDENTITY" | head -1 | awk '{print $2}')
+    PM_MODEL=$(grep "model:" "$PM_IDENTITY" | head -1 | awk '{print $2}' | tr -d '"')
     if [[ "$PM_MODEL" == "opus" ]]; then
         pass "PM uses opus model"
     else
