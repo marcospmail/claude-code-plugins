@@ -22,6 +22,11 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # Source workflow utilities
 source "$SCRIPT_DIR/workflow-utils.sh"
 
+# Support isolated tmux socket (used by e2e tests)
+# Normal use: TMUX_SOCKET unset → TMUX_FLAGS="" → bare tmux (unchanged)
+# Tests:      TMUX_SOCKET="yato-e2e-test" → TMUX_FLAGS="-L yato-e2e-test" (isolated)
+TMUX_FLAGS="${TMUX_SOCKET:+-L $TMUX_SOCKET}"
+
 # Parse arguments
 PROJECT_PATH="${1:-}"
 WORKFLOW_NAME="${2:-}"
@@ -113,13 +118,13 @@ echo ""
 IN_TMUX=false
 if [[ -n "$TMUX" ]]; then
     IN_TMUX=true
-    SESSION=$(tmux display-message -p '#S')
+    SESSION=$(tmux $TMUX_FLAGS display-message -p '#S')
     echo "Using current tmux session: $SESSION"
 else
     # Generate session name from project
     SESSION=$(basename "$PROJECT_PATH" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
     echo "Creating new session: $SESSION"
-    tmux new-session -d -s "$SESSION" -c "$PROJECT_PATH"
+    tmux $TMUX_FLAGS new-session -d -s "$SESSION" -c "$PROJECT_PATH"
 fi
 
 # Update session in status.yml directly (not using current file)
@@ -128,11 +133,11 @@ if [[ -f "$STATUS_FILE" ]]; then
 fi
 
 # CRITICAL: Set WORKFLOW_NAME in tmux environment for other scripts
-tmux setenv -t "$SESSION" WORKFLOW_NAME "$WORKFLOW_NAME"
+tmux $TMUX_FLAGS setenv -t "$SESSION" WORKFLOW_NAME "$WORKFLOW_NAME"
 
 # Enable pane titles display
-tmux set-option -t "$SESSION" pane-border-status top
-tmux set-option -t "$SESSION" pane-border-format " #{pane_title} "
+tmux $TMUX_FLAGS set-option -t "$SESSION" pane-border-status top
+tmux $TMUX_FLAGS set-option -t "$SESSION" pane-border-format " #{pane_title} "
 
 # Check if we have a saved layout
 LAYOUT_FILE="$WORKFLOW_PATH/layout.yml"
@@ -143,24 +148,24 @@ LAYOUT_FILE="$WORKFLOW_PATH/layout.yml"
 echo ""
 echo "Setting up pane layout..."
 
-PANE_COUNT=$(tmux list-panes -t "$SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+PANE_COUNT=$(tmux $TMUX_FLAGS list-panes -t "$SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
 
 if [[ "$PANE_COUNT" -lt 2 ]]; then
     # Start fresh - create the layout
     # Split vertically - Check-ins on top (20% height)
-    tmux split-window -t "$SESSION:0.0" -v -b -p 20 -c "$PROJECT_PATH"
+    tmux $TMUX_FLAGS split-window -t "$SESSION:0.0" -v -b -p 20 -c "$PROJECT_PATH"
     # Now: pane 0 = Check-ins, pane 1 = PM
 
-    tmux select-pane -t "$SESSION:0.0" -T "Check-ins"
-    tmux set-option -p -t "$SESSION:0.0" allow-set-title off
+    tmux $TMUX_FLAGS select-pane -t "$SESSION:0.0" -T "Check-ins"
+    tmux $TMUX_FLAGS set-option -p -t "$SESSION:0.0" allow-set-title off
 
-    tmux select-pane -t "$SESSION:0.1" -T "PM"
-    tmux set-option -p -t "$SESSION:0.1" allow-set-title off
+    tmux $TMUX_FLAGS select-pane -t "$SESSION:0.1" -T "PM"
+    tmux $TMUX_FLAGS set-option -p -t "$SESSION:0.1" allow-set-title off
 fi
 
 # Capture global pane IDs for check-ins and PM
-CHECKINS_PANE_ID=$(tmux display-message -t "$SESSION:0.0" -p '#{pane_id}' 2>/dev/null)
-PM_PANE_ID=$(tmux display-message -t "$SESSION:0.1" -p '#{pane_id}' 2>/dev/null)
+CHECKINS_PANE_ID=$(tmux $TMUX_FLAGS display-message -t "$SESSION:0.0" -p '#{pane_id}' 2>/dev/null)
+PM_PANE_ID=$(tmux $TMUX_FLAGS display-message -t "$SESSION:0.1" -p '#{pane_id}' 2>/dev/null)
 CHECKINS_PANE="${CHECKINS_PANE_ID:-$SESSION:0.0}"
 PM_PANE="${PM_PANE_ID:-$SESSION:0.1}"
 
@@ -253,7 +258,7 @@ for i in "${!AGENT_NAMES[@]}"; do
 
     # Create new window for this agent with specific window name
     # Capture both window index and global pane ID
-    WINDOW_OUTPUT=$(tmux new-window -t "$SESSION" -n "$agent_name" -c "$PROJECT_PATH" -P -F "#{session_name}:#{window_index}:#{pane_id}" 2>&1)
+    WINDOW_OUTPUT=$(tmux $TMUX_FLAGS new-window -t "$SESSION" -n "$agent_name" -c "$PROJECT_PATH" -P -F "#{session_name}:#{window_index}:#{pane_id}" 2>&1)
 
     if [[ $? -ne 0 ]] || [[ -z "$WINDOW_OUTPUT" ]]; then
         echo "    Warning: Could not create window for $agent_name"
@@ -268,7 +273,7 @@ for i in "${!AGENT_NAMES[@]}"; do
 
     # Start Claude with correct model and bypass permissions
     sleep 0.3
-    tmux send-keys -t "$AGENT_PANE_ID" "claude --dangerously-skip-permissions --model $agent_model" Enter
+    tmux $TMUX_FLAGS send-keys -t "$AGENT_PANE_ID" "claude --dangerously-skip-permissions --model $agent_model" Enter
 
     # Store agent ID and pane ID
     AGENT_IDS+=("$AGENT_WINDOW")
@@ -291,7 +296,7 @@ done
 # Start checkin-display.sh in the check-ins pane
 echo ""
 echo "Starting check-in display..."
-tmux send-keys -t "$CHECKINS_PANE" "$SCRIPT_DIR/checkin-display.sh" Enter
+tmux $TMUX_FLAGS send-keys -t "$CHECKINS_PANE" "$SCRIPT_DIR/checkin-display.sh" Enter
 
 # Restart check-in daemon if there are incomplete tasks and no daemon running
 echo ""
@@ -317,7 +322,7 @@ fi
 # Start Claude in PM pane with opus model
 echo "Starting Claude in PM pane..."
 sleep 0.5
-tmux send-keys -t "$PM_PANE" "claude --dangerously-skip-permissions --model opus" Enter
+tmux $TMUX_FLAGS send-keys -t "$PM_PANE" "claude --dangerously-skip-permissions --model opus" Enter
 
 # Wait for Claude to initialize in PM pane
 echo "Waiting for Claude instances to initialize..."
@@ -364,7 +369,7 @@ lines = content.split('\\n')
 in_agent = False
 result = []
 for line in lines:
-    if '- name: $agent_name' in line:
+    if '- name: \"$agent_name\"' in line or '- name: $agent_name' in line:
         in_agent = True
     elif in_agent and line.strip().startswith('pane_id:'):
         line = re.sub(r'pane_id: .*', 'pane_id: \"$agent_pane_id\"', line)
@@ -408,16 +413,16 @@ done
 echo "Setting pane titles..."
 
 # Check-ins pane
-tmux select-pane -t "$CHECKINS_PANE" -T "Check-ins"
-tmux set-option -p -t "$CHECKINS_PANE" allow-set-title off
+tmux $TMUX_FLAGS select-pane -t "$CHECKINS_PANE" -T "Check-ins"
+tmux $TMUX_FLAGS set-option -p -t "$CHECKINS_PANE" allow-set-title off
 
 # PM pane
-tmux select-pane -t "$PM_PANE" -T "PM"
-tmux set-option -p -t "$PM_PANE" allow-set-title off
+tmux $TMUX_FLAGS select-pane -t "$PM_PANE" -T "PM"
+tmux $TMUX_FLAGS set-option -p -t "$PM_PANE" allow-set-title off
 
 # Re-set PM pane title after a brief pause (Claude may still be initializing)
 sleep 2
-tmux select-pane -t "$PM_PANE" -T "PM"
+tmux $TMUX_FLAGS select-pane -t "$PM_PANE" -T "PM"
 
 # Check if ralph loop was enabled and re-enable it
 RALPH_LOOP_FILE="$WORKFLOW_PATH/ralph-loop.local.md"
@@ -515,7 +520,7 @@ for i in "${!AGENT_NAMES[@]}"; do
 done
 echo ""
 echo "Window layout:"
-tmux list-windows -t "$SESSION" -F "  Window #{window_index}: #{window_name}"
+tmux $TMUX_FLAGS list-windows -t "$SESSION" -F "  Window #{window_index}: #{window_name}"
 
 if [[ "$RALPH_ENABLED" == "true" ]]; then
     echo ""
