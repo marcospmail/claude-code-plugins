@@ -41,7 +41,7 @@ fail() { echo "  FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 cleanup() {
     echo ""; echo "Cleaning up..."
-    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION_NAME" 2>/dev/null || true
     rm -rf "$TEST_DIR" 2>/dev/null || true
     rm -f "$OUTPUT_FILE" "$INPUT_CMD_FILE" "$INPUT_JSON_FILE" 2>/dev/null || true
 }

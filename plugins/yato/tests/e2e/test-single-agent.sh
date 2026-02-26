@@ -89,7 +89,7 @@ else
 fi
 
 # Check agent role is correct
-if grep -q "role: qa" "$AGENTS_YML" 2>/dev/null; then
+if grep -q 'role: "qa"' "$AGENTS_YML" 2>/dev/null; then
     pass "QA agent has correct role"
 else
     fail "QA agent missing correct role"

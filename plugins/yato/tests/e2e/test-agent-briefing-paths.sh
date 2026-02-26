@@ -162,7 +162,7 @@ else
 fi
 
 # Test 9: agents.yml shows qa role for discoverer
-if grep -A 4 'name: "discoverer"' "$WORKFLOW_PATH/agents.yml" 2>/dev/null | grep -q "role: qa"; then
+if grep -A 4 'name: "discoverer"' "$WORKFLOW_PATH/agents.yml" 2>/dev/null | grep -q 'role: "qa"'; then
     pass "agents.yml shows discoverer role: qa"
 else
     fail "agents.yml has wrong role for discoverer"
