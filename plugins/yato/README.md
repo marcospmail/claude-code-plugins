@@ -43,6 +43,14 @@ Run this from your project directory. The PM analyzes your codebase, proposes a 
 
 Reconnects to your tmux session and restores all agents where they left off. Use this after closing your terminal or coming back to a project.
 
+### Cleanup
+
+```
+/yato:yato-cleanup
+```
+
+Tears down a running Yato workflow session. Stops all agents, kills the tmux session, cancels pending check-ins, and optionally deletes the workflow folder. Use when you're done with a workflow and want to free up resources.
+
 ## How It Works
 
 ```
@@ -186,6 +194,7 @@ project/.workflow/
 | `/yato:yato-new-project` | Yes | Start a new project from scratch |
 | `/yato:yato-existing-project` | Yes | Work on an existing codebase |
 | `/yato:yato-resume` | Yes | Resume a workflow from where you left off |
+| `/yato:yato-cleanup` | Yes | Tear down a running workflow session |
 | `/yato:cancel-checkin` | Yes | Cancel the automatic check-in daemon |
 | `send-to-agent` | No (PM only) | Send a message to a team agent |
 | `notify-pm` | No (Agents only) | Notify PM with status update |
