@@ -188,6 +188,24 @@ class TestLoadSaveAgentsYml:
         assert loaded["pm"]["name"] == "pm"
         assert loaded["agents"][0]["name"] == "dev"
 
+    def test_save_and_reload_pane_id_with_percent(self, tmp_path):
+        """pane_id values like %183 must survive YAML round-trip (% is a YAML directive char)."""
+        wf = tmp_path / "wf"
+        wf.mkdir()
+        reg = WorkflowRegistry(wf)
+        data = {
+            "pm": {"name": "pm", "role": "pm", "pane_id": "%100", "session": "s", "window": 0, "model": "opus"},
+            "agents": [
+                {"name": "dev", "role": "developer", "pane_id": "%183", "session": "s", "window": 1, "model": "sonnet"},
+                {"name": "qa", "role": "qa", "pane_id": "%184", "session": "s", "window": 2, "model": "sonnet"},
+            ],
+        }
+        reg._save_agents_yml(data)
+        loaded = reg._load_agents_yml()
+        assert loaded["pm"]["pane_id"] == "%100"
+        assert loaded["agents"][0]["pane_id"] == "%183"
+        assert loaded["agents"][1]["pane_id"] == "%184"
+
 
 # ==================== _agent_from_yml_entry / _agent_to_yml_entry ====================
 

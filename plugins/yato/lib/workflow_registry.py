@@ -14,6 +14,20 @@ from typing import Optional, List, Dict, Any
 
 import yaml
 
+
+class _QuotedDumper(yaml.Dumper):
+    """YAML dumper that quotes strings starting with % (YAML directive character)."""
+    pass
+
+
+def _quoted_str_representer(dumper, data):
+    if data.startswith("%"):
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style='"')
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data)
+
+
+_QuotedDumper.add_representer(str, _quoted_str_representer)
+
 # Handle imports for both `uv run` and direct script execution
 try:
     from lib.session_registry import Agent
@@ -144,7 +158,7 @@ class WorkflowRegistry:
         """Save agents.yml file."""
         self.workflow_path.mkdir(parents=True, exist_ok=True)
         with open(self.agents_file, "w") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False, Dumper=_QuotedDumper)
 
     def _agent_from_yml_entry(self, entry: Dict[str, Any], is_pm: bool = False) -> Agent:
         """Convert a YAML entry to an Agent object."""
