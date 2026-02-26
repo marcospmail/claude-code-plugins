@@ -50,6 +50,11 @@ mkdir -p "$TEST_DIR"
 # Create tmux session with larger size for Claude TUI
 # IMPORTANT: Use -x 120 -y 40 for Claude's TUI to work properly
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+for _retry in $(seq 1 5); do
+    tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null && break
+    sleep 1
+    tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
+done
 
 # Initialize git repo (needed for some operations)
 tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "git init -q && git config user.name Test && git config user.email test@test.com" Enter

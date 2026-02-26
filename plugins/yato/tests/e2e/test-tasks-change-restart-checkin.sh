@@ -105,6 +105,11 @@ EOF
 # Create tmux session with larger size for Claude TUI
 # IMPORTANT: Use -x 120 -y 40 for Claude's TUI to work properly
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+for _retry in $(seq 1 5); do
+    tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null && break
+    sleep 1
+    tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
+done
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME "001-test-workflow"
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" YATO_PATH "$PROJECT_ROOT"
 

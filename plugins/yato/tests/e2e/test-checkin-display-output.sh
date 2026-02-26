@@ -65,6 +65,11 @@ mkdir -p "$TEST_DIR"
 # IMPORTANT: Use -x 120 -y 40 for Claude's TUI to work properly
 # Window 0 will have: pane 0 (checkin-display), and we'll use window 1 for Claude
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
+for _retry in $(seq 1 5); do
+    tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null && break
+    sleep 1
+    tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
+done
 
 # Create a second window for Claude
 tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -n "claude" -c "$TEST_DIR"

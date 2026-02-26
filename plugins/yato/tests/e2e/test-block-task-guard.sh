@@ -103,6 +103,12 @@ mkdir -p "$TEST_DIR/.workflow/001-test-workflow/agents/qa"
 
 # Create tmux session first to capture pane IDs
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
+# Retry session creation if tmux server wasn't ready
+for _retry in $(seq 1 5); do
+    tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null && break
+    sleep 1
+    tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR" 2>/dev/null
+done
 tmux -L "$TMUX_SOCKET" setenv -t "$SESSION_NAME" WORKFLOW_NAME 001-test-workflow
 PM_PANE_ID=$(tmux -L "$TMUX_SOCKET" list-panes -t "$SESSION_NAME:0" -F '#{pane_id}' | head -1)
 DEV_PANE_ID=$(tmux -L "$TMUX_SOCKET" new-window -d -t "$SESSION_NAME" -c "$TEST_DIR" -P -F '#{pane_id}' 2>/dev/null)

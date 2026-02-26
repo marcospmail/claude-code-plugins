@@ -128,6 +128,11 @@ echo ""
 #   Window 1: Claude (for running test commands)
 echo "Starting tmux session and Claude..."
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 220 -y 50 -n "pm-window" -c "$TEST_DIR"
+for _retry in $(seq 1 5); do
+    tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null && break
+    sleep 1
+    tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 220 -y 50 -n "pm-window" -c "$TEST_DIR" 2>/dev/null
+done
 # Split window 0 to create pane 1 (PM pane) and capture its pane_id
 PM_PANE_ID=$(tmux -L "$TMUX_SOCKET" split-window -t "$SESSION_NAME:0" -h -c "$TEST_DIR" -P -F '#{pane_id}')
 tmux -L "$TMUX_SOCKET" new-window -t "$SESSION_NAME" -n "claude" -c "$TEST_DIR"
