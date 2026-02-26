@@ -262,12 +262,12 @@ create_agents_yml() {
 # This file tracks all agents and their tmux locations
 
 pm:
-  name: pm
-  role: pm
+  name: "pm"
+  role: "pm"
   pane_id: ""
   session: "$session"
   window: 0
-  model: opus
+  model: "opus"
 
 agents: []
 EOF
@@ -300,7 +300,7 @@ add_agent_to_yml() {
     fi
 
     # Check if agent already exists (from save_team_structure at Step 6)
-    if grep -q "name: $agent_name" "$agents_file"; then
+    if grep -q "name: \"$agent_name\"" "$agents_file" || grep -q "name: $agent_name$" "$agents_file"; then
         # Update existing entry's session and window fields using Python for reliable YAML editing
         python3 -c "
 import yaml, sys
@@ -343,7 +343,7 @@ with open('$agents_file', 'w') as f:
                     if isinstance(val, str) and val == '':
                         f.write(f'{prefix}{key}: \"\"\n')
                     elif isinstance(val, str):
-                        f.write(f'{prefix}{key}: {val}\n')
+                        f.write(f'{prefix}{key}: \"{val}\"\n')
                     else:
                         f.write(f'{prefix}{key}: {val}\n')
                     first_key = False
@@ -356,21 +356,21 @@ with open('$agents_file', 'w') as f:
     if grep -q "^agents: \[\]" "$agents_file"; then
         # First agent - replace empty array
         sed -i '' "s/^agents: \[\]/agents:\\
-  - name: $agent_name\\
-    role: $agent_role\\
+  - name: \"$agent_name\"\\
+    role: \"$agent_role\"\\
     pane_id: \"$pane_id\"\\
     session: \"$session\"\\
     window: $window_number\\
-    model: $model/" "$agents_file"
+    model: \"$model\"/" "$agents_file"
     else
         # Additional agents - append to array
         cat >> "$agents_file" <<EOF
-  - name: $agent_name
-    role: $agent_role
+  - name: "$agent_name"
+    role: "$agent_role"
     pane_id: "$pane_id"
     session: "$session"
     window: $window_number
-    model: $model
+    model: "$model"
 EOF
     fi
 
@@ -425,7 +425,7 @@ save_team_structure() {
         fi
 
         # Check if agent already exists — skip append if so (update role/model in place)
-        if grep -q "name: $agent_name$" "$agents_file"; then
+        if grep -q "name: \"$agent_name\"" "$agents_file" || grep -q "name: $agent_name$" "$agents_file"; then
             # Agent already in agents.yml — update role and model via Python for reliable YAML editing
             python3 -c "
 import yaml
@@ -464,7 +464,7 @@ with open('$agents_file', 'w') as f:
                     if isinstance(val, str) and val == '':
                         f.write(f'{prefix}{key}: \\\"\\\"\n')
                     elif isinstance(val, str):
-                        f.write(f'{prefix}{key}: {val}\n')
+                        f.write(f'{prefix}{key}: \"{val}\"\n')
                     else:
                         f.write(f'{prefix}{key}: {val}\n')
                     first_key = False
@@ -472,12 +472,12 @@ with open('$agents_file', 'w') as f:
         else
             # Append new agent to agents.yml with empty pane_id/session/window
             cat >> "$agents_file" <<EOF
-  - name: $agent_name
-    role: $agent_role
+  - name: "$agent_name"
+    role: "$agent_role"
     pane_id: ""
     session: ""
     window: ""
-    model: $agent_model
+    model: "$agent_model"
 EOF
         fi
 
