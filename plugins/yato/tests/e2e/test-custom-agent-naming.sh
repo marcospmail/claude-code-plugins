@@ -61,6 +61,11 @@ mkdir -p "$TEST_DIR"
 echo "function test() { return true; }" > "$TEST_DIR/app.js"
 
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "orchestrator" -c "$TEST_DIR"
+for _retry in $(seq 1 5); do
+    tmux -L "$TMUX_SOCKET" has-session -t "$SESSION_NAME" 2>/dev/null && break
+    sleep 1
+    tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -n "orchestrator" -c "$TEST_DIR" 2>/dev/null
+done
 
 echo "  ✓ Test environment ready"
 echo ""
@@ -176,7 +181,7 @@ else
 fi
 
 # Test 9: agents.yml shows discoverer with role qa
-if grep -A 4 'name: "discoverer"' "$AGENTS_YML" 2>/dev/null | grep -q "role: qa"; then
+if grep -A 4 'name: "discoverer"' "$AGENTS_YML" 2>/dev/null | grep -q 'role: "qa"'; then
     pass "agents.yml shows discoverer has role: qa"
 else
     fail "agents.yml doesn't show discoverer's role as qa"
