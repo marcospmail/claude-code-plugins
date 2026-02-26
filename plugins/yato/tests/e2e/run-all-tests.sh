@@ -36,7 +36,15 @@ declare -a FAILED_TEST_NAMES
 for test_file in "$SCRIPT_DIR"/test-*.sh; do
     if [[ -f "$test_file" ]]; then
         test_name=$(basename "$test_file" .sh)
+        # Skip helper files that aren't actual tests
+        [[ "$test_name" == "test-helpers" ]] && continue
         TOTAL_TESTS=$((TOTAL_TESTS + 1))
+
+        # Capture PIDs from the test socket BEFORE killing the server, so we can
+        # clean up orphaned processes (Claude may survive SIGHUP from kill-server).
+        # IMPORTANT: Never use a broad pkill pattern — it would kill the user's
+        # real Claude sessions in other tabs.
+        _TEST_PIDS=$(tmux -L "$TMUX_SOCKET" list-panes -a -F '#{pane_pid}' 2>/dev/null | tr '\n' ' ')
 
         # Kill the entire tmux server to ensure clean state between tests
         # (individual session cleanup is insufficient — background panes, daemons,
@@ -46,8 +54,22 @@ for test_file in "$SCRIPT_DIR"/test-*.sh; do
         # Kill any lingering checkin daemon processes from previous tests
         pkill -f "checkin_scheduler.*yato-e2e" 2>/dev/null || true
 
-        # Delay between tests to allow background processes and tmux to settle
-        sleep 2
+        # Kill orphaned processes from the test socket only (by captured PIDs)
+        for _pid in $_TEST_PIDS; do
+            pkill -P "$_pid" 2>/dev/null || true
+            kill "$_pid" 2>/dev/null || true
+        done
+
+        # Wait for tmux server to fully release the socket before starting next test
+        # (without this, new-session can fail silently if the old server is still dying)
+        SOCKET_PATH="/private/tmp/tmux-$(id -u)/$TMUX_SOCKET"
+        for i in $(seq 1 20); do
+            if ! tmux -L "$TMUX_SOCKET" list-sessions 2>/dev/null | grep -q .; then
+                break
+            fi
+            sleep 0.5
+        done
+        sleep 1
 
         echo "─────────────────────────────────────────────────────"
         echo "Running: $test_name"
