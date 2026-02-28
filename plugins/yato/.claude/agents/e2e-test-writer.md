@@ -123,7 +123,8 @@ trap cleanup EXIT
 echo "Setting up test environment..."
 mkdir -p "$TEST_DIR"
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+# Unset CLAUDECODE to allow nested Claude launch (when test runs from within Claude Code)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "unset CLAUDECODE && claude" Enter
 sleep 10  # Wait for Claude to start
 
 # Test phase
@@ -170,10 +171,23 @@ fi
 
 Tests MUST run through a real Claude Code session. **Never call Python scripts, CLI commands, or bash scripts directly from the test runner.** All execution must go through Claude running inside a tmux window.
 
+### MANDATORY: Unset CLAUDECODE Before Launching Claude in Tmux
+
+When E2E tests are run from within a Claude Code session (which is common — users run tests from their Claude session), the `CLAUDECODE=1` environment variable is inherited by tmux panes. This causes Claude to refuse to start with: `"Error: Claude Code cannot be launched inside another Claude Code session."` **Every test that launches Claude in a tmux pane MUST unset this variable first.**
+
+**Pattern:**
+```bash
+# CORRECT — always unset CLAUDECODE before launching Claude
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "unset CLAUDECODE && claude --dangerously-skip-permissions" Enter
+
+# INCORRECT — will fail when test is run from within a Claude session
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude --dangerously-skip-permissions" Enter
+```
+
 **Pattern for asking Claude to run commands:**
 ```bash
-# Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "claude" Enter
+# Start Claude in the session (MUST unset CLAUDECODE)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "unset CLAUDECODE && claude" Enter
 sleep 8
 
 # Handle trust prompt
@@ -235,7 +249,7 @@ export TMUX_SOCKET="yato-e2e-test"
 
 mkdir -p "$TEST_DIR"
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" "claude" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" "unset CLAUDECODE && claude" Enter
 sleep 10
 
 # Send skill command
@@ -259,7 +273,7 @@ export TMUX_SOCKET="yato-e2e-test"
 
 mkdir -p "$TEST_DIR/.workflow/001-test"
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION" -c "$TEST_DIR"
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" "claude" Enter
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION" "unset CLAUDECODE && claude" Enter
 sleep 10
 
 # Run skill that should create files
