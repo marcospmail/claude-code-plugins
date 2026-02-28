@@ -154,26 +154,26 @@ fi
 echo ""
 
 # ============================================================
-# PHASE 5: Verify reminders use [REMINDER] format
+# PHASE 5: Verify reminders use [IMPORTANT] format
 # ============================================================
-echo "Phase 5: Verifying [REMINDER] format..."
+echo "Phase 5: Verifying [IMPORTANT] format..."
 
-if echo "$PM_TO_AGENTS" | grep -q "\[REMINDER\].*identity.yml"; then
-    pass "PM_TO_AGENTS_SUFFIX uses [REMINDER] format for identity.yml"
+if echo "$PM_TO_AGENTS" | grep -q "\[IMPORTANT\].*identity.yml"; then
+    pass "PM_TO_AGENTS_SUFFIX uses [IMPORTANT] format for identity.yml"
 else
-    fail "PM_TO_AGENTS_SUFFIX not using [REMINDER] format for identity.yml"
+    fail "PM_TO_AGENTS_SUFFIX not using [IMPORTANT] format for identity.yml"
 fi
 
-if echo "$AGENTS_TO_PM" | grep -q "\[REMINDER\].*identity.yml"; then
-    pass "AGENTS_TO_PM_SUFFIX uses [REMINDER] format for identity.yml"
+if echo "$AGENTS_TO_PM" | grep -q "\[IMPORTANT\].*identity.yml"; then
+    pass "AGENTS_TO_PM_SUFFIX uses [IMPORTANT] format for identity.yml"
 else
-    fail "AGENTS_TO_PM_SUFFIX not using [REMINDER] format for identity.yml"
+    fail "AGENTS_TO_PM_SUFFIX not using [IMPORTANT] format for identity.yml"
 fi
 
-if echo "$CHECKIN_TO_PM" | grep -q "\[REMINDER\].*identity.yml"; then
-    pass "CHECKIN_TO_PM_SUFFIX uses [REMINDER] format for identity.yml"
+if echo "$CHECKIN_TO_PM" | grep -q "\[IMPORTANT\].*identity.yml"; then
+    pass "CHECKIN_TO_PM_SUFFIX uses [IMPORTANT] format for identity.yml"
 else
-    fail "CHECKIN_TO_PM_SUFFIX not using [REMINDER] format for identity.yml"
+    fail "CHECKIN_TO_PM_SUFFIX not using [IMPORTANT] format for identity.yml"
 fi
 
 echo ""
