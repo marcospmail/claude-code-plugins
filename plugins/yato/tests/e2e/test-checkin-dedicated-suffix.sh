@@ -155,7 +155,8 @@ tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0.1" "stty -ixon" Enter
 sleep 1
 
 # Start Claude in window 1
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "claude" Enter
+# Unset CLAUDECODE to allow nested Claude launch (when test runs from within Claude Code)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:1" "unset CLAUDECODE && claude" Enter
 
 echo "Waiting for Claude to start..."
 sleep 8

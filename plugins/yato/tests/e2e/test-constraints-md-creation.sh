@@ -61,7 +61,8 @@ tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "git init -q && git config u
 sleep 2
 
 # Start Claude in the session
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "claude" Enter
+# Unset CLAUDECODE to allow nested Claude launch (when test runs from within Claude Code)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME" "unset CLAUDECODE && claude" Enter
 
 echo "  Waiting for Claude to start..."
 sleep 8

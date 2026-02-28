@@ -88,7 +88,8 @@ tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:2" "stty -ixon" Enter
 sleep 1
 
 # Start Claude in window 0 (skip permissions to avoid blocking on bash prompts)
-tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "claude --dangerously-skip-permissions" Enter
+# Unset CLAUDECODE to allow nested Claude launch (when test runs from within Claude Code)
+tmux -L "$TMUX_SOCKET" send-keys -t "$SESSION_NAME:0" "unset CLAUDECODE && claude --dangerously-skip-permissions" Enter
 
 # Wait for Claude to start and handle trust prompt
 echo "Waiting for Claude to start..."
