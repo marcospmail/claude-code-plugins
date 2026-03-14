@@ -135,6 +135,9 @@ fi
 # CRITICAL: Set WORKFLOW_NAME in tmux environment for other scripts
 tmux $TMUX_FLAGS setenv -t "$SESSION" WORKFLOW_NAME "$WORKFLOW_NAME"
 
+# Rename window 0 to "Orchestrator" (matches init behavior from orchestrator.py)
+tmux $TMUX_FLAGS rename-window -t "$SESSION:0" "Orchestrator"
+
 # Enable pane titles display
 tmux $TMUX_FLAGS set-option -t "$SESSION" pane-border-status top
 tmux $TMUX_FLAGS set-option -t "$SESSION" pane-border-format " #{pane_title} "

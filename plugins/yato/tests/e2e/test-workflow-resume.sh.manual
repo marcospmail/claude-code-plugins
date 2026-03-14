@@ -11,6 +11,7 @@
 # 5. Check-in daemon restarts when incomplete tasks exist
 # 6. layout.yml is saved after resume
 # 7. status.yml session field is updated
+# 8. Window 0 is renamed to 'Orchestrator'
 #
 # IMPORTANT: All execution goes through Claude Code skills in a tmux session.
 # The /yato-resume skill internally calls resume-workflow.sh, but tests
@@ -419,6 +420,13 @@ WINDOW_LIST=$(tmux -L "$TMUX_SOCKET" list-windows -t "$RESUME_SESSION" -F "#{win
 echo "  Debug - window list:"
 echo "$WINDOW_LIST" | sed 's/^/    /'
 echo ""
+
+# Check window 0 is renamed to "Orchestrator"
+if echo "$WINDOW_LIST" | grep -q "^0:Orchestrator"; then
+    pass "Window 0 renamed to 'Orchestrator'"
+else
+    fail "Window 0 should be named 'Orchestrator', got: $(echo "$WINDOW_LIST" | grep "^0:" | head -1)"
+fi
 
 # Check developer window exists (should be window 1 or higher)
 if echo "$WINDOW_LIST" | grep -q "developer"; then
