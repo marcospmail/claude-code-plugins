@@ -1,7 +1,7 @@
 ---
 name: yato-resume
 description: Resume a workflow from where you left off. Restores the tmux session, PM, agents, and check-ins. Use when reopening a project to continue previous work.
-allowed-tools: Bash,Read,Glob,Grep
+allowed-tools: Bash,Read,Glob,Grep,AskUserQuestion
 user-invocable: true
 disable-model-invocation: false
 argument-hint: "[workflow-name or leave empty to list]"
@@ -77,13 +77,12 @@ To resume a workflow, run:
   /yato-resume 001-add-user-auth
 ```
 
-Then ask the user:
-```
-Which workflow would you like to resume?
-Enter the workflow name (e.g., 001-add-user-auth):
-```
+Then use the `AskUserQuestion` tool to let the user pick a workflow. Build the choices from the listed workflows:
 
-WAIT for response.
+- **question**: "Which workflow would you like to resume?"
+- **options**: One option per workflow name (e.g., `["001-add-user-auth", "002-fix-payment-bug"]`)
+
+WAIT for the user's selection.
 
 ## Step 4: Resume the Workflow
 
@@ -171,7 +170,7 @@ That's all. Do not run any other tmux commands.
 <action>
 1. PROJECT_PATH = current directory
 2. List available workflows using resume-workflow.sh
-3. Ask: "Which workflow would you like to resume?"
+3. Use AskUserQuestion with options: ["001-add-auth", "002-fix-bug"]
 4. User picks "002-fix-bug"
 5. Run: resume-workflow.sh "$PROJECT_PATH" "002-fix-bug"
 6. Start Claude in PM, brief PM
@@ -201,9 +200,8 @@ To connect: tmux attach -t [SESSION]
 ```
 Available workflows:
 [workflow list]
-
-Which workflow would you like to resume?
 ```
+Then use AskUserQuestion tool with workflow names as options.
 
 **If no workflows:**
 ```
