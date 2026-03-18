@@ -97,37 +97,16 @@ Run the resume-workflow script which:
 ${CLAUDE_PLUGIN_ROOT}/bin/resume-workflow.sh "$PROJECT_PATH" "$WORKFLOW_NAME"
 ```
 
-Capture the session name from the output for the attach command.
+The script handles everything: creating the session, starting Claude in all panes, and briefing the PM and agents. Do NOT start Claude or send briefings separately — the script already does this.
 
-## Step 5: Start Claude in PM Pane
-
-After the script completes, start Claude in the PM pane:
+Compute the session name to provide the attach command:
 
 ```bash
-# Get session name from project path
-SESSION=$(basename "$PROJECT_PATH" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
-PM_PANE="$SESSION:0.1"
-
-# Start Claude Opus in PM pane
-tmux send-keys -t "$PM_PANE" "claude --dangerously-skip-permissions --model opus" Enter
+PROJECT_SLUG=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | tr '._ ' '-')
+SESSION="${PROJECT_SLUG}_${WORKFLOW_NAME}"
 ```
 
-Wait 5 seconds for Claude to initialize, then brief the PM:
-
-```bash
-sleep 5
-TMUX_SOCKET="${TMUX_SOCKET}" uv run --project ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/tmux_utils.py send --skip-suffix "$PM_PANE" "RESUMING WORKFLOW: $WORKFLOW_NAME
-
-Read these files and continue from where you left off:
-- .workflow/$WORKFLOW_NAME/agents/pm/instructions.md
-- .workflow/$WORKFLOW_NAME/tasks.json
-- .workflow/$WORKFLOW_NAME/prd.md
-- .workflow/$WORKFLOW_NAME/agents.yml (shows agent windows)
-
-Agents have been restored in their windows. Check tasks.json for pending tasks."
-```
-
-## Step 6: Inform User
+## Step 5: Inform User
 
 Tell the user the workflow has been resumed and provide the attach command:
 
@@ -145,10 +124,8 @@ That's all. Do not run any other tmux commands.
 1. Detect project path and compute project slug
 2. Check for $ARGUMENTS (workflow name)
 3. If no argument: list workflows, ask user to pick
-4. Run resume-workflow.sh to restore session, PM pane, and all agent windows
-5. Start Claude in PM pane
-6. Brief PM with files to read and continue
-7. Tell user the attach command
+4. Run resume-workflow.sh to restore session, PM pane, and all agent windows (script handles Claude startup and briefings)
+5. Tell user the attach command
 </workflow_summary>
 
 <examples>
@@ -158,10 +135,9 @@ That's all. Do not run any other tmux commands.
 1. PROJECT_PATH = /Users/user/projects/my-app
 2. WORKFLOW_NAME = "001-add-user-auth"
 3. Run: resume-workflow.sh "$PROJECT_PATH" "001-add-user-auth"
-4. Script restores session, PM pane, and all agent windows
-5. Start Claude in PM pane: tmux send-keys -t "my-app:0.1" "claude --dangerously-skip-permissions --model opus" Enter
-6. Brief PM with workflow files
-7. Tell user: Workflow resumed. To connect: tmux attach -t my-app
+4. Script restores session, starts Claude in all panes, and briefs PM and agents
+5. SESSION = "my-app_001-add-user-auth"
+6. Tell user: Workflow resumed. To connect: tmux attach -t my-app_001-add-user-auth
 </action>
 </example>
 
