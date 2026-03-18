@@ -12,7 +12,7 @@
 # 2. PM window with yato suffix only — outputs yato suffix
 # 3. PM window with workflow suffix only — outputs workflow suffix
 # 4. PM window with both — stacks yato + workflow
-# 5. PM window with neither — outputs nothing
+# 5. PM window with neither — outputs PM identity block only
 # 6. Non-PM window (developer) — outputs nothing
 # 7. Ordering — yato suffix before workflow suffix
 
@@ -237,11 +237,11 @@ else
 fi
 
 # ============================================================
-# Test 5: PM window with neither — outputs nothing
+# Test 5: PM window with neither — outputs PM identity block only
 # ============================================================
 echo ""
 echo "======================================================================"
-echo "  Test 5: PM window with neither — outputs nothing"
+echo "  Test 5: PM window with neither — outputs PM identity block only"
 echo "======================================================================"
 echo ""
 
@@ -252,10 +252,10 @@ OUTFILE5="/tmp/e2e-ups-test5-$$"
 OUTPUT5=$(run_hook_in_pane "$SESSION_NAME:0" "$OUTFILE5")
 rm -f "$OUTFILE5"
 
-if [[ -z "$OUTPUT5" ]]; then
-    pass "No output when both suffixes empty"
+if echo "$OUTPUT5" | grep -Fq "You are the PM"; then
+    pass "PM identity block present even with empty suffixes"
 else
-    fail "Should produce no output with empty suffixes, got: $OUTPUT5"
+    fail "PM identity block should always be present for PM, got: $OUTPUT5"
 fi
 
 # ============================================================
