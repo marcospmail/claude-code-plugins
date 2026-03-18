@@ -112,15 +112,20 @@ def main():
             except Exception:
                 pass
 
-    # Stack: yato first, then workflow
-    parts = []
+    # Build PM identity block (survives context compaction)
+    workflow_name = _get_workflow_name()
+    identity_block = "[IMPORTANT] You are the PM (Project Manager) for this Yato workflow."
+    if workflow_name:
+        identity_block += f" Workflow: {workflow_name}."
+        identity_block += f" Your config files: .workflow/{workflow_name}/agents/pm/ (identity.yml, instructions.md, constraints.md, agent-tasks.md)."
+        identity_block += f" Tasks file: .workflow/{workflow_name}/tasks.json."
+
+    # Stack: identity first, then yato suffix, then workflow suffix
+    parts = [identity_block]
     if yato_suffix:
         parts.append(yato_suffix)
     if workflow_suffix:
         parts.append(workflow_suffix)
-
-    if not parts:
-        return 0
 
     print("\n\n".join(parts))
     return 0
