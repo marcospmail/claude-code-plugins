@@ -114,16 +114,21 @@ echo "Status: $WORKFLOW_STATUS"
 echo "Check-in interval: ${CHECKIN_INTERVAL} minutes"
 echo ""
 
-# Determine session - check if we're inside tmux
+# Always create a dedicated workflow session (matching deploy behavior)
+# The deploy creates: ${PROJECT_SLUG}_${WORKFLOW_NAME}
+# Resume must use the same naming to avoid reusing the orchestrator's session.
+PROJECT_SLUG=$(basename "$PROJECT_PATH" | tr '[:upper:]' '[:lower:]' | tr '._ ' '-')
+SESSION="${PROJECT_SLUG}_${WORKFLOW_NAME}"
+
 IN_TMUX=false
 if [[ -n "$TMUX" ]]; then
     IN_TMUX=true
-    SESSION=$(tmux $TMUX_FLAGS display-message -p '#S')
-    echo "Using current tmux session: $SESSION"
+fi
+
+if tmux $TMUX_FLAGS has-session -t "$SESSION" 2>/dev/null; then
+    echo "Reusing existing workflow session: $SESSION"
 else
-    # Generate session name from project
-    SESSION=$(basename "$PROJECT_PATH" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
-    echo "Creating new session: $SESSION"
+    echo "Creating workflow session: $SESSION"
     tmux $TMUX_FLAGS new-session -d -s "$SESSION" -c "$PROJECT_PATH"
 fi
 
@@ -290,9 +295,18 @@ for i in "${!AGENT_NAMES[@]}"; do
         IDENTITY_FILE="$AGENTS_DIR/$agent_role/identity.yml"
     fi
     if [[ -f "$IDENTITY_FILE" ]]; then
-        sed -i '' "s|^pane_id:.*|pane_id: \"$AGENT_PANE_ID\"|" "$IDENTITY_FILE"
+        # Update pane_id if field exists, otherwise append it
+        if grep -q "^pane_id:" "$IDENTITY_FILE"; then
+            sed -i '' "s|^pane_id:.*|pane_id: \"$AGENT_PANE_ID\"|" "$IDENTITY_FILE"
+        else
+            echo "pane_id: \"$AGENT_PANE_ID\"" >> "$IDENTITY_FILE"
+        fi
         new_window="${AGENT_WINDOW##*:}"
         sed -i '' "s|^window:.*|window: $new_window|" "$IDENTITY_FILE"
+        # Update session field if present (for legacy identity.yml files)
+        if grep -q "^session:" "$IDENTITY_FILE"; then
+            sed -i '' "s|^session:.*|session: \"$SESSION\"|" "$IDENTITY_FILE"
+        fi
     fi
 done
 
@@ -334,6 +348,22 @@ sleep 3
 # Update agents.yml with new pane_ids and window numbers
 echo ""
 echo "Updating agents.yml with new pane IDs..."
+
+# Update PM identity.yml with new pane_id (resume only updates agent identity.yml in the loop)
+PM_IDENTITY_FILE="$WORKFLOW_PATH/agents/pm/identity.yml"
+if [[ -f "$PM_IDENTITY_FILE" ]]; then
+    # Update pane_id if field exists, otherwise append it
+    if grep -q "^pane_id:" "$PM_IDENTITY_FILE"; then
+        sed -i '' "s|^pane_id:.*|pane_id: \"$PM_PANE_ID\"|" "$PM_IDENTITY_FILE"
+    else
+        echo "pane_id: \"$PM_PANE_ID\"" >> "$PM_IDENTITY_FILE"
+    fi
+    # Update session field if present (for legacy identity.yml files)
+    if grep -q "^session:" "$PM_IDENTITY_FILE"; then
+        sed -i '' "s|^session:.*|session: \"$SESSION\"|" "$PM_IDENTITY_FILE"
+    fi
+    echo "  Updated PM identity.yml -> pane_id $PM_PANE_ID"
+fi
 
 # Update PM pane_id first
 uv run python -c "
