@@ -123,7 +123,10 @@ The PM will ask you what you want to accomplish.
 **If IN tmux:**
 
 ```bash
-tmux switch-client -t "$SESSION_NAME"
+CLIENT_TTY=$(tmux display-message -p '#{client_tty}' 2>/dev/null)
+if [[ -n "$CLIENT_TTY" ]]; then
+    tmux switch-client -c "$CLIENT_TTY" -t "$SESSION_NAME"
+fi
 ```
 
 The user is now in the PM session. The PM will read `status.yml` and either proceed with the request or ask the user what they want to accomplish.

@@ -88,7 +88,10 @@ uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/lib/orches
 
 **If IN_TMUX**:
 ```bash
-tmux switch-client -t "$SESSION_NAME"
+CLIENT_TTY=$(tmux display-message -p '#{client_tty}' 2>/dev/null)
+if [[ -n "$CLIENT_TTY" ]]; then
+    tmux switch-client -c "$CLIENT_TTY" -t "$SESSION_NAME"
+fi
 ```
 
 **If NOT_IN_TMUX**:
