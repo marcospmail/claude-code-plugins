@@ -87,26 +87,20 @@ Present the templates to the user using AskUserQuestion BEFORE proposing a team:
 
 **After user selects a PREDEFINED TEMPLATE (not Custom):** Read that template file and use its agents EXACTLY AS DEFINED. DO NOT analyze, adapt, trim, or modify the template agents in any way. Present them directly for approval. The user chose that template deliberately - respect their choice.
 
-**After user selects 'Custom':** Skip templates and propose a team from scratch based on task analysis.
+**After user selects 'Custom':** Show a multi-select AskUserQuestion listing all predefined agents from `{{ yato_path }}/agents/` directory.
 
-ANALYZE the task and propose ONLY the agents needed:
-- If fixing bugs/implementing features: developer (opus) - CAN MODIFY CODE
-- If testing needed: qa (opus) - usually CANNOT MODIFY CODE (only test/report), BUT can modify test files if using test-writer agents
-- If security/review needed: code-reviewer (opus) - CANNOT MODIFY CODE (only review/request changes)
-- If specialized work: backend-developer, frontend-developer, designer, devops, etc.
-
-EXAMPLES:
-- E2E test fixes -> Single QA with opus
-- Bug fix -> Single developer with opus
-- New feature -> Developer (opus) + QA (opus)
-- Documentation -> Single developer with opus
-
-MODEL GUIDELINES: ALWAYS propose opus initially. User can request sonnet/haiku if they want to save costs.
-
-CRITICAL: Propose MINIMAL team needed - don't default to 3 agents!
+Steps:
+1. Read all `*.yml` files from `{{ yato_path }}/agents/` (skip non-yml files like pm.md)
+2. For each YAML file, extract `name` and `description` fields
+3. Present a multi-select AskUserQuestion:
+   - Question: 'Which agents would you like on your team?'
+   - Header: 'Agents'
+   - Options: One per agent YAML - label = agent `name`, description = agent `description`
+   - Allow multiple selections
+4. Use the selected agents with `default_model` from each agent's YAML (no manual model override)
 
 FORMAT your team proposal like this:
-Agent: [name] | Model: [model] | Role: [role] | Description: [brief description of what they'll work on]
+Agent: [name] | Model: [default_model from YAML] | Role: [name] | Description: [description from YAML]
 
 DO NOT include specific task numbers or assignments.
 DO NOT explain 'why this structure' or 'parallel execution plan'.
@@ -270,9 +264,31 @@ a) If USER provides new requirements: Update PRD (`.workflow/$WORKFLOW_NAME/prd.
    FORBIDDEN: Adding technical details you invented without user approval or developer input.
 b) After PRD updated: Regenerate tasks by running: `/parse-prd-to-tasks`
 c) This creates a fresh tasks.json based on updated PRD.
-d) Reassign tasks to agents via their agent-tasks.md files using /send-to-agent.
+d) Read `.workflow/$WORKFLOW_NAME/agents.yml` to get ALL available agents on the team.
+e) Distribute new tasks across ALL applicable agents — NEVER assign everything to developer when other agents exist:
+   - Implementation tasks → developer
+   - Test coverage → qa (if qa agent exists on team)
+   - Code quality review → code-reviewer or reviewer (if exists on team)
+   - Security concerns → security-reviewer (if exists on team)
+   - Infrastructure → devops (if exists on team)
+f) Reassign tasks to agents via their agent-tasks.md files using /send-to-agent.
 
 CRITICAL: Do this whenever user adds features, changes scope, or clarifies requirements.
+
+CRITICAL — MULTI-AGENT DISTRIBUTION: If you only assign tasks to developer when other agents are available, you are wasting your team. Every change that touches code should trigger a cascade: implementation → tests → review.
+
+EXAMPLES of correct multi-agent distribution when requirements change:
+- User adds "Add OAuth login":
+  - developer: Implement OAuth endpoints and integrate with auth flow
+  - qa: Write OAuth integration tests (if qa exists)
+  - code-reviewer: Review OAuth implementation for security and code quality (if exists)
+- User adds "Fix performance issue":
+  - developer: Optimize the slow code path
+  - security-reviewer: Verify no security regressions introduced (if exists)
+- User adds "Refactor database layer":
+  - developer: Refactor schema and queries
+  - qa: Update and run affected tests (if qa exists)
+  - code-reviewer: Review refactored code for correctness (if exists)
 
 ### Step 15: Auto-Stop
 
