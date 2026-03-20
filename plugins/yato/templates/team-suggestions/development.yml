@@ -10,27 +10,6 @@ use_cases:
   - Creating new UI pages or workflows
 
 agents:
-  - name: developer
-    role: developer
-    model: opus
-    description: Implements the feature according to PRD and task assignments
-  - name: qa-test-writer
-    role: qa
-    model: opus
-    description: Implements e2e tests for the feature using established test patterns
-  - name: qa-validator
-    role: qa
-    model: opus
-    description: Validates that tests were properly implemented and follow correct patterns (tmux + real Claude sessions)
-  - name: qa-manual
-    role: qa
-    model: opus
-    description: Performs manual and visual testing using the browser agent
-  - name: code-reviewer
-    role: code-reviewer
-    model: opus
-    description: Reviews working directory changes using /working-dir-review for quality and best practices
-  - name: security-reviewer
-    role: security-reviewer
-    model: opus
-    description: Reviews code for security vulnerabilities and OWASP concerns
+  - developer
+  - qa
+  - code-reviewer

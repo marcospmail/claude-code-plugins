@@ -10,7 +10,4 @@ use_cases:
   - Patching a security vulnerability
 
 agents:
-  - name: developer
-    role: developer
-    model: opus
-    description: Investigates the root cause and implements the fix
+  - developer
