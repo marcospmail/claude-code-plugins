@@ -120,8 +120,32 @@ def main():
         identity_block += f" Your config files: .workflow/{workflow_name}/agents/pm/ (identity.yml, instructions.md, constraints.md, agent-tasks.md)."
         identity_block += f" Tasks file: .workflow/{workflow_name}/tasks.json."
 
-    # Stack: identity first, then yato suffix, then workflow suffix
+    # Build dynamic agent roster from agents.yml
+    agent_roster = ""
+    if workflow_path:
+        agents_file = workflow_path / "agents.yml"
+        if agents_file.exists():
+            try:
+                agents_data = yaml.safe_load(agents_file.read_text())
+                if agents_data and isinstance(agents_data, dict):
+                    agents_list = agents_data.get("agents") or []
+                    if agents_list:
+                        lines = [
+                            f"  - {a.get('name', '?')} (role: {a.get('role', '?')})"
+                            for a in agents_list
+                        ]
+                        agent_roster = (
+                            "[AVAILABLE AGENTS] Your team for this workflow:\n"
+                            + "\n".join(lines)
+                            + "\nALWAYS distribute new tasks across ALL relevant agents -- not just developer."
+                        )
+            except Exception:
+                pass
+
+    # Stack: identity first, then agent roster, then yato suffix, then workflow suffix
     parts = [identity_block]
+    if agent_roster:
+        parts.append(agent_roster)
     if yato_suffix:
         parts.append(yato_suffix)
     if workflow_suffix:
