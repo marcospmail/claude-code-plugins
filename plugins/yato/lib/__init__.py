@@ -4,7 +4,7 @@ Yato - Yet Another Tmux Orchestrator
 A Claude Code plugin for multi-agent coordination across tmux sessions.
 """
 
-__version__ = "3.14.2"
+__version__ = "3.15.0"
 
 # Core classes
 from lib.session_registry import Agent

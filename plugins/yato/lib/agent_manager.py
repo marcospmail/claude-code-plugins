@@ -208,6 +208,28 @@ class AgentManager:
         else:
             self.jinja_env = None
 
+    def load_predefined_agents(self) -> Dict[str, Any]:
+        """Load predefined agent configurations from agents/*.yml files.
+
+        Returns:
+            Dict mapping agent name -> parsed YAML config dict.
+        """
+        agents_dir = self.yato_path / "agents"
+        if not agents_dir.exists():
+            return {}
+
+        agents = {}
+        for yml_file in sorted(agents_dir.glob("*.yml")):
+            try:
+                with open(yml_file, "r") as f:
+                    data = yaml.safe_load(f)
+                if not data or "name" not in data:
+                    continue
+                agents[data["name"]] = data
+            except Exception:
+                continue
+        return agents
+
     # Default model per role
     ROLE_DEFAULT_MODELS = {
         "code-reviewer": "opus",
@@ -217,13 +239,33 @@ class AgentManager:
 
     def _get_default_model(self, role: str) -> str:
         """Get the default model for a role."""
-        return self.ROLE_DEFAULT_MODELS.get(role.lower(), "sonnet")
+        role_lower = role.lower()
+        predefined = self.load_predefined_agents()
+        if role_lower in predefined:
+            return predefined[role_lower].get("default_model", "sonnet")
+        return self.ROLE_DEFAULT_MODELS.get(role_lower, "sonnet")
 
     def _get_role_config(self, role: str) -> Dict[str, Any]:
-        """Get configuration for a role."""
+        """Get configuration for a role.
+
+        Checks predefined agent YAMLs first, then falls back to hardcoded ROLE_CONFIGS,
+        partial name matching, and a default config.
+        """
         role_lower = role.lower()
 
-        # Check exact match first
+        # Check predefined YAML agents first
+        predefined = self.load_predefined_agents()
+        if role_lower in predefined:
+            agent = predefined[role_lower]
+            return {
+                "can_modify_code": agent.get("can_modify_code", False),
+                "purpose": agent.get("description", role_lower),
+                "responsibilities": [],
+                "instructions": agent.get("instructions", ""),
+                "default_model": agent.get("default_model", "sonnet"),
+            }
+
+        # Check hardcoded ROLE_CONFIGS
         if role_lower in self.ROLE_CONFIGS:
             return self.ROLE_CONFIGS[role_lower]
 
@@ -332,12 +374,17 @@ class AgentManager:
             )
 
         # Create instructions.md
+        # Use 'instructions' from predefined YAML if available, else format responsibilities list
+        if role_config.get("instructions"):
+            responsibilities_str = role_config["instructions"].strip()
+        else:
+            responsibilities_str = "\n".join(f"- {r}" for r in role_config.get("responsibilities", []))
         instructions_content = self._render_template("agent_instructions.md.j2", {
             "name_capitalized": agent_name.title(),
             "role_capitalized": role.replace("-", " ").title(),
             "agent_purpose": role_config["purpose"],
             "role_description": role_description,
-            "responsibilities": "\n".join(f"- {r}" for r in role_config["responsibilities"]),
+            "responsibilities": responsibilities_str,
             "role": role,
         })
         (agent_dir / "instructions.md").write_text(instructions_content)
@@ -788,10 +835,48 @@ Wait for PM to assign your first tasks via agent-tasks.md."""
 
         send_message(agent_id, briefing, workflow_status_file=status_file)
 
+    def load_team_template(self, template_path: str) -> Optional[Dict[str, Any]]:
+        """Load a team template YAML and resolve string agent names to full configs.
+
+        Supports both old format (agents as list of dicts) and new format (agents as
+        list of strings referencing predefined agent YAMLs).
+
+        Args:
+            template_path: Path to team template YAML file
+
+        Returns:
+            Parsed template dict with agents resolved, or None on failure.
+        """
+        try:
+            with open(template_path, "r") as f:
+                data = yaml.safe_load(f)
+        except Exception:
+            return None
+
+        if not data or "agents" not in data:
+            return data
+
+        predefined = self.load_predefined_agents()
+        resolved_agents = []
+        for agent in data["agents"]:
+            if isinstance(agent, str):
+                agent_config = predefined.get(agent, {})
+                resolved_agents.append({
+                    "name": agent,
+                    "role": agent,
+                    "model": agent_config.get("default_model", "sonnet"),
+                    "description": agent_config.get("description", ""),
+                })
+            elif isinstance(agent, dict):
+                resolved_agents.append(agent)
+
+        data["agents"] = resolved_agents
+        return data
+
     def create_team(
         self,
         session: str,
-        agents: List[Dict[str, str]],
+        agents: List,
         project_path: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -799,20 +884,31 @@ Wait for PM to assign your first tasks via agent-tasks.md."""
 
         Args:
             session: Tmux session name
-            agents: List of agent dicts with name, role, model keys
+            agents: List of agent dicts with name, role, model keys, or list of
+                    agent name strings referencing predefined agents/*.yml
             project_path: Project path
 
         Returns:
             List of created agent info dicts
         """
+        predefined = self.load_predefined_agents()
         created = []
         for agent in agents:
+            if isinstance(agent, str):
+                agent_config = predefined.get(agent, {})
+                role = agent
+                name = None
+                model = agent_config.get("default_model", "sonnet")
+            else:
+                role = agent.get("role", "developer")
+                name = agent.get("name")
+                model = agent.get("model", "sonnet")
             result = self.create_agent(
                 session=session,
-                role=agent.get("role", "developer"),
+                role=role,
                 project_path=project_path,
-                name=agent.get("name"),
-                model=agent.get("model", "sonnet"),
+                name=name,
+                model=model,
             )
             if result:
                 created.append(result)
