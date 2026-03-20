@@ -761,3 +761,261 @@ class TestAgentManagerCLI:
         self._exec_main_block([])
         captured = capsys.readouterr()
         assert "usage:" in captured.out.lower() or "commands" in captured.out.lower()
+
+
+# ==================== load_predefined_agents ====================
+
+
+class TestLoadPredefinedAgents:
+    def test_loads_from_real_agents_dir(self):
+        """load_predefined_agents returns non-empty dict from real agents/ dir."""
+        mgr = AgentManager()
+        agents = mgr.load_predefined_agents()
+        assert isinstance(agents, dict)
+        assert len(agents) > 0
+
+    def test_returns_expected_roles(self):
+        """All predefined roles are present."""
+        mgr = AgentManager()
+        agents = mgr.load_predefined_agents()
+        expected = [
+            "developer", "backend-developer", "frontend-developer",
+            "fullstack-developer", "qa", "code-reviewer", "reviewer",
+            "security-reviewer", "devops", "designer",
+        ]
+        for role in expected:
+            assert role in agents, f"Missing agent: {role}"
+
+    def test_agent_has_required_fields(self):
+        """Each loaded agent has name, description, can_modify_code, default_model, instructions."""
+        mgr = AgentManager()
+        agents = mgr.load_predefined_agents()
+        for name, agent in agents.items():
+            assert "name" in agent, f"{name}: missing 'name'"
+            assert "description" in agent, f"{name}: missing 'description'"
+            assert "can_modify_code" in agent, f"{name}: missing 'can_modify_code'"
+            assert "default_model" in agent, f"{name}: missing 'default_model'"
+            assert "instructions" in agent, f"{name}: missing 'instructions'"
+
+    def test_developer_can_modify_code(self):
+        mgr = AgentManager()
+        agents = mgr.load_predefined_agents()
+        assert agents["developer"]["can_modify_code"] is True
+
+    def test_qa_test_only(self):
+        mgr = AgentManager()
+        agents = mgr.load_predefined_agents()
+        assert agents["qa"]["can_modify_code"] == "test-only"
+
+    def test_code_reviewer_cannot_modify(self):
+        mgr = AgentManager()
+        agents = mgr.load_predefined_agents()
+        assert agents["code-reviewer"]["can_modify_code"] is False
+
+    def test_code_reviewer_uses_opus(self):
+        mgr = AgentManager()
+        agents = mgr.load_predefined_agents()
+        assert agents["code-reviewer"]["default_model"] == "opus"
+
+    def test_security_reviewer_uses_opus(self):
+        mgr = AgentManager()
+        agents = mgr.load_predefined_agents()
+        assert agents["security-reviewer"]["default_model"] == "opus"
+
+    def test_developer_uses_sonnet(self):
+        mgr = AgentManager()
+        agents = mgr.load_predefined_agents()
+        assert agents["developer"]["default_model"] == "sonnet"
+
+    def test_missing_agents_dir_returns_empty(self, tmp_path):
+        """When agents/ dir doesn't exist, returns empty dict."""
+        mgr = AgentManager(yato_path=str(tmp_path))
+        agents = mgr.load_predefined_agents()
+        assert agents == {}
+
+    def test_invalid_yaml_skipped(self, tmp_path):
+        """YAML files that fail to parse are skipped silently."""
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "bad.yml").write_text(":\n  - invalid: {{{{")
+        (agents_dir / "good.yml").write_text(
+            "name: good\ndescription: Good agent\ncan_modify_code: false\n"
+            "default_model: sonnet\ninstructions: |\n  - Do stuff\n"
+        )
+        mgr = AgentManager(yato_path=str(tmp_path))
+        agents = mgr.load_predefined_agents()
+        assert "good" in agents
+        assert "bad" not in agents
+
+    def test_yml_without_name_skipped(self, tmp_path):
+        """YAML files without 'name' field are skipped."""
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "noname.yml").write_text(
+            "description: No name\ncan_modify_code: false\ndefault_model: sonnet\n"
+        )
+        mgr = AgentManager(yato_path=str(tmp_path))
+        agents = mgr.load_predefined_agents()
+        assert agents == {}
+
+    def test_name_matches_file_content(self):
+        """Agent name in YAML matches the expected role name."""
+        mgr = AgentManager()
+        agents = mgr.load_predefined_agents()
+        assert agents["developer"]["name"] == "developer"
+        assert agents["qa"]["name"] == "qa"
+
+
+# ==================== _get_role_config with YAML ====================
+
+
+class TestGetRoleConfigWithYaml:
+    def test_yaml_takes_priority_over_role_configs(self):
+        """YAML-loaded agents override hardcoded ROLE_CONFIGS."""
+        mgr = AgentManager()
+        config = mgr._get_role_config("developer")
+        # Should come from YAML
+        assert "instructions" in config
+        assert config["default_model"] == "sonnet"
+
+    def test_yaml_agent_has_instructions_key(self):
+        """YAML-based config has 'instructions' key."""
+        mgr = AgentManager()
+        config = mgr._get_role_config("qa")
+        assert "instructions" in config
+        assert len(config["instructions"]) > 0
+
+    def test_pm_falls_back_to_role_configs(self):
+        """pm is not in YAML, falls back to hardcoded ROLE_CONFIGS."""
+        mgr = AgentManager()
+        config = mgr._get_role_config("pm")
+        assert config["can_modify_code"] is False
+        # pm comes from ROLE_CONFIGS which has 'responsibilities', no 'instructions'
+        assert "responsibilities" in config
+
+    def test_unknown_role_no_yaml_no_match(self, tmp_path):
+        """Unknown role with empty agents dir returns default config."""
+        mgr = AgentManager(yato_path=str(tmp_path))
+        config = mgr._get_role_config("totally-unknown")
+        assert config["can_modify_code"] is False
+        assert "Support" in config["purpose"]
+
+
+# ==================== load_team_template ====================
+
+
+class TestLoadTeamTemplate:
+    def test_loads_bug_template(self, tmp_path):
+        """Load the simplified bug.yml template with string agent names."""
+        template_file = tmp_path / "bug.yml"
+        template_file.write_text(
+            "name: bug\ndescription: Bug fix team\nuse_cases:\n  - Fix bugs\n"
+            "agents:\n  - developer\n"
+        )
+        mgr = AgentManager()
+        result = mgr.load_team_template(str(template_file))
+        assert result is not None
+        assert result["name"] == "bug"
+        assert len(result["agents"]) == 1
+        agent = result["agents"][0]
+        assert agent["role"] == "developer"
+        assert agent["model"] == "sonnet"
+
+    def test_resolves_multiple_string_agents(self, tmp_path):
+        """String agent names are resolved to full configs from predefined YAMLs."""
+        template_file = tmp_path / "dev.yml"
+        template_file.write_text(
+            "name: development\ndescription: Dev team\nagents:\n  - developer\n  - qa\n  - code-reviewer\n"
+        )
+        mgr = AgentManager()
+        result = mgr.load_team_template(str(template_file))
+        assert result is not None
+        assert len(result["agents"]) == 3
+        roles = [a["role"] for a in result["agents"]]
+        assert "developer" in roles
+        assert "qa" in roles
+        assert "code-reviewer" in roles
+
+    def test_code_reviewer_gets_opus_model(self, tmp_path):
+        """code-reviewer agent resolves to opus model from YAML."""
+        template_file = tmp_path / "t.yml"
+        template_file.write_text(
+            "name: t\ndescription: team\nagents:\n  - code-reviewer\n"
+        )
+        mgr = AgentManager()
+        result = mgr.load_team_template(str(template_file))
+        agent = result["agents"][0]
+        assert agent["model"] == "opus"
+
+    def test_preserves_dict_agents_backward_compat(self, tmp_path):
+        """Old-format dict agents are preserved as-is (backward compatibility)."""
+        template_file = tmp_path / "old.yml"
+        template_file.write_text(
+            "name: old\ndescription: old format\nagents:\n"
+            "  - name: mydev\n    role: developer\n    model: opus\n    description: Custom dev\n"
+        )
+        mgr = AgentManager()
+        result = mgr.load_team_template(str(template_file))
+        assert result is not None
+        agent = result["agents"][0]
+        assert agent["name"] == "mydev"
+        assert agent["role"] == "developer"
+        assert agent["model"] == "opus"
+
+    def test_unknown_agent_name_uses_defaults(self, tmp_path):
+        """Unknown agent names not in YAML use default model sonnet."""
+        template_file = tmp_path / "t.yml"
+        template_file.write_text(
+            "name: t\ndescription: team\nagents:\n  - unknown-role\n"
+        )
+        mgr = AgentManager()
+        result = mgr.load_team_template(str(template_file))
+        agent = result["agents"][0]
+        assert agent["role"] == "unknown-role"
+        assert agent["model"] == "sonnet"
+
+    def test_missing_file_returns_none(self):
+        """Non-existent template path returns None."""
+        mgr = AgentManager()
+        result = mgr.load_team_template("/tmp/nonexistent_yato_template_xyz.yml")
+        assert result is None
+
+    def test_no_agents_key_returns_data(self, tmp_path):
+        """Template without 'agents' key is returned as-is."""
+        template_file = tmp_path / "t.yml"
+        template_file.write_text("name: t\ndescription: no agents\n")
+        mgr = AgentManager()
+        result = mgr.load_team_template(str(template_file))
+        assert result is not None
+        assert result["name"] == "t"
+        assert "agents" not in result
+
+
+# ==================== create_team with string agent names ====================
+
+
+class TestCreateTeamWithStringAgents:
+    @patch("lib.agent_manager.subprocess.run")
+    @patch("lib.agent_manager._tmux_cmd", return_value=["tmux"])
+    @patch("lib.agent_manager.WorkflowOps.get_current_workflow", return_value="001-test")
+    @patch("lib.agent_manager.WorkflowOps.add_agent_to_yml")
+    def test_string_agents_resolved(self, mock_add, mock_wf, mock_tmux, mock_run, tmp_workflow):
+        """create_team accepts list of string agent names."""
+        project = tmp_workflow.parent.parent
+        mock_run.return_value = MagicMock(returncode=1)  # no session
+        mgr = AgentManager()
+        results = mgr.create_team("sess", ["developer", "qa"], project_path=str(project))
+        assert len(results) == 2
+
+    @patch("lib.agent_manager.subprocess.run")
+    @patch("lib.agent_manager._tmux_cmd", return_value=["tmux"])
+    @patch("lib.agent_manager.WorkflowOps.get_current_workflow", return_value="001-test")
+    @patch("lib.agent_manager.WorkflowOps.add_agent_to_yml")
+    def test_mixed_string_and_dict_agents(self, mock_add, mock_wf, mock_tmux, mock_run, tmp_workflow):
+        """create_team accepts mixed list of strings and dicts."""
+        project = tmp_workflow.parent.parent
+        mock_run.return_value = MagicMock(returncode=1)  # no session
+        mgr = AgentManager()
+        agents = ["developer", {"role": "qa", "name": "qa1", "model": "sonnet"}]
+        results = mgr.create_team("sess", agents, project_path=str(project))
+        assert len(results) == 2
