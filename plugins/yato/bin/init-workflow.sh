@@ -38,9 +38,10 @@ WORKFLOW_PATH="$PROJECT_PATH/.workflow/$WORKFLOW_NAME"
 # Support isolated tmux socket (used by e2e tests)
 TMUX_FLAGS="${TMUX_SOCKET:+-L $TMUX_SOCKET}"
 
-# Set WORKFLOW_NAME in tmux environment (if in tmux)
+# Set WORKFLOW_NAME in tmux environment, scoped to the current session (if in tmux)
 if [[ -n "$TMUX" ]]; then
-    tmux $TMUX_FLAGS setenv WORKFLOW_NAME "$WORKFLOW_NAME"
+    _INIT_SESSION=$(tmux $TMUX_FLAGS display-message -p '#S' 2>/dev/null || echo "")
+    [[ -n "$_INIT_SESSION" ]] && tmux $TMUX_FLAGS setenv -t "$_INIT_SESSION" WORKFLOW_NAME "$WORKFLOW_NAME"
 fi
 
 # NOTE: We intentionally do NOT create .workflow/current file
