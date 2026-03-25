@@ -327,7 +327,7 @@ if [[ "$DAEMON_RUNNING" == "0" && -n "$INCOMPLETE_TASKS" && "$INCOMPLETE_TASKS" 
         echo "Check-in interval not configured yet (placeholder '_'), skipping daemon restart."
     else
         echo "Restarting check-in daemon ($INCOMPLETE_TASKS incomplete tasks)..."
-        cd "$PROJECT_PATH" && uv run --project "$SCRIPT_DIR/.." python "$SCRIPT_DIR/../lib/checkin_scheduler.py" start "$CHECKIN_INTERVAL" --note "Resumed workflow" --target "$PM_PANE" --workflow "$WORKFLOW_NAME" > /dev/null 2>&1
+        cd "$PROJECT_PATH" && uv run --project "$SCRIPT_DIR/.." python "$SCRIPT_DIR/../lib/checkin_scheduler.py" start "$CHECKIN_INTERVAL" --note "Auto check-in ($INCOMPLETE_TASKS tasks remaining)" --target "$PM_PANE" --workflow "$WORKFLOW_NAME" > /dev/null 2>&1
         echo "Check-in daemon restarted."
     fi
 elif [[ "$DAEMON_RUNNING" == "1" ]]; then
