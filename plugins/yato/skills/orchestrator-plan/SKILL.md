@@ -70,11 +70,16 @@ Based on gathered requirements, create a PRD file.
 
 ## Phase 5: Generate Team Configuration
 
-Based on the PRD complexity, generate a team-config.json:
+Read the team suggestion templates from `${CLAUDE_PLUGIN_ROOT}/templates/team-suggestions/` to pick the appropriate team composition:
 
-**Simple project** (1-3 features, single tech): 1 PM + 1 Developer
-**Medium project** (4-6 features, frontend+backend): 1 PM + 2 Developers
-**Complex project** (7+ features, multiple systems): 1 PM + 3+ Developers + QA
+```bash
+ls ${CLAUDE_PLUGIN_ROOT}/templates/team-suggestions/
+cat ${CLAUDE_PLUGIN_ROOT}/templates/team-suggestions/*.yml
+```
+
+Each template defines a team for a specific use case (e.g., development, bug fix). Choose the template that best matches the project's needs based on the PRD. The PM is always included automatically.
+
+For complex projects requiring multiple developers, start from the matching template and add additional developer agents as needed.
 
 ## Phase 6: Deploy the Team
 
