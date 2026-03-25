@@ -13,3 +13,5 @@ agents:
   - developer
   - qa
   - code-reviewer
+  - security-reviewer
+  - code-cleanness-verifier
