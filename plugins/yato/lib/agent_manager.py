@@ -63,128 +63,6 @@ class AgentManager:
     - agent-tasks.md
     """
 
-    # Role configurations
-    ROLE_CONFIGS = {
-        "developer": {
-            "can_modify_code": True,
-            "purpose": "Implementation and development",
-            "responsibilities": [
-                "Implement features according to PRD and tasks.json",
-                "Write clean, maintainable code",
-                "Follow existing code patterns and conventions",
-                "Update agent-tasks.md as you complete tasks",
-                "Notify PM when tasks are done",
-            ],
-        },
-        "backend-developer": {
-            "can_modify_code": True,
-            "purpose": "Backend implementation and development",
-            "responsibilities": [
-                "Implement backend features according to PRD",
-                "Write clean, maintainable code",
-                "Follow existing code patterns and conventions",
-                "Update agent-tasks.md as you complete tasks",
-                "Notify PM when tasks are done",
-            ],
-        },
-        "frontend-developer": {
-            "can_modify_code": True,
-            "purpose": "Frontend implementation and development",
-            "responsibilities": [
-                "Implement frontend features according to PRD",
-                "Write clean, maintainable code",
-                "Follow existing code patterns and conventions",
-                "Update agent-tasks.md as you complete tasks",
-                "Notify PM when tasks are done",
-            ],
-        },
-        "fullstack-developer": {
-            "can_modify_code": True,
-            "purpose": "Full-stack implementation and development",
-            "responsibilities": [
-                "Implement features across the stack",
-                "Write clean, maintainable code",
-                "Follow existing code patterns and conventions",
-                "Update agent-tasks.md as you complete tasks",
-                "Notify PM when tasks are done",
-            ],
-        },
-        "qa": {
-            "can_modify_code": "test-only",
-            "purpose": "Testing and quality assurance",
-            "responsibilities": [
-                "Test implementations thoroughly",
-                "Write and run test cases (you CAN create/modify test files in e2e/, tests/, __tests__/)",
-                "Report bugs and issues to developers",
-                "Verify fixes before marking complete",
-                "Do NOT modify production code (src/, lib/, app/) - TEST FILES ONLY",
-                "You are ALLOWED to use Write/Edit tools for test files",
-            ],
-        },
-        "code-reviewer": {
-            "can_modify_code": False,
-            "purpose": "Code review and security analysis",
-            "responsibilities": [
-                "Review code for quality and best practices",
-                "Check for security vulnerabilities",
-                "Provide constructive feedback",
-                "Request changes from developers - do NOT fix yourself",
-                "Approve only when all issues are addressed",
-            ],
-        },
-        "reviewer": {
-            "can_modify_code": False,
-            "purpose": "Code review",
-            "responsibilities": [
-                "Review code for quality and best practices",
-                "Provide constructive feedback",
-                "Request changes from developers - do NOT fix yourself",
-                "Approve only when all issues are addressed",
-            ],
-        },
-        "security-reviewer": {
-            "can_modify_code": False,
-            "purpose": "Security analysis",
-            "responsibilities": [
-                "Review code for security vulnerabilities",
-                "Check for OWASP top 10 issues",
-                "Provide security recommendations",
-                "Request changes from developers",
-            ],
-        },
-        "devops": {
-            "can_modify_code": True,
-            "purpose": "Infrastructure and deployment",
-            "responsibilities": [
-                "Manage infrastructure and deployment",
-                "Set up CI/CD pipelines",
-                "Monitor system health",
-                "Handle environment configuration",
-            ],
-        },
-        "designer": {
-            "can_modify_code": False,
-            "purpose": "Design and user experience",
-            "responsibilities": [
-                "Create and review designs",
-                "Provide UX recommendations",
-                "Work with developers on implementation",
-                "Ensure design consistency",
-            ],
-        },
-        "pm": {
-            "can_modify_code": False,
-            "purpose": "Project management and coordination",
-            "responsibilities": [
-                "Coordinate team and assign tasks",
-                "Track progress in tasks.json",
-                "Ensure quality standards are met",
-                "Communicate with user for clarifications",
-                "Verify all work is complete before marking done",
-            ],
-        },
-    }
-
     def __init__(self, workflow_path: Optional[str] = None, yato_path: Optional[str] = None):
         """
         Initialize the agent manager.
@@ -230,30 +108,23 @@ class AgentManager:
                 continue
         return agents
 
-    # Default model per role
-    ROLE_DEFAULT_MODELS = {
-        "code-reviewer": "opus",
-        "security-reviewer": "opus",
-        "pm": "opus",
-    }
-
     def _get_default_model(self, role: str) -> str:
-        """Get the default model for a role."""
+        """Get the default model for a role from predefined YAML agents."""
         role_lower = role.lower()
         predefined = self.load_predefined_agents()
         if role_lower in predefined:
             return predefined[role_lower].get("default_model", "sonnet")
-        return self.ROLE_DEFAULT_MODELS.get(role_lower, "sonnet")
+        return "sonnet"
 
     def _get_role_config(self, role: str) -> Dict[str, Any]:
         """Get configuration for a role.
 
-        Checks predefined agent YAMLs first, then falls back to hardcoded ROLE_CONFIGS,
-        partial name matching, and a default config.
+        Checks predefined agent YAMLs (agents/*.yml) first, then falls back to
+        partial name matching and a default config for custom roles.
         """
         role_lower = role.lower()
 
-        # Check predefined YAML agents first
+        # Check predefined YAML agents
         predefined = self.load_predefined_agents()
         if role_lower in predefined:
             agent = predefined[role_lower]
@@ -265,11 +136,7 @@ class AgentManager:
                 "default_model": agent.get("default_model", "sonnet"),
             }
 
-        # Check hardcoded ROLE_CONFIGS
-        if role_lower in self.ROLE_CONFIGS:
-            return self.ROLE_CONFIGS[role_lower]
-
-        # Check for partial matches
+        # Check for partial matches (custom roles containing "dev" or "developer")
         if "developer" in role_lower or "dev" in role_lower:
             return {
                 "can_modify_code": True,
@@ -281,7 +148,7 @@ class AgentManager:
                 ],
             }
 
-        # Default config
+        # Default config for unknown roles
         return {
             "can_modify_code": False,
             "purpose": "Support and analysis",

@@ -57,9 +57,12 @@ class TestGetDefaultModel:
         mgr = AgentManager()
         assert mgr._get_default_model("security-reviewer") == "opus"
 
+    def test_developer_gets_opus(self):
+        mgr = AgentManager()
+        assert mgr._get_default_model("developer") == "opus"
+
     def test_unknown_role_gets_sonnet(self):
         mgr = AgentManager()
-        assert mgr._get_default_model("developer") == "sonnet"
         assert mgr._get_default_model("unknown") == "sonnet"
 
 
@@ -779,9 +782,9 @@ class TestLoadPredefinedAgents:
         mgr = AgentManager()
         agents = mgr.load_predefined_agents()
         expected = [
-            "developer", "backend-developer", "frontend-developer",
-            "fullstack-developer", "qa", "code-reviewer", "reviewer",
+            "developer", "qa", "code-reviewer",
             "security-reviewer", "devops", "designer",
+            "code-cleanness-verifier",
         ]
         for role in expected:
             assert role in agents, f"Missing agent: {role}"
@@ -822,10 +825,10 @@ class TestLoadPredefinedAgents:
         agents = mgr.load_predefined_agents()
         assert agents["security-reviewer"]["default_model"] == "opus"
 
-    def test_developer_uses_sonnet(self):
+    def test_developer_uses_opus(self):
         mgr = AgentManager()
         agents = mgr.load_predefined_agents()
-        assert agents["developer"]["default_model"] == "sonnet"
+        assert agents["developer"]["default_model"] == "opus"
 
     def test_missing_agents_dir_returns_empty(self, tmp_path):
         """When agents/ dir doesn't exist, returns empty dict."""
@@ -876,7 +879,7 @@ class TestGetRoleConfigWithYaml:
         config = mgr._get_role_config("developer")
         # Should come from YAML
         assert "instructions" in config
-        assert config["default_model"] == "sonnet"
+        assert config["default_model"] == "opus"
 
     def test_yaml_agent_has_instructions_key(self):
         """YAML-based config has 'instructions' key."""
@@ -919,7 +922,7 @@ class TestLoadTeamTemplate:
         assert len(result["agents"]) == 1
         agent = result["agents"][0]
         assert agent["role"] == "developer"
-        assert agent["model"] == "sonnet"
+        assert agent["model"] == "opus"
 
     def test_resolves_multiple_string_agents(self, tmp_path):
         """String agent names are resolved to full configs from predefined YAMLs."""
