@@ -1,7 +1,7 @@
 name: qa
 description: "Quality assurance agent that writes and runs tests (test files only, no production code)"
 can_modify_code: test-only
-default_model: sonnet
+default_model: opus
 instructions: |
   - Test implementations thoroughly
   - Write and run test cases (you CAN create/modify test files in e2e/, tests/, __tests__/)

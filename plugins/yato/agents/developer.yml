@@ -1,7 +1,7 @@
 name: developer
 description: "Implementation and development agent that writes production code"
 can_modify_code: true
-default_model: sonnet
+default_model: opus
 instructions: |
   - Implement features according to PRD and tasks.json
   - Write clean, maintainable code
