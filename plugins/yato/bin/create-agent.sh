@@ -211,42 +211,28 @@ if [[ -n "$PROJECT_PATH" ]]; then
         # Files don't exist - create everything (backward compatibility)
         mkdir -p "$AGENT_DIR"
 
-        # Determine if agent can modify code based on role
-        CAN_MODIFY_CODE="true"
-        AGENT_PURPOSE="Implementation and development"
-
-        case "$ROLE" in
-            qa)
-                CAN_MODIFY_CODE="false"
-                AGENT_PURPOSE="Testing and quality assurance"
-                ;;
-            code-reviewer|reviewer|security-reviewer)
-                CAN_MODIFY_CODE="false"
-                AGENT_PURPOSE="Code review and security analysis"
-                ;;
-            developer|backend-developer|frontend-developer|fullstack-developer)
-                CAN_MODIFY_CODE="true"
-                AGENT_PURPOSE="Implementation and development"
-                ;;
-            devops)
-                CAN_MODIFY_CODE="true"
-                AGENT_PURPOSE="Infrastructure and deployment"
-                ;;
-            designer)
-                CAN_MODIFY_CODE="false"
-                AGENT_PURPOSE="Design and user experience"
-                ;;
-            *)
-                # Default: developers can modify, others cannot
-                if [[ "$ROLE" == *"developer"* ]] || [[ "$ROLE" == *"dev"* ]]; then
-                    CAN_MODIFY_CODE="true"
-                    AGENT_PURPOSE="Development and implementation"
-                else
-                    CAN_MODIFY_CODE="false"
-                    AGENT_PURPOSE="Support and analysis"
-                fi
-                ;;
-        esac
+        # Determine if agent can modify code and purpose from agents/*.yml
+        AGENT_YML_INFO=$(uv run --project "$SCRIPT_DIR/.." python -c "
+import yaml, sys, pathlib
+agents_dir = pathlib.Path('$SCRIPT_DIR/../agents')
+for f in agents_dir.glob('*.yml'):
+    with open(f) as fh:
+        data = yaml.safe_load(fh)
+    if data and data.get('name') == '$ROLE':
+        can_modify = data.get('can_modify_code', True)
+        # Normalize: true/false/test-only -> true/false
+        if isinstance(can_modify, str) and can_modify not in ('true', 'false'):
+            can_modify = False
+        print(f'{str(can_modify).lower()}|{data.get(\"description\", \"\")}')
+        sys.exit(0)
+# Fallback for unknown roles
+if 'developer' in '$ROLE' or 'dev' in '$ROLE':
+    print('true|Development and implementation')
+else:
+    print('false|Support and analysis')
+" 2>/dev/null) || AGENT_YML_INFO="true|Implementation and development"
+        CAN_MODIFY_CODE="${AGENT_YML_INFO%%|*}"
+        AGENT_PURPOSE="${AGENT_YML_INFO#*|}"
 
         # Create identity.yml (pane_id-based format)
         cat > "$AGENT_DIR/identity.yml" <<EOF
@@ -277,46 +263,29 @@ else
 fi)
 
 ## Responsibilities
-$(case "$ROLE" in
-    developer|backend-developer|frontend-developer|fullstack-developer)
-        echo "- Implement features according to PRD and tasks.json"
-        echo "- Write clean, maintainable code"
-        echo "- Follow existing code patterns and conventions"
-        echo "- Update agent-tasks.md as you complete tasks"
-        echo "- Notify PM when tasks are done"
-        ;;
-    qa)
-        echo "- Test implementations thoroughly"
-        echo "- Write and run test cases"
-        echo "- Report bugs and issues to developers"
-        echo "- Verify fixes before marking complete"
-        ;;
-    code-reviewer|reviewer|security-reviewer)
-        echo "- Review code for quality and best practices"
-        echo "- Check for security vulnerabilities"
-        echo "- Provide constructive feedback"
-        echo "- Request changes from developers"
-        echo "- Approve only when all issues are addressed"
-        ;;
-    devops)
-        echo "- Manage infrastructure and deployment"
-        echo "- Set up CI/CD pipelines"
-        echo "- Monitor system health"
-        echo "- Handle environment configuration"
-        ;;
-    pm)
-        echo "- Coordinate team and assign tasks"
-        echo "- Track progress in tasks.json"
-        echo "- Ensure quality standards are met"
-        echo "- Communicate with user for clarifications"
-        echo "- Verify all work is complete before marking done"
-        ;;
-    *)
-        echo "- Follow instructions from PM"
-        echo "- Update agent-tasks.md as you work"
-        echo "- Notify PM when blocked or done"
-        ;;
-esac)
+$(uv run --project "$SCRIPT_DIR/.." python -c "
+import yaml, pathlib
+agents_dir = pathlib.Path('$SCRIPT_DIR/../agents')
+for f in agents_dir.glob('*.yml'):
+    with open(f) as fh:
+        data = yaml.safe_load(fh)
+    if data and data.get('name') == '$ROLE':
+        instructions = data.get('instructions', '').strip()
+        if instructions:
+            print(instructions)
+        else:
+            print('- Follow instructions from PM')
+            print('- Update agent-tasks.md as you work')
+            print('- Notify PM when blocked or done')
+        exit(0)
+print('- Follow instructions from PM')
+print('- Update agent-tasks.md as you work')
+print('- Notify PM when blocked or done')
+" 2>/dev/null || {
+    echo "- Follow instructions from PM"
+    echo "- Update agent-tasks.md as you work"
+    echo "- Notify PM when blocked or done"
+})
 
 ## Communication
 - Notify PM using: notify-pm.sh "[STATUS] message"

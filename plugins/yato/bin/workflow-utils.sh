@@ -302,7 +302,7 @@ add_agent_to_yml() {
     # Check if agent already exists (from save_team_structure at Step 6)
     if grep -q "name: \"$agent_name\"" "$agents_file" || grep -q "name: $agent_name$" "$agents_file"; then
         # Update existing entry's session and window fields using Python for reliable YAML editing
-        python3 -c "
+        if ! uv run --project "$WORKFLOW_UTILS_DIR/.." python -c "
 import yaml, sys
 with open('$agents_file', 'r') as f:
     data = yaml.safe_load(f)
@@ -347,7 +347,10 @@ with open('$agents_file', 'w') as f:
                     else:
                         f.write(f'{prefix}{key}: {val}\n')
                     first_key = False
-"
+"; then
+            echo "Error: Failed to update $agent_name in agents.yml (python/yaml error)" >&2
+            return 1
+        fi
         echo "Updated $agent_name in agents.yml (window $window_number)"
         return 0
     fi
@@ -427,7 +430,7 @@ save_team_structure() {
         # Check if agent already exists — skip append if so (update role/model in place)
         if grep -q "name: \"$agent_name\"" "$agents_file" || grep -q "name: $agent_name$" "$agents_file"; then
             # Agent already in agents.yml — update role and model via Python for reliable YAML editing
-            python3 -c "
+            if ! uv run --project "$WORKFLOW_UTILS_DIR/.." python -c "
 import yaml
 with open('$agents_file', 'r') as f:
     data = yaml.safe_load(f)
@@ -468,7 +471,10 @@ with open('$agents_file', 'w') as f:
                     else:
                         f.write(f'{prefix}{key}: {val}\n')
                     first_key = False
-"
+"; then
+                echo "Error: Failed to update $agent_name in agents.yml (python/yaml error)" >&2
+                return 1
+            fi
         else
             # Append new agent to agents.yml with empty pane_id/session/window
             cat >> "$agents_file" <<EOF

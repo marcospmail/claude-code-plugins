@@ -85,20 +85,21 @@ echo ""
 # Track created agents
 CREATED_AGENTS=()
 
-# Function to get default model for agent role
+# Function to get default model for agent role (reads from agents/*.yml)
 get_default_model() {
     local role=$1
-    case "$role" in
-        code-reviewer)
-            echo "opus"
-            ;;
-        developer|qa|backend-developer|frontend-developer|designer|devops)
-            echo "sonnet"
-            ;;
-        *)
-            echo "sonnet"  # Default to sonnet
-            ;;
-    esac
+    local yato_root="$SCRIPT_DIR/.."
+    uv run --project "$yato_root" python -c "
+import yaml, sys, pathlib
+agents_dir = pathlib.Path('$yato_root/agents')
+for f in agents_dir.glob('*.yml'):
+    with open(f) as fh:
+        data = yaml.safe_load(fh)
+    if data and data.get('name') == '$role':
+        print(data.get('default_model', 'sonnet'))
+        sys.exit(0)
+print('sonnet')
+" 2>/dev/null || echo "sonnet"
 }
 
 # Count occurrences of each role for smart naming (bash 3.2 compatible)
