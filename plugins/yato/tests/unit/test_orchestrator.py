@@ -319,19 +319,15 @@ class TestDeployTeamPanes:
 class TestGetDefaultModel:
     def test_pm(self):
         orc = Orchestrator()
-        assert orc._get_default_model("pm") == "sonnet"
+        assert orc._get_default_model("pm") == "opus"
 
     def test_developer(self):
         orc = Orchestrator()
-        assert orc._get_default_model("developer") == "sonnet"
+        assert orc._get_default_model("developer") == "opus"
 
     def test_qa(self):
         orc = Orchestrator()
-        assert orc._get_default_model("qa") == "haiku"
-
-    def test_architect(self):
-        orc = Orchestrator()
-        assert orc._get_default_model("architect") == "opus"
+        assert orc._get_default_model("qa") == "opus"
 
     def test_unknown_defaults_to_sonnet(self):
         orc = Orchestrator()
@@ -812,14 +808,15 @@ class TestCmdDeploy:
         assert ret == 0
         captured = capsys.readouterr()
         assert "Deployed team to: mysess" in captured.out
-        # Verify default team config passed
-        mock_deploy.assert_called_once_with(
-            session_name="mysess",
-            project_path="/tmp/proj",
-            team_config=[{"role": "pm"}, {"role": "developer"}],
-            project_context=None,
-            use_panes=False,
-        )
+        # Verify default team loaded from development.yml template
+        mock_deploy.assert_called_once()
+        call_kwargs = mock_deploy.call_args[1]
+        assert call_kwargs["session_name"] == "mysess"
+        assert call_kwargs["project_path"] == "/tmp/proj"
+        assert call_kwargs["use_panes"] is False
+        assert call_kwargs["project_context"] is None
+        roles = [a["role"] for a in call_kwargs["team_config"]]
+        assert roles == ["pm", "developer", "qa", "code-reviewer", "security-reviewer", "code-cleanness-verifier"]
 
     @patch("lib.orchestrator.Orchestrator.deploy_team")
     def test_with_config_file_list_format(self, mock_deploy, capsys, tmp_path):
@@ -911,13 +908,11 @@ class TestCmdDeploy:
         }
         args = argparse.Namespace(session="s", path="/p", config=None, panes=True)
         cmd_deploy(args)
-        mock_deploy.assert_called_once_with(
-            session_name="s",
-            project_path="/p",
-            team_config=[{"role": "pm"}, {"role": "developer"}],
-            project_context=None,
-            use_panes=True,
-        )
+        mock_deploy.assert_called_once()
+        call_kwargs = mock_deploy.call_args[1]
+        assert call_kwargs["use_panes"] is True
+        roles = [a["role"] for a in call_kwargs["team_config"]]
+        assert roles == ["pm", "developer", "qa", "code-reviewer", "security-reviewer", "code-cleanness-verifier"]
 
 
 # ==================== cmd_start (lines 778-787) ====================

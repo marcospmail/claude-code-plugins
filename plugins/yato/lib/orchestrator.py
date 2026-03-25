@@ -584,31 +584,13 @@ class Orchestrator:
         return result
 
     def _get_default_model(self, role: str) -> str:
+        """Get default Claude model based on agent role.
+
+        Delegates to AgentManager which reads from agents/*.yml files.
         """
-        Get default Claude model based on agent role.
-
-        - opus: Planning, PRD generation, PM oversight, complex decisions
-        - sonnet: Implementation, coding, development tasks
-        - haiku: Simple tasks, reading, exploring, QA checks
-        """
-        model_map = {
-            # Opus for planning and oversight
-            "pm": "sonnet",  # PM needs good balance of speed and quality
-            "architect": "opus",
-            "planner": "opus",
-
-            # Sonnet for implementation
-            "developer": "sonnet",
-            "engineer": "sonnet",
-            "devops": "sonnet",
-
-            # Haiku for simpler tasks
-            "qa": "haiku",
-            "reviewer": "haiku",
-            "researcher": "haiku",
-            "explorer": "haiku",
-        }
-        return model_map.get(role, "sonnet")  # Default to sonnet
+        from lib.agent_manager import AgentManager
+        mgr = AgentManager(yato_path=str(self.project_root))
+        return mgr._get_default_model(role)
 
     # ==================== Agent Operations ====================
 
@@ -750,11 +732,19 @@ def cmd_deploy(args: argparse.Namespace) -> int:
             team_config = config_data.get("agents", [])
             project_context = config_data.get("project_context")
     else:
-        # Default team: PM + Developer
-        team_config = [
-            {"role": "pm"},
-            {"role": "developer"}
-        ]
+        # Default team: read from development.yml template
+        from lib.agent_manager import AgentManager
+        mgr = AgentManager(yato_path=str(Path(__file__).parent.parent))
+        template_path = Path(__file__).parent.parent / "templates" / "team-suggestions" / "development.yml"
+        template = mgr.load_team_template(str(template_path))
+        if template and "agents" in template:
+            team_config = [{"role": "pm"}] + template["agents"]
+        else:
+            # Fallback: PM + developer
+            team_config = [
+                {"role": "pm"},
+                {"role": "developer"},
+            ]
 
     result = orchestrator.deploy_team(
         session_name=args.session,
