@@ -545,6 +545,21 @@ def run_daemon(
         except:
             pass
 
+    def reset_status_in_progress():
+        """Reset workflow status from completed back to in-progress."""
+        if not status_file.exists():
+            return
+        try:
+            with open(status_file, "r") as f:
+                content = f.read()
+            import re
+            content = re.sub(r"^status: completed$", "status: in-progress", content, flags=re.MULTILINE)
+            content = re.sub(r"^completed_at:.*\n?", "", content, flags=re.MULTILINE)
+            with open(status_file, "w") as f:
+                f.write(content)
+        except:
+            pass
+
     def send_message(message: str):
         """Send a message to the target pane with stacked suffixes."""
         try:
@@ -600,6 +615,11 @@ def run_daemon(
             _tmux_send_message(target, msg, _skip_suffix=True)
         except:
             pass
+
+    # Reset status to in-progress if there are incomplete tasks
+    incomplete_at_start = get_incomplete_tasks()
+    if incomplete_at_start > 0:
+        reset_status_in_progress()
 
     # Get current pending check-in ID
     data = load_checkins()

@@ -2178,3 +2178,188 @@ class TestCheckinSchedulerCLIStatusWithDaemon:
         captured = capsys.readouterr()
         assert "Daemon PID:" in captured.out
         assert "Next check-in:" in captured.out
+
+
+# ==================== run_daemon reset_status_in_progress ====================
+
+
+class TestRunDaemonResetStatusInProgress:
+    """Tests reset_status_in_progress called at daemon start."""
+
+    @patch("lib.checkin_scheduler.time.sleep")
+    def test_daemon_start_resets_completed_to_in_progress_when_incomplete_tasks(self, mock_sleep, tmp_project):
+        """status.yml with status: completed is reset to in-progress when pending tasks exist."""
+        wf_name = "001-test"
+        wf = tmp_project / ".workflow" / wf_name
+        wf.mkdir(parents=True)
+
+        # One pending task = incomplete
+        tasks_data = {"tasks": [{"status": "pending"}, {"status": "completed"}]}
+        (wf / "tasks.json").write_text(json.dumps(tasks_data))
+
+        (wf / "status.yml").write_text("status: completed\ncompleted_at: 2026-03-25T10:00:00\n")
+
+        # PID -1 so should_stop() triggers immediately after reset (which happens before loop)
+        checkins_data = {"checkins": [], "daemon_pid": -1}
+        (wf / "checkins.json").write_text(json.dumps(checkins_data))
+
+        with patch("lib.tmux_utils.send_message"):
+            run_daemon(
+                workflow_name=wf_name,
+                interval_minutes=1,
+                target="sess:0",
+                yato_path=str(tmp_project),
+                project_dir=str(tmp_project),
+            )
+
+        content = (wf / "status.yml").read_text()
+        assert "status: in-progress" in content
+        assert "status: completed" not in content
+
+    @patch("lib.checkin_scheduler.time.sleep")
+    def test_daemon_start_does_not_reset_when_all_tasks_completed(self, mock_sleep, tmp_project):
+        """status.yml stays completed when all tasks are completed."""
+        wf_name = "001-test"
+        wf = tmp_project / ".workflow" / wf_name
+        wf.mkdir(parents=True)
+
+        pid = os.getpid()
+        tasks_data = {"tasks": [{"status": "completed"}, {"status": "completed"}]}
+        (wf / "tasks.json").write_text(json.dumps(tasks_data))
+
+        (wf / "status.yml").write_text("status: completed\ncompleted_at: 2026-03-25T10:00:00\n")
+
+        checkins_data = {"checkins": [], "daemon_pid": pid}
+        (wf / "checkins.json").write_text(json.dumps(checkins_data))
+
+        with patch("lib.tmux_utils.send_message"):
+            run_daemon(
+                workflow_name=wf_name,
+                interval_minutes=1,
+                target="sess:0",
+                yato_path=str(tmp_project),
+                project_dir=str(tmp_project),
+            )
+
+        content = (wf / "status.yml").read_text()
+        assert "status: completed" in content
+        assert "completed_at: 2026-03-25T10:00:00" in content
+
+    @patch("lib.checkin_scheduler.time.sleep")
+    def test_completed_at_removed_when_status_reset(self, mock_sleep, tmp_project):
+        """completed_at line is removed when status is reset from completed to in-progress."""
+        wf_name = "001-test"
+        wf = tmp_project / ".workflow" / wf_name
+        wf.mkdir(parents=True)
+
+        tasks_data = {"tasks": [{"status": "in_progress"}]}
+        (wf / "tasks.json").write_text(json.dumps(tasks_data))
+
+        (wf / "status.yml").write_text(
+            "status: completed\ntitle: Test\ncompleted_at: 2026-03-25T10:00:00\ncheckin_interval_minutes: 5\n"
+        )
+
+        # PID -1 so daemon stops after reset
+        checkins_data = {"checkins": [], "daemon_pid": -1}
+        (wf / "checkins.json").write_text(json.dumps(checkins_data))
+
+        with patch("lib.tmux_utils.send_message"):
+            run_daemon(
+                workflow_name=wf_name,
+                interval_minutes=1,
+                target="sess:0",
+                yato_path=str(tmp_project),
+                project_dir=str(tmp_project),
+            )
+
+        content = (wf / "status.yml").read_text()
+        assert "status: in-progress" in content
+        assert "completed_at" not in content
+        # Other fields preserved
+        assert "title: Test" in content
+        assert "checkin_interval_minutes: 5" in content
+
+    @patch("lib.checkin_scheduler.time.sleep")
+    def test_status_not_touched_if_already_in_progress(self, mock_sleep, tmp_project):
+        """status.yml with status: in-progress is not modified."""
+        wf_name = "001-test"
+        wf = tmp_project / ".workflow" / wf_name
+        wf.mkdir(parents=True)
+
+        tasks_data = {"tasks": [{"status": "pending"}]}
+        (wf / "tasks.json").write_text(json.dumps(tasks_data))
+
+        original_content = "status: in-progress\ntitle: Test\ncheckin_interval_minutes: 5\n"
+        (wf / "status.yml").write_text(original_content)
+
+        # PID -1 so daemon stops after reset check
+        checkins_data = {"checkins": [], "daemon_pid": -1}
+        (wf / "checkins.json").write_text(json.dumps(checkins_data))
+
+        with patch("lib.tmux_utils.send_message"):
+            run_daemon(
+                workflow_name=wf_name,
+                interval_minutes=1,
+                target="sess:0",
+                yato_path=str(tmp_project),
+                project_dir=str(tmp_project),
+            )
+
+        content = (wf / "status.yml").read_text()
+        assert content == original_content
+
+    @patch("lib.checkin_scheduler.time.sleep")
+    def test_reset_handles_missing_status_file(self, mock_sleep, tmp_project):
+        """No crash when status.yml doesn't exist and there are incomplete tasks."""
+        wf_name = "001-test"
+        wf = tmp_project / ".workflow" / wf_name
+        wf.mkdir(parents=True)
+
+        tasks_data = {"tasks": [{"status": "pending"}]}
+        (wf / "tasks.json").write_text(json.dumps(tasks_data))
+
+        # No status.yml created; PID -1 so daemon stops quickly
+        checkins_data = {"checkins": [], "daemon_pid": -1}
+        (wf / "checkins.json").write_text(json.dumps(checkins_data))
+
+        with patch("lib.tmux_utils.send_message"):
+            run_daemon(
+                workflow_name=wf_name,
+                interval_minutes=1,
+                target="sess:0",
+                yato_path=str(tmp_project),
+                project_dir=str(tmp_project),
+            )
+
+        # Should complete without error, status.yml still doesn't exist
+        assert not (wf / "status.yml").exists()
+
+    @patch("lib.checkin_scheduler.time.sleep")
+    def test_reset_works_without_completed_at_field(self, mock_sleep, tmp_project):
+        """Reset works fine when status.yml has status: completed but no completed_at."""
+        wf_name = "001-test"
+        wf = tmp_project / ".workflow" / wf_name
+        wf.mkdir(parents=True)
+
+        tasks_data = {"tasks": [{"status": "blocked"}]}
+        (wf / "tasks.json").write_text(json.dumps(tasks_data))
+
+        (wf / "status.yml").write_text("status: completed\ntitle: Test\n")
+
+        # PID -1 so daemon stops after reset
+        checkins_data = {"checkins": [], "daemon_pid": -1}
+        (wf / "checkins.json").write_text(json.dumps(checkins_data))
+
+        with patch("lib.tmux_utils.send_message"):
+            run_daemon(
+                workflow_name=wf_name,
+                interval_minutes=1,
+                target="sess:0",
+                yato_path=str(tmp_project),
+                project_dir=str(tmp_project),
+            )
+
+        content = (wf / "status.yml").read_text()
+        assert "status: in-progress" in content
+        assert "status: completed" not in content
+        assert "title: Test" in content

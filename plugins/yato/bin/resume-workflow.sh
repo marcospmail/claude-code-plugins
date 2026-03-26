@@ -315,13 +315,21 @@ echo ""
 echo "Starting check-in display..."
 tmux $TMUX_FLAGS send-keys -t "$CHECKINS_PANE" "$SCRIPT_DIR/checkin-display.sh" Enter
 
-# Restart check-in daemon if there are incomplete tasks and no daemon running
+# Reset status.yml from completed to in-progress if there are incomplete tasks
 echo ""
 echo "Checking check-in daemon status..."
 DAEMON_STATUS=$(cd "$PROJECT_PATH" && uv run --project "$SCRIPT_DIR/.." python "$SCRIPT_DIR/../lib/checkin_scheduler.py" status --workflow "$WORKFLOW_NAME" 2>&1)
 DAEMON_RUNNING=$(echo "$DAEMON_STATUS" | grep "Daemon running:" | grep -c "True" || true)
 INCOMPLETE_TASKS=$(echo "$DAEMON_STATUS" | grep "Incomplete tasks:" | awk '{print $NF}')
 
+if [[ "$WORKFLOW_STATUS" == "completed" && -n "$INCOMPLETE_TASKS" && "$INCOMPLETE_TASKS" -gt 0 ]]; then
+    echo "Workflow status is 'completed' but $INCOMPLETE_TASKS tasks remain — resetting to 'in-progress'..."
+    sed -i '' 's/^status: completed$/status: in-progress/' "$STATUS_FILE"
+    sed -i '' '/^completed_at:/d' "$STATUS_FILE"
+    WORKFLOW_STATUS="in-progress"
+fi
+
+# Restart check-in daemon if there are incomplete tasks and no daemon running
 if [[ "$DAEMON_RUNNING" == "0" && -n "$INCOMPLETE_TASKS" && "$INCOMPLETE_TASKS" -gt 0 ]]; then
     if [[ "$CHECKIN_INTERVAL" == "_" || -z "$CHECKIN_INTERVAL" ]]; then
         echo "Check-in interval not configured yet (placeholder '_'), skipping daemon restart."
