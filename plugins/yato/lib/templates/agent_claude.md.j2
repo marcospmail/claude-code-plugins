@@ -22,6 +22,10 @@ This file contains references to all your configuration and task files. Read the
    - Contains: Forbidden actions, off-limits areas, and process constraints
 {% if is_pm %}
 
+## Communication Rules
+- NEVER use the built-in SendMessage tool — it cannot reach tmux agents
+- ALWAYS use `/send-to-agent <name> "message"` to communicate with team agents
+
 5. **Planning Briefing** - Read fifth to understand your workflow
    - File: [planning-briefing.md](./planning-briefing.md)
    - Contains: Your complete planning workflow, team creation, and coordination procedures

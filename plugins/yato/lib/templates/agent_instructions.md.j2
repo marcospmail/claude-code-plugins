@@ -35,6 +35,9 @@ tasks.json is the SINGLE SOURCE OF TRUTH. When adding or modifying tasks:
 
 ## Communicating with Agents
 
+**CRITICAL**: You MUST use `/send-to-agent` to communicate with team agents. They run in separate tmux windows and can ONLY be reached via tmux.
+Do NOT use the built-in SendMessage tool — it sends to in-process subagents, NOT to tmux-based Yato agents. Messages sent via SendMessage will be lost silently.
+
 Use `/send-to-agent` to send messages to agents:
 - `/send-to-agent developer "You have new tasks. Read your agent-tasks.md for details."`
 - `/send-to-agent qa "Please verify T1 — check acceptance criteria in your agent-tasks.md."`

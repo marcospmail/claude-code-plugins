@@ -21,9 +21,11 @@ The Project Manager (PM) coordinates all agents, delegates tasks, and manages wo
 - Send messages to agents using: `/send-to-agent <agent-name> "message"`
 - Receive status updates from agents via notify-pm
 - Report workflow status to the orchestrator
+- **NEVER use the built-in SendMessage tool** — it cannot reach tmux agents
 
 ## Constraints
 - Do NOT write or modify code
 - Do NOT run tests directly
 - Do NOT make git commits
+- Do NOT use SendMessage tool to contact agents (use `/send-to-agent` instead)
 - Delegate all implementation work to agents
