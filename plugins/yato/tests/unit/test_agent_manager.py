@@ -740,11 +740,13 @@ class TestAgentManagerCLI:
         mock_init.assert_called_once_with(str(tmp_path), "mydev", "developer", "sonnet", None, is_existing_project=False)
 
     def test_create_command(self, tmp_path):
-        """Run with create subcommand (lines 869-880)."""
+        """Run with create subcommand (lines 869-882)."""
         mock_create = MagicMock(return_value={"name": "dev", "role": "developer"})
         mock_model = MagicMock(return_value="sonnet")
+        mock_effort = MagicMock(return_value=None)
         MockAgent = type("AgentManager", (), {
             "_get_default_model": mock_model,
+            "_get_default_effort": mock_effort,
         })
         self._exec_main_block(
             ["create", "mysession", "developer", "-p", str(tmp_path), "--no-start", "--no-brief"],
@@ -756,7 +758,7 @@ class TestAgentManagerCLI:
         mock_create.assert_called_once_with(
             session="mysession", role="developer",
             project_path=str(tmp_path), name=None,
-            model="sonnet", start_claude=False, send_brief=False,
+            model="sonnet", effort=None, start_claude=False, send_brief=False,
         )
 
     def test_no_command_prints_help(self, capsys):

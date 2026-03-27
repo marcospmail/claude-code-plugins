@@ -293,7 +293,7 @@ class TestUpdateCheckinInterval:
         wf = tmp_project / ".workflow" / "001-test"
         wf.mkdir(parents=True)
         status_file = wf / "status.yml"
-        status_file.write_text("# Status\ncheckin_interval_minutes: 15\nstatus: in-progress\n")
+        status_file.write_text("# Status\ncheckin_interval_minutes: 5\nstatus: in-progress\n")
 
         result = WorkflowOps.update_checkin_interval(str(tmp_project), 5)
         assert result is True

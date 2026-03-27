@@ -24,7 +24,7 @@ def tmp_workflow(tmp_project):
         "title": "Test Feature",
         "initial_request": "Build test feature",
         "folder": "001-test-feature",
-        "checkin_interval_minutes": 15,
+        "checkin_interval_minutes": 5,
         "created_at": "2026-01-01T00:00:00Z",
         "session": "test-session",
         "agent_message_suffix": "",

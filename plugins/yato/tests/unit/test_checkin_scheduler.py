@@ -217,7 +217,7 @@ class TestGetInterval:
     def test_from_status_yml(self, tmp_workflow):
         sched = CheckinScheduler(str(tmp_workflow))
         interval = sched.get_interval()
-        assert interval == 15
+        assert interval == 5
 
     def test_placeholder_underscore(self, tmp_path):
         wf = tmp_path / "wf"
@@ -473,7 +473,7 @@ class TestStatus:
         assert "incomplete_tasks" in status
         assert "next_checkin" in status
         assert "total_checkins" in status
-        assert status["interval_minutes"] == 15
+        assert status["interval_minutes"] == 5
         assert status["incomplete_tasks"] == 2
         assert status["next_checkin"] == "2026-01-01T12:00:00"
 
