@@ -45,6 +45,7 @@ ROLE=""
 PROJECT_PATH=""
 WINDOW_NAME=""
 MODEL=""
+EFFORT=""
 START_CLAUDE=true
 SEND_BRIEF=true
 
@@ -66,6 +67,7 @@ Options:
   -p, --path      Project path (working directory)
   -n, --name      Window name (default: <Role>)
   -m, --model     Claude model to use (opus, sonnet, haiku)
+  -e, --effort    Claude effort level (low, medium, high)
   --no-start      Don't start Claude automatically
   --no-brief      Don't send briefing message
   -h, --help      Show this help
@@ -94,6 +96,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -m|--model)
             MODEL="$2"
+            shift 2
+            ;;
+        -e|--effort)
+            EFFORT="$2"
             shift 2
             ;;
         --no-start)
@@ -239,6 +245,7 @@ else:
 name: ${WINDOW_NAME}
 role: ${ROLE}
 model: ${MODEL:-sonnet}
+effort: ${EFFORT}
 pane_id: "${PANE_ID}"
 window: ${WINDOW_INDEX}
 workflow: ${WORKFLOW_NAME:-default}
@@ -389,11 +396,15 @@ fi  # End of if PROJECT_PATH
 if [[ "$START_CLAUDE" == true ]]; then
     echo "Starting Claude with bypass permissions..."
 
-    # Build the claude command with optional model
+    # Build the claude command with optional model and effort
     CLAUDE_CMD="claude --dangerously-skip-permissions"
     if [[ -n "$MODEL" ]]; then
         CLAUDE_CMD="$CLAUDE_CMD --model $MODEL"
         echo "Using model: $MODEL"
+    fi
+    if [[ -n "$EFFORT" ]]; then
+        CLAUDE_CMD="$CLAUDE_CMD --effort $EFFORT"
+        echo "Using effort: $EFFORT"
     fi
 
     tmux $TMUX_FLAGS send-keys -t "$AGENT_ID" "$CLAUDE_CMD" Enter

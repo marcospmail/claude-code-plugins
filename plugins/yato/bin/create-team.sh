@@ -8,9 +8,10 @@
 #   - developer, qa, code-reviewer
 #   - backend-developer, frontend-developer, designer, devops, etc.
 #
-# Agent format: role OR name:role:model
+# Agent format: role OR name:role:model OR name:role:model:effort
 #   - Simple: developer, qa, code-reviewer
 #   - Custom: mydev:developer:opus, qa-tester:qa:sonnet
+#   - With effort: mydev:developer:opus:medium
 #
 # Examples:
 #   ./create-team.sh /path/to/project qa                    # Single QA agent (default model)
@@ -102,6 +103,24 @@ print('sonnet')
 " 2>/dev/null || echo "sonnet"
 }
 
+# Function to get default effort for agent role (reads from agents/*.yml)
+get_default_effort() {
+    local role=$1
+    local yato_root="$SCRIPT_DIR/.."
+    uv run --project "$yato_root" python -c "
+import yaml, sys, pathlib
+agents_dir = pathlib.Path('$yato_root/agents')
+for f in agents_dir.glob('*.yml'):
+    with open(f) as fh:
+        data = yaml.safe_load(fh)
+    if data and data.get('name') == '$role':
+        effort = data.get('effort', '')
+        if effort:
+            print(effort)
+        sys.exit(0)
+" 2>/dev/null || echo ""
+}
+
 # Count occurrences of each role for smart naming (bash 3.2 compatible)
 count_role() {
     local role="$1"
@@ -121,14 +140,19 @@ create_agent() {
     local name=$2
     local model=$3
     local window_num=$4
+    local effort=$5
 
     echo "Creating $role ($name) with model $model in window $window_num..."
 
+    # Build create-agent.sh command with optional effort
+    local create_args=("$SESSION" "$role" -n "$name" -m "$model" -p "$PROJECT_PATH")
+    if [[ -n "$effort" ]]; then
+        create_args+=(-e "$effort")
+        echo "Using effort: $effort"
+    fi
+
     # Create agent in new window (not pane)
-    local output=$("$SCRIPT_DIR/create-agent.sh" "$SESSION" "$role" \
-        -n "$name" \
-        -m "$model" \
-        -p "$PROJECT_PATH" 2>&1)
+    local output=$("$SCRIPT_DIR/create-agent.sh" "${create_args[@]}" 2>&1)
 
     local exit_code=$?
     echo "$output" | grep -E "(Agent ID|Error|Created window|Starting Claude)"
@@ -147,11 +171,34 @@ echo "=== Creating Team Agents ==="
 WINDOW_NUM=1
 
 for agent_spec in "${AGENTS[@]}"; do
-    # Parse agent spec: can be "role" or "name:role:model"
+    # Parse agent spec: can be "role", "name:role", "name:role:model", or "name:role:model:effort"
     # Count colons to determine format
     colon_count=$(echo "$agent_spec" | tr -cd ':' | wc -c | tr -d ' ')
+    effort=""
 
-    if [[ $colon_count -eq 2 ]]; then
+    if [[ $colon_count -eq 3 ]]; then
+        # Format: name:role:model:effort (e.g., "dev:developer:opus:medium")
+        IFS=':' read -r agent_name agent_role model effort <<< "$agent_spec"
+
+        if [[ -z "$agent_name" || -z "$agent_role" || -z "$model" || -z "$effort" ]]; then
+            echo "ERROR: Failed to parse agent spec '$agent_spec'. Expected format: name:role:model:effort"
+            continue
+        fi
+
+        # Validate model
+        if [[ "$model" != "opus" && "$model" != "sonnet" && "$model" != "haiku" ]]; then
+            echo "WARNING: Invalid model '$model' for $agent_name, using default for role '$agent_role'"
+            model=$(get_default_model "$agent_role")
+        fi
+
+        # Validate effort
+        if [[ "$effort" != "low" && "$effort" != "medium" && "$effort" != "high" ]]; then
+            echo "WARNING: Invalid effort '$effort' for $agent_name, using default for role '$agent_role'"
+            effort=$(get_default_effort "$agent_role")
+        fi
+
+        echo "Parsed: name=$agent_name, role=$agent_role, model=$model, effort=$effort"
+    elif [[ $colon_count -eq 2 ]]; then
         # Format: name:role:model (e.g., "qa-impl:developer:opus")
         IFS=':' read -r agent_name agent_role model <<< "$agent_spec"
 
@@ -167,7 +214,8 @@ for agent_spec in "${AGENTS[@]}"; do
             model=$(get_default_model "$agent_role")
         fi
 
-        echo "Parsed: name=$agent_name, role=$agent_role, model=$model"
+        effort=$(get_default_effort "$agent_role")
+        echo "Parsed: name=$agent_name, role=$agent_role, model=$model, effort=${effort:-(none)}"
     elif [[ $colon_count -eq 1 ]]; then
         # Format: name:role (e.g., "my-dev:developer")
         IFS=':' read -r agent_name agent_role <<< "$agent_spec"
@@ -179,11 +227,13 @@ for agent_spec in "${AGENTS[@]}"; do
         fi
 
         model=$(get_default_model "$agent_role")
-        echo "Parsed: name=$agent_name, role=$agent_role, model=$model (default)"
+        effort=$(get_default_effort "$agent_role")
+        echo "Parsed: name=$agent_name, role=$agent_role, model=$model (default), effort=${effort:-(none)}"
     else
         # Format: role (simple format)
         agent_role="$agent_spec"
         model=$(get_default_model "$agent_role")
+        effort=$(get_default_effort "$agent_role")
 
         # Smart naming: only add number if multiple of same role
         role_count=$(count_role "$agent_role")
@@ -205,7 +255,7 @@ for agent_spec in "${AGENTS[@]}"; do
         fi
     fi
 
-    create_agent "$agent_role" "$agent_name" "$model" "$WINDOW_NUM"
+    create_agent "$agent_role" "$agent_name" "$model" "$WINDOW_NUM" "$effort"
     ((WINDOW_NUM++))
 done
 

@@ -221,23 +221,27 @@ try:
     names = []
     roles = []
     models = []
+    efforts = []
     windows = []
     for a in agents:
         if a.get('name'):
             names.append(a.get('name', ''))
             roles.append(a.get('role', ''))
             models.append(a.get('model', 'sonnet'))
+            efforts.append(a.get('effort', ''))
             windows.append(a.get('window', '1'))
 
     print('AGENT_NAMES=(' + ' '.join(['\"' + n + '\"' for n in names]) + ')')
     print('AGENT_ROLES=(' + ' '.join(['\"' + r + '\"' for r in roles]) + ')')
     print('AGENT_MODELS=(' + ' '.join(['\"' + m + '\"' for m in models]) + ')')
+    print('AGENT_EFFORTS=(' + ' '.join(['\"' + e + '\"' for e in efforts]) + ')')
     print('AGENT_WINDOWS=(' + ' '.join(['\"' + w + '\"' for w in windows]) + ')')
 except Exception as e:
     print(f'# Error parsing agents.yml: {e}', file=sys.stderr)
     print('AGENT_NAMES=()')
     print('AGENT_ROLES=()')
     print('AGENT_MODELS=()')
+    print('AGENT_EFFORTS=()')
     print('AGENT_WINDOWS=()')
 ")"
 fi
@@ -260,6 +264,7 @@ for i in "${!AGENT_NAMES[@]}"; do
     agent_name="${AGENT_NAMES[$i]}"
     agent_role="${AGENT_ROLES[$i]}"
     agent_model="${AGENT_MODELS[$i]}"
+    agent_effort="${AGENT_EFFORTS[$i]}"
     agent_window="${AGENT_WINDOWS[$i]}"
 
     echo "  Creating window $agent_window for: $agent_name ($agent_role, $agent_model)"
@@ -279,9 +284,13 @@ for i in "${!AGENT_NAMES[@]}"; do
     AGENT_WINDOW="${WINDOW_OUTPUT%:*}"  # session:window_index
     AGENT_PANE_ID="${WINDOW_OUTPUT##*:}"  # %N pane ID
 
-    # Start Claude with correct model and bypass permissions
+    # Start Claude with correct model, effort, and bypass permissions
     sleep 0.3
-    tmux $TMUX_FLAGS send-keys -t "$AGENT_PANE_ID" "claude --dangerously-skip-permissions --model $agent_model" Enter
+    CLAUDE_CMD="claude --dangerously-skip-permissions --model $agent_model"
+    if [[ -n "$agent_effort" ]]; then
+        CLAUDE_CMD="$CLAUDE_CMD --effort $agent_effort"
+    fi
+    tmux $TMUX_FLAGS send-keys -t "$AGENT_PANE_ID" "$CLAUDE_CMD" Enter
 
     # Store agent ID and pane ID
     AGENT_IDS+=("$AGENT_WINDOW")
@@ -347,7 +356,7 @@ fi
 # Start Claude in PM pane with opus model
 echo "Starting Claude in PM pane..."
 sleep 0.5
-tmux $TMUX_FLAGS send-keys -t "$PM_PANE" "claude --dangerously-skip-permissions --model opus" Enter
+tmux $TMUX_FLAGS send-keys -t "$PM_PANE" "claude --dangerously-skip-permissions --model opus --effort medium" Enter
 
 # Wait for Claude to initialize in PM pane
 echo "Waiting for Claude instances to initialize..."
