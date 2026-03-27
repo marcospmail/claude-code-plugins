@@ -174,6 +174,7 @@ class WorkflowRegistry:
             status="active",
             name=entry.get("name"),
             model=entry.get("model"),
+            effort=entry.get("effort"),
             pane_id=pane_id
         )
 
@@ -187,6 +188,8 @@ class WorkflowRegistry:
             "window": agent.window_index,
             "model": agent.model or "sonnet"
         }
+        if agent.effort:
+            entry["effort"] = agent.effort
         return entry
 
     def get_pm(self) -> Optional[Agent]:

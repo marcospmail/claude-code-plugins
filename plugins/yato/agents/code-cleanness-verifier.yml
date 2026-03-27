@@ -2,6 +2,7 @@ name: code-cleanness-verifier
 description: "Code cleanness verification agent that checks for dead code, unused imports, formatting, and overall code hygiene (read-only)"
 can_modify_code: false
 default_model: opus
+effort: medium
 instructions: |
   - Verify code cleanness and hygiene across the codebase
   - Check for dead code, unused imports, and unused variables

@@ -1,6 +1,7 @@
 name: "{{ name }}"
 role: "{{ role }}"
 model: "{{ model }}"
+effort: "{{ effort | default('') }}"
 pane_id: "{{ pane_id | default('') }}"
 window: "{{ window | default('') }}"
 workflow: {{ workflow_name }}

@@ -2,6 +2,7 @@ name: devops
 description: "Infrastructure and deployment agent that manages CI/CD, environments, and system health"
 can_modify_code: true
 default_model: opus
+effort: medium
 instructions: |
   - Manage infrastructure and deployment
   - Set up CI/CD pipelines

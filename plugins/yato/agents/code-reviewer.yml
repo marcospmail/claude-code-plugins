@@ -2,6 +2,7 @@ name: code-reviewer
 description: "Code review agent that reviews code quality, best practices, and security (read-only)"
 can_modify_code: false
 default_model: opus
+effort: medium
 instructions: |
   - Review code for quality and best practices
   - Check for security vulnerabilities

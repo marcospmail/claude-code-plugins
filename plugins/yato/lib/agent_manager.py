@@ -116,6 +116,14 @@ class AgentManager:
             return predefined[role_lower].get("default_model", "sonnet")
         return "sonnet"
 
+    def _get_default_effort(self, role: str) -> Optional[str]:
+        """Get the default effort for a role from predefined YAML agents."""
+        role_lower = role.lower()
+        predefined = self.load_predefined_agents()
+        if role_lower in predefined:
+            return predefined[role_lower].get("effort")
+        return None
+
     def _get_role_config(self, role: str) -> Dict[str, Any]:
         """Get configuration for a role.
 
@@ -134,6 +142,7 @@ class AgentManager:
                 "responsibilities": [],
                 "instructions": agent.get("instructions", ""),
                 "default_model": agent.get("default_model", "sonnet"),
+                "effort": agent.get("effort"),
             }
 
         # Check for partial matches (custom roles containing "dev" or "developer")
@@ -214,11 +223,15 @@ class AgentManager:
         else:
             can_modify_str = "false"
 
+        # Get effort from role config
+        effort = role_config.get("effort", "")
+
         # Create identity.yml
         identity_content = self._render_template("agent_identity.yml.j2", {
             "name": agent_name,
             "role": role,
             "model": model,
+            "effort": effort,
             "pane_id": "",
             "window": "",
             "workflow_name": workflow_name,
@@ -466,6 +479,7 @@ class AgentManager:
         project_path: Optional[str] = None,
         name: Optional[str] = None,
         model: str = "sonnet",
+        effort: Optional[str] = None,
         start_claude: bool = True,
         send_brief: bool = True,
     ) -> Optional[Dict[str, Any]]:
@@ -488,6 +502,7 @@ class AgentManager:
             project_path: Project path (working directory)
             name: Window name (defaults to role with smart numbering)
             model: Claude model (haiku, sonnet, opus)
+            effort: Claude effort level (low, medium, high)
             start_claude: Whether to start Claude automatically
             send_brief: Whether to send briefing message
 
@@ -593,6 +608,9 @@ class AgentManager:
             if model:
                 claude_cmd += f" --model {model}"
                 print(f"Using model: {model}")
+            if effort:
+                claude_cmd += f" --effort {effort}"
+                print(f"Using effort: {effort}")
 
             subprocess.run(
                 _tmux_cmd() + ["send-keys", "-t", tmux_target, claude_cmd, "Enter"],
@@ -621,7 +639,7 @@ class AgentManager:
             print(f"  Window: {display_name}")
         if project_path:
             print(f"  Path: {project_path}")
-        return {
+        result_dict = {
             "agent_id": agent_id,
             "role": role,
             "name": agent_name,
@@ -631,6 +649,9 @@ class AgentManager:
             "project_path": project_path,
             "model": model,
         }
+        if effort:
+            result_dict["effort"] = effort
+        return result_dict
 
     def _send_agent_briefing(
         self,
@@ -728,12 +749,16 @@ Wait for PM to assign your first tasks via agent-tasks.md."""
         for agent in data["agents"]:
             if isinstance(agent, str):
                 agent_config = predefined.get(agent, {})
-                resolved_agents.append({
+                resolved = {
                     "name": agent,
                     "role": agent,
                     "model": agent_config.get("default_model", "sonnet"),
                     "description": agent_config.get("description", ""),
-                })
+                }
+                agent_effort = agent_config.get("effort")
+                if agent_effort:
+                    resolved["effort"] = agent_effort
+                resolved_agents.append(resolved)
             elif isinstance(agent, dict):
                 resolved_agents.append(agent)
 
@@ -766,16 +791,19 @@ Wait for PM to assign your first tasks via agent-tasks.md."""
                 role = agent
                 name = None
                 model = agent_config.get("default_model", "sonnet")
+                effort = agent_config.get("effort")
             else:
                 role = agent.get("role", "developer")
                 name = agent.get("name")
                 model = agent.get("model", "sonnet")
+                effort = agent.get("effort")
             result = self.create_agent(
                 session=session,
                 role=role,
                 project_path=project_path,
                 name=name,
                 model=model,
+                effort=effort,
             )
             if result:
                 created.append(result)
@@ -828,6 +856,7 @@ if __name__ == "__main__":
     create_parser.add_argument("--project", "-p", help="Project path")
     create_parser.add_argument("--name", "-n", help="Window name")
     create_parser.add_argument("--model", "-m", default=None, help="Model (default: role-dependent)")
+    create_parser.add_argument("--effort", "-e", default=None, help="Effort level (low, medium, high)")
     create_parser.add_argument("--no-start", action="store_true", help="Don't start Claude")
     create_parser.add_argument("--no-brief", action="store_true", help="Don't send briefing")
 
@@ -840,12 +869,14 @@ if __name__ == "__main__":
     elif args.command == "create":
         manager = AgentManager()
         model = args.model if args.model else manager._get_default_model(args.role)
+        effort = args.effort if args.effort else manager._get_default_effort(args.role)
         create_agent(
             session=args.session,
             role=args.role,
             project_path=args.project,
             name=args.name,
             model=model,
+            effort=effort,
             start_claude=not args.no_start,
             send_brief=not args.no_brief,
         )

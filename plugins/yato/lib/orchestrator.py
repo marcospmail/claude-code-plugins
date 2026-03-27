@@ -387,7 +387,7 @@ class Orchestrator:
 
         # Start Claude with bypass permissions - PM always uses Opus
         model_flag = "--model opus"
-        cmd = f"claude --dangerously-skip-permissions {model_flag}"
+        cmd = f"claude --dangerously-skip-permissions {model_flag} --effort medium"
         subprocess.run(_tmux_cmd() + ["send-keys", "-t", pm_target, cmd, "Enter"], check=True)
 
         # Wait for Claude to start fully
@@ -620,9 +620,11 @@ class Orchestrator:
         for agent in agents:
             if not agent:
                 continue
-            # Build Claude command with model and dangerous flag
+            # Build Claude command with model, effort, and dangerous flag
             model = agent.model or "sonnet"
             claude_cmd = f"claude --dangerously-skip-permissions --model {model}"
+            if agent.effort:
+                claude_cmd += f" --effort {agent.effort}"
 
             success = self.tmux.send_message_to_agent(agent.agent_id, claude_cmd)
             results[agent.agent_id] = success

@@ -28,6 +28,7 @@ class Agent:
         skills: Optional[List[str]] = None,
         briefing: Optional[str] = None,
         model: Optional[str] = None,  # haiku, sonnet, opus
+        effort: Optional[str] = None,  # low, medium, high
         pane_id: Optional[str] = None  # Global tmux pane ID (e.g., "%5")
     ):
         self.session_name = session_name
@@ -50,6 +51,7 @@ class Agent:
         self.skills = skills or []  # Specific skills (e.g., ["react", "testing"])
         self.briefing = briefing  # Custom briefing text
         self.model = model  # Claude model: haiku, sonnet, opus
+        self.effort = effort  # Claude effort: low, medium, high
 
     @property
     def target(self) -> str:
@@ -83,6 +85,8 @@ class Agent:
             data["briefing"] = self.briefing
         if self.model:
             data["model"] = self.model
+        if self.effort:
+            data["effort"] = self.effort
         return data
 
     def __repr__(self) -> str:
