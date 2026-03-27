@@ -151,7 +151,7 @@ title: "Add hourly cron"
 initial_request: |
   User's original request goes here...
 folder: "/path/to/project/.workflow/001-add-hourly-cron"  # Absolute path
-checkin_interval_minutes: _  # Placeholder until user selects interval (e.g., 3, 5, 10)
+checkin_interval_minutes: 5  # Default: 5 minutes (auto-set, not user-prompted)
 session: "myproject"
 agent_message_suffix: ""              # Workflow-level: PM → agent messages (read fresh each send)
 checkin_message_suffix: ""             # Workflow-level: check-in daemon → PM messages (read fresh each send)

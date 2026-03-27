@@ -142,35 +142,26 @@ CRITICAL: Only assign tasks to agents that exist in agents.yml (created in step 
 
 Format: JSON with tasks array. Each task has: id, subject, description, activeForm, agent, status, blockedBy, blocks.
 
-### Step 8: Ask Check-in Interval
+### Step 8: Save Check-in Interval
 
-Ask check-in interval using AskUserQuestion tool with these options:
-- Question: 'How often should I check in with the team?'
-- Header: 'Check-in'
+Check-in interval is always 5 minutes. Do NOT ask the user — just save it:
+`source {{ yato_path }}/bin/workflow-utils.sh && update_checkin_interval {{ project_path }} 5`
+
+### Step 9: Ask to Start
+
+Use AskUserQuestion tool:
+- Question: 'Ready to start?'
+- Header: 'Start'
 - Options:
-  - '3 minutes' (description: 'Frequent check-ins for fast-paced work')
-  - '5 minutes (Recommended)' (description: 'Balanced check-in frequency for most tasks')
-  - '10 minutes' (description: 'Less frequent check-ins for independent work')
+  - 'Start' (description: 'Create agents and begin work')
+  - 'Ask something else' (description: 'Ask a question before starting')
 
-User can select from these or type custom minutes in 'Other' field.
-
-After user answers, extract the number and SAVE IT by running:
-`source {{ yato_path }}/bin/workflow-utils.sh && update_checkin_interval {{ project_path }} <MINUTES>`
-
-Example: If user selects '5 minutes', run: `update_checkin_interval {{ project_path }} 5`
-Example: If user types '7' in Other, run: `update_checkin_interval {{ project_path }} 7`
-
-### Step 9: Show Start Message
-
-Show this EXACT message with colors:
-
-\033[1;32m+==================================================+\033[0m
-\033[1;32m|  Type 'start' to begin work                      |\033[0m
-\033[1;32m+==================================================+\033[0m
+If user selects 'Ask something else' or types a question in 'Other': answer their question, then ask again with the same AskUserQuestion.
+Keep looping until user selects 'Start'.
 
 ### Step 10: Create Agents and Start Check-ins
 
-ONLY AFTER USER TYPES 'start':
+ONLY AFTER USER SELECTS 'Start':
 
 a) Create agents based on APPROVED team structure:
    `{{ yato_path }}/bin/create-team.sh {{ project_path }} <agent-role> <agent-role> ...`

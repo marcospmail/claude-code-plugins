@@ -104,7 +104,7 @@ class WorkflowOps:
         title: str,
         initial_request: str = "",
         session: str = "_",
-        checkin_interval: int = 15,
+        checkin_interval: int = 5,
     ) -> str:
         """
         Create a new workflow folder with initial structure.
