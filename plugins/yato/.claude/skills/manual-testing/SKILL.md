@@ -10,9 +10,9 @@ argument-hint: "[what to test]"
 
 Guide for manually testing Yato workflows via tmux.
 
-## MANDATORY: Use Real Workflows
+## CRITICAL WARNING
 
-You MUST use Yato skills to start a real workflow. DO NOT bypass by running scripts directly (e.g., init-workflow.sh, agent_manager.py, save_team_structure). The point of manual testing is to verify the full end-to-end flow with live Claude agents.
+**CRITICAL: You MUST use real Yato workflows for manual testing. NEVER bypass by running hook scripts directly, simulating input, or taking any shortcuts. The entire point of manual testing is to verify the full end-to-end flow with live Claude agents in tmux. If you skip this, the test is invalid.**
 
 ## Step 1: Start a Real Workflow
 
