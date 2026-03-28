@@ -6,21 +6,39 @@ Prevents marking blocked tasks as "completed" - blocked stays blocked until reso
 import json
 import sys
 import os
+from typing import Optional
+
+import yaml
+
+
+def get_agent_roster(file_path: str) -> Optional[str]:
+    """Extract agent roster from agents.yml in the same workflow directory as tasks.json."""
+    try:
+        workflow_dir = os.path.dirname(file_path)
+        agents_yml_path = os.path.join(workflow_dir, "agents.yml")
+
+        with open(agents_yml_path, "r") as f:
+            agents_data = yaml.safe_load(f)
+
+        agents_list = agents_data["agents"]
+        agent_names = [agent["name"] for agent in agents_list]
+        count = len(agent_names)
+        names_str = ", ".join(agent_names)
+        return f"TEAM ROSTER: Your team has {count} agents: {names_str}.\nAssign tasks to all applicable agents when creating or updating tasks."
+    except (FileNotFoundError, KeyError, TypeError, yaml.YAMLError):
+        return None
+
 
 def main():
     try:
-        # Read hook input from stdin
         hook_input = json.loads(sys.stdin.read())
     except json.JSONDecodeError:
-        # No input or invalid JSON - allow tool to proceed
         print(json.dumps({"continue": True}))
         return 0
 
-    # Get the file path being edited
     tool_input = hook_input.get("toolInput", {})
     file_path = tool_input.get("file_path", "") or tool_input.get("path", "")
 
-    # Only inject reminder for tasks.json edits
     if "tasks.json" in file_path:
         output = {
             "continue": True,
@@ -43,6 +61,10 @@ CRITICAL:
 2. Blocked tasks stay 'blocked' until resolved - you CANNOT skip tasks
 3. If user says "skip it", task stays BLOCKED - do NOT mark as completed"""
         }
+
+        roster = get_agent_roster(file_path)
+        if roster:
+            output["systemMessage"] += "\n\n" + roster
     else:
         output = {"continue": True}
 
