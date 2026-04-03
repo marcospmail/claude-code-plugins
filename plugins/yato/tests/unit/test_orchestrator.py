@@ -1209,6 +1209,9 @@ class TestMainEntryRunpy:
     def test_runpy_invocation(self, mock_help):
         """Simulate running the module as __main__."""
         import runpy
+        import warnings
         with pytest.raises(SystemExit) as exc_info:
-            runpy.run_module("lib.orchestrator", run_name="__main__", alter_sys=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                runpy.run_module("lib.orchestrator", run_name="__main__", alter_sys=True)
         assert exc_info.value.code == 0

@@ -4,6 +4,7 @@ import os
 import runpy
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -476,7 +477,9 @@ class TestWorkflowRegistryCLI:
         """Test CLI output when workflow has PM and team agents."""
         project = tmp_workflow_with_agents.parent.parent
         monkeypatch.setattr(sys, "argv", ["script", str(project)])
-        runpy.run_module("lib.workflow_registry", run_name="__main__", alter_sys=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            runpy.run_module("lib.workflow_registry", run_name="__main__", alter_sys=True)
         captured = capsys.readouterr()
         assert "Workflow path" in captured.out
         assert "Agents file" in captured.out
@@ -487,14 +490,18 @@ class TestWorkflowRegistryCLI:
         """Test CLI with workflow but no agents."""
         project = tmp_workflow.parent.parent
         monkeypatch.setattr(sys, "argv", ["script", str(project)])
-        runpy.run_module("lib.workflow_registry", run_name="__main__", alter_sys=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            runpy.run_module("lib.workflow_registry", run_name="__main__", alter_sys=True)
         captured = capsys.readouterr()
         assert "Workflow path" in captured.out
 
     def test_no_workflow(self, tmp_project, monkeypatch, capsys):
         """Test CLI when no workflow exists."""
         monkeypatch.setattr(sys, "argv", ["script", str(tmp_project)])
-        runpy.run_module("lib.workflow_registry", run_name="__main__", alter_sys=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            runpy.run_module("lib.workflow_registry", run_name="__main__", alter_sys=True)
         captured = capsys.readouterr()
         assert "No workflow found" in captured.out
 
@@ -502,7 +509,9 @@ class TestWorkflowRegistryCLI:
         """Test CLI with no args (uses '.')."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(sys, "argv", ["script"])
-        runpy.run_module("lib.workflow_registry", run_name="__main__", alter_sys=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            runpy.run_module("lib.workflow_registry", run_name="__main__", alter_sys=True)
         captured = capsys.readouterr()
         assert "No workflow found" in captured.out
 
