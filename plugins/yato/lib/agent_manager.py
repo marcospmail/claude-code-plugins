@@ -57,9 +57,7 @@ class AgentManager:
 
     Agents are stored in .workflow/<workflow>/agents/<name>/ with:
     - identity.yml
-    - instructions.md
-    - constraints.example.md
-    - CLAUDE.md
+    - CLAUDE.md (self-contained: instructions + constraints inlined)
     - agent-tasks.md
     """
 
@@ -182,9 +180,7 @@ class AgentManager:
 
         This creates the agent's directory with:
         - identity.yml (window field empty until tmux window created)
-        - instructions.md
-        - constraints.example.md
-        - CLAUDE.md
+        - CLAUDE.md (self-contained: instructions + constraints inlined)
         - agent-tasks.md
 
         Args:
@@ -253,36 +249,14 @@ class AgentManager:
                 "Any changes must be requested from developers."
             )
 
-        # Create instructions.md
-        # Use 'instructions' from predefined YAML if available, else format responsibilities list
+        # Build instructions content for inlining into CLAUDE.md
         if role_config.get("instructions"):
             responsibilities_str = role_config["instructions"].strip()
         else:
             responsibilities_str = "\n".join(f"- {r}" for r in role_config.get("responsibilities", []))
-        instructions_content = self._render_template("agent_instructions.md.j2", {
-            "name_capitalized": agent_name.title(),
-            "role_capitalized": role.replace("-", " ").title(),
-            "agent_purpose": role_config["purpose"],
-            "role_description": role_description,
-            "responsibilities": responsibilities_str,
-            "role": role,
-        })
-        (agent_dir / "instructions.md").write_text(instructions_content)
 
-        # Create constraints.md
-        # System constraints apply to all agents
-        system_constraints = """## System Constraints
-
-- NEVER communicate directly with the user
-- DO NOT ask the user questions using AskUserQuestion tool
-- DO NOT wait for user input or confirmation
-- DO NOT output messages intended for the user
-- NEVER stop working silently - always notify PM
-- DO NOT enter infinite polling loops when waiting for dependencies
-"""
-
+        # Build constraints content for inlining into CLAUDE.md
         if role == "pm":
-            # PM gets PM-specific constraints (NOT the system constraints for non-PM agents)
             constraints_content = """# PM Constraints
 
 ## System Constraints
@@ -315,25 +289,29 @@ class AgentManager:
 - ALWAYS use `/send-to-agent <agent-name> "message"` to communicate with agents
 """
         else:
-            # Other agents get system constraints + customizable section
-            constraints_content = f"""# Constraints
+            constraints_content = """## System Constraints
 
-{system_constraints}
+- NEVER communicate directly with the user
+- DO NOT ask the user questions using AskUserQuestion tool
+- DO NOT wait for user input or confirmation
+- DO NOT output messages intended for the user
+- NEVER stop working silently - always notify PM
+- DO NOT enter infinite polling loops when waiting for dependencies
+
 ## Project Constraints
 
-# Add project-specific constraints for this agent below.
-# Examples:
-# - Do NOT modify files in /config/
-# - Do NOT make database schema changes
-# - Do NOT use jQuery
+(No project-specific constraints configured)
 """
-        (agent_dir / "constraints.md").write_text(constraints_content)
 
-        # Create CLAUDE.md
+        # Create CLAUDE.md (self-contained with instructions + constraints)
         claude_content = self._render_template("agent_claude.md.j2", {
             "project_path": project_path,
             "workflow_name": workflow_name,
-            "is_pm": role == "pm",
+            "role": role,
+            "agent_purpose": role_config["purpose"],
+            "role_description": role_description,
+            "responsibilities": responsibilities_str,
+            "constraints_content": constraints_content,
         })
         (agent_dir / "CLAUDE.md").write_text(claude_content)
 

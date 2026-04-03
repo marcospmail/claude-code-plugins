@@ -121,16 +121,16 @@ fi
 echo ""
 echo "Phase 4: Checking PM instructions template..."
 
-# Check the PM instructions template instead (since workflow creation may vary)
-PM_TEMPLATE="$PROJECT_ROOT/lib/templates/agent_instructions.md.j2"
+# Check the CLAUDE.md template (instructions are now inlined into CLAUDE.md)
+PM_TEMPLATE="$PROJECT_ROOT/lib/templates/agent_claude.md.j2"
 
-# Fallback: check the generated file if it exists
-PM_INSTRUCTIONS="$WORKFLOW_PATH/agents/pm/instructions.md"
+# Fallback: check the generated CLAUDE.md if it exists
+PM_CLAUDE_MD="$WORKFLOW_PATH/agents/pm/CLAUDE.md"
 
 # Use whichever file exists - check template first
 CHECK_FILE="$PM_TEMPLATE"
-if [[ -f "$PM_INSTRUCTIONS" ]]; then
-    CHECK_FILE="$PM_INSTRUCTIONS"
+if [[ -f "$PM_CLAUDE_MD" ]]; then
+    CHECK_FILE="$PM_CLAUDE_MD"
 fi
 
 if [[ -f "$CHECK_FILE" ]]; then

@@ -62,10 +62,8 @@ lib/
 ├── agent_manager.py      # Agent creation and file generation
 └── templates/            # Jinja2 templates for agent files
     ├── agent_identity.yml.j2
-    ├── agent_instructions.md.j2
     ├── agent_claude.md.j2
-    ├── agent_tasks.md.j2
-    └── constraints.example.md.j2
+    └── agent_tasks.md.j2
 ```
 
 **Dependency flow**: `orchestrator.py` → `workflow_ops.py` + `agent_manager.py` + `tmux_utils.py`
@@ -136,8 +134,6 @@ project/.workflow/
     └── agents/                # Agent configs
         ├── developer/
         │   ├── identity.yml
-        │   ├── instructions.md
-        │   ├── constraints.example.md
         │   ├── CLAUDE.md
         │   └── agent-tasks.md
         └── qa/

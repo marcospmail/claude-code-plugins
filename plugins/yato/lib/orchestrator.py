@@ -329,7 +329,7 @@ class Orchestrator:
         subprocess.run(_tmux_cmd() + ["select-pane", "-t", pm_target, "-T", "PM"], capture_output=True)
         subprocess.run(_tmux_cmd() + ["set-option", "-p", "-t", pm_target, "allow-set-title", "off"], capture_output=True)
 
-        # Create PM agent files (identity.yml, instructions.md, constraints.md, CLAUDE.md, agent-tasks.md, planning-briefing.md)
+        # Create PM agent files (identity.yml, CLAUDE.md, agent-tasks.md, planning-briefing.md)
         # Always run init-files to ensure the full set of files is generated via Jinja2 templates
         if workflow_name:
             lib_dir = Path(__file__).parent
@@ -399,12 +399,11 @@ class Orchestrator:
             f"You are the Project Manager for: {project_path}.\n\n"
             f"Read your agent files now. Start with your CLAUDE.md:\n"
             f"  .workflow/{workflow_name}/agents/pm/CLAUDE.md\n\n"
-            f"It lists all your configuration files in reading order:\n"
+            f"It contains your role, instructions, and constraints inline.\n"
+            f"Also read:\n"
             f"  1. identity.yml - who you are\n"
-            f"  2. instructions.md - your role and responsibilities\n"
-            f"  3. agent-tasks.md - current tasks\n"
-            f"  4. constraints.md - what you cannot do\n"
-            f"  5. planning-briefing.md - your complete planning workflow\n\n"
+            f"  2. agent-tasks.md - current tasks\n"
+            f"  3. planning-briefing.md - your complete planning workflow\n\n"
             f"After reading all files, begin the workflow in planning-briefing.md.\n"
             f"Start now: Read status.yml for the initial request, explore the codebase, then begin informed discovery!"
         )

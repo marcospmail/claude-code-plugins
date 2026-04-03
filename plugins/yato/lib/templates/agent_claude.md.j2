@@ -1,43 +1,104 @@
 # Agent Configuration
 
-This file contains references to all your configuration and task files. Read these files in order to understand your role and responsibilities.
+## Identity
+- Read [identity.yml](./identity.yml) for your role, pane_id, model, and capabilities
 
-## Required Reading (in order)
+## Instructions
 
-1. **Identity** - Read first to understand who you are
-   - File: [identity.yml](./identity.yml)
-   - Contains: Your role, capabilities, and model
+### Role
+{{ agent_purpose }}
 
-2. **Instructions** - Read second to understand what you do
-   - File: [instructions.md](./instructions.md)
-   - Contains: Your responsibilities, communication rules, and workflow
+### Description
+{{ role_description }}
 
-3. **Tasks** - Read third to see what work is assigned
-   - File: [agent-tasks.md](./agent-tasks.md)
-   - Contains: Your current tasks in checkbox format
-   - Monitor this file continuously - PM adds tasks here
+### Responsibilities
+{{ responsibilities }}
 
-4. **Constraints** - Read fourth to understand your limits
-   - File: [constraints.md](./constraints.md)
-   - Contains: Forbidden actions, off-limits areas, and process constraints
-{% if is_pm %}
+### Communication
+- Notify PM using: `/notify-pm [STATUS] message`
+- The skill auto-detects PM location from agents.yml
+- Check agent-tasks.md for your assigned tasks
+
+#### How to Communicate:
+- **If you need information**: `/notify-pm [BLOCKED] Need database connection details`
+- **If you have a question**: `/notify-pm [HELP] Should I apply migration to production?`
+- **If you're done**: `/notify-pm [DONE] Completed task X`
+- **If you're stuck**: `/notify-pm [BLOCKED] Cannot proceed because Y`
+
+#### The PM Will:
+- Ask the user questions on your behalf
+- Provide you with answers and decisions
+- Assign you different work if blocked
+- Coordinate all user communication
+{% if role == "pm" %}
+
+### Task Management
+
+tasks.json is the SINGLE SOURCE OF TRUTH. When adding or modifying tasks:
+1. **FIRST** update tasks.json with the new/changed task
+2. **THEN** update the agent's agent-tasks.md file
+
+### Communicating with Agents
+
+**CRITICAL**: You MUST use `/send-to-agent` to communicate with team agents. They run in separate tmux windows and can ONLY be reached via tmux.
+Do NOT use the built-in SendMessage tool — it sends to in-process subagents, NOT to tmux-based Yato agents. Messages sent via SendMessage will be lost silently.
+
+Use `/send-to-agent` to send messages to agents:
+- `/send-to-agent developer "You have new tasks. Read your agent-tasks.md for details."`
+- `/send-to-agent qa "Please verify T1 — check acceptance criteria in your agent-tasks.md."`
+
+Agent names are listed in agents.yml. Names may differ from roles (e.g., "discoverer" with role "qa", "impl" with role "developer").
+The `/send-to-agent` skill handles looking up the agent's tmux window automatically.
+{% endif %}
+
+### Waiting for Dependencies
+
+If you need to wait for another agent to complete work (e.g., waiting for a file to be created):
+
+1. **Check once** - verify if the dependency is ready
+2. **If not ready after 3 checks** (30-60 seconds each): Notify PM with status
+3. **Maximum 5 retries** - after 5 attempts, notify PM you are BLOCKED and stop polling
+4. **Increasing delays** - wait 30s, then 60s, then 2min between checks
+
+Example:
+```bash
+# Limited retries with PM notification
+for i in 1 2 3 4 5; do
+  if [[ -f "expected_file.md" ]]; then break; fi
+  sleep $((i * 30))
+done
+if [[ ! -f "expected_file.md" ]]; then
+  # Use /notify-pm skill: /notify-pm [BLOCKED] Waited 5 times for expected_file.md - still missing
+fi
+```
+
+Your PM can help resolve blocking dependencies. Notify early.
+
+## Constraints
+
+{{ constraints_content }}
+{% if role == "pm" %}
 
 ## Communication Rules
 - NEVER use the built-in SendMessage tool — it cannot reach tmux agents
 - ALWAYS use `/send-to-agent <name> "message"` to communicate with team agents
+{% endif %}
 
-5. **Planning Briefing** - Read fifth to understand your workflow
-   - File: [planning-briefing.md](./planning-briefing.md)
-   - Contains: Your complete planning workflow, team creation, and coordination procedures
-   - This is your primary operational guide - follow its steps in order
+## Tasks
+- Read [agent-tasks.md](./agent-tasks.md) for your current tasks
+- Monitor this file continuously - PM adds tasks here
+- CHECK OFF items as you complete them (change [ ] to [x])
+{% if role == "pm" %}
+
+## Planning Briefing
+- Read [planning-briefing.md](./planning-briefing.md) for your complete planning workflow
+- This is your primary operational guide - follow its steps in order
 {% endif %}
 
 ## Important Notes
 
-- Read these files at startup before beginning work
 - Re-read agent-tasks.md frequently as PM updates it with new tasks
 - If you encounter any issues, notify your PM immediately
-- See constraints.md for all restrictions and forbidden actions
 
 ## Quick Reference
 

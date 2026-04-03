@@ -139,10 +139,10 @@ class TestInitAgentFiles:
         assert result is not None
         agent_dir = Path(result)
         assert (agent_dir / "identity.yml").exists()
-        assert (agent_dir / "instructions.md").exists()
-        assert (agent_dir / "constraints.md").exists()
         assert (agent_dir / "CLAUDE.md").exists()
         assert (agent_dir / "agent-tasks.md").exists()
+        assert not (agent_dir / "instructions.md").exists()
+        assert not (agent_dir / "constraints.md").exists()
         # Developer should NOT have planning-briefing.md
         assert not (agent_dir / "planning-briefing.md").exists()
 
@@ -165,10 +165,10 @@ class TestInitAgentFiles:
         dev_dir = mgr.init_agent_files(
             str(project), "dev", "developer", "sonnet", "001-test-feature"
         )
-        pm_constraints = Path(pm_dir) / "constraints.md"
-        dev_constraints = Path(dev_dir) / "constraints.md"
-        assert "PM Constraints" in pm_constraints.read_text()
-        assert "PM Constraints" not in dev_constraints.read_text()
+        pm_claude = (Path(pm_dir) / "CLAUDE.md").read_text()
+        dev_claude = (Path(dev_dir) / "CLAUDE.md").read_text()
+        assert "PM Constraints" in pm_claude or "PM-Specific Constraints" in pm_claude
+        assert "PM Constraints" not in dev_claude
 
     def test_qa_role(self, tmp_workflow):
         project = tmp_workflow.parent.parent
@@ -581,7 +581,6 @@ class TestRenameAgentDiskRename:
         old_dir = tmp_workflow / "agents" / "dev"
         old_dir.mkdir(parents=True, exist_ok=True)
         (old_dir / "identity.yml").write_text("name: dev\nrole: developer\n")
-        (old_dir / "instructions.md").write_text("# Instructions\n")
 
         mgr = AgentManager()
         project = tmp_workflow.parent.parent
@@ -590,7 +589,6 @@ class TestRenameAgentDiskRename:
         new_dir = tmp_workflow / "agents" / "dev-1"
         assert new_dir.exists()
         assert not old_dir.exists()
-        assert (new_dir / "instructions.md").exists()
         identity_content = (new_dir / "identity.yml").read_text()
         assert 'name: "dev-1"' in identity_content
 
@@ -1024,3 +1022,87 @@ class TestCreateTeamWithStringAgents:
         agents = ["developer", {"role": "qa", "name": "qa1", "model": "sonnet"}]
         results = mgr.create_team("sess", agents, project_path=str(project))
         assert len(results) == 2
+
+
+# ==================== Self-contained CLAUDE.md tests ====================
+
+
+class TestInitAgentFilesSelfContained:
+    """Tests for self-contained CLAUDE.md (no instructions.md or constraints.md)."""
+
+    def test_no_instructions_md_generated(self, tmp_workflow):
+        project = tmp_workflow.parent.parent
+        mgr = AgentManager()
+        result = mgr.init_agent_files(
+            str(project), "mydev", "developer", "sonnet", "001-test-feature"
+        )
+        assert result is not None
+        agent_dir = Path(result)
+        assert not (agent_dir / "instructions.md").exists()
+
+    def test_no_constraints_md_generated(self, tmp_workflow):
+        project = tmp_workflow.parent.parent
+        mgr = AgentManager()
+        result = mgr.init_agent_files(
+            str(project), "mydev", "developer", "sonnet", "001-test-feature"
+        )
+        assert result is not None
+        agent_dir = Path(result)
+        assert not (agent_dir / "constraints.md").exists()
+
+    def test_claude_md_contains_instructions(self, tmp_workflow):
+        project = tmp_workflow.parent.parent
+        mgr = AgentManager()
+        result = mgr.init_agent_files(
+            str(project), "mydev", "developer", "sonnet", "001-test-feature"
+        )
+        claude_md = (Path(result) / "CLAUDE.md").read_text()
+        assert "## Instructions" in claude_md
+        assert "Responsibilities" in claude_md
+
+    def test_claude_md_contains_constraints(self, tmp_workflow):
+        project = tmp_workflow.parent.parent
+        mgr = AgentManager()
+        result = mgr.init_agent_files(
+            str(project), "mydev", "developer", "sonnet", "001-test-feature"
+        )
+        claude_md = (Path(result) / "CLAUDE.md").read_text()
+        assert "## Constraints" in claude_md
+        assert "System Constraints" in claude_md
+
+    def test_pm_claude_md_has_pm_constraints(self, tmp_workflow):
+        project = tmp_workflow.parent.parent
+        mgr = AgentManager()
+        result = mgr.init_agent_files(
+            str(project), "pm", "pm", "opus", "001-test-feature"
+        )
+        claude_md = (Path(result) / "CLAUDE.md").read_text()
+        assert "PM-Specific Constraints" in claude_md
+        assert "GOLDEN RULE" in claude_md
+
+    def test_developer_claude_md_has_system_constraints(self, tmp_workflow):
+        project = tmp_workflow.parent.parent
+        mgr = AgentManager()
+        result = mgr.init_agent_files(
+            str(project), "dev", "developer", "sonnet", "001-test-feature"
+        )
+        claude_md = (Path(result) / "CLAUDE.md").read_text()
+        assert "NEVER communicate directly with the user" in claude_md
+
+    def test_claude_md_references_identity_yml(self, tmp_workflow):
+        project = tmp_workflow.parent.parent
+        mgr = AgentManager()
+        result = mgr.init_agent_files(
+            str(project), "dev", "developer", "sonnet", "001-test-feature"
+        )
+        claude_md = (Path(result) / "CLAUDE.md").read_text()
+        assert "identity.yml" in claude_md
+
+    def test_claude_md_references_agent_tasks(self, tmp_workflow):
+        project = tmp_workflow.parent.parent
+        mgr = AgentManager()
+        result = mgr.init_agent_files(
+            str(project), "dev", "developer", "sonnet", "001-test-feature"
+        )
+        claude_md = (Path(result) / "CLAUDE.md").read_text()
+        assert "agent-tasks.md" in claude_md

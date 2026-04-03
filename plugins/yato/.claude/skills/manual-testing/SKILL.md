@@ -50,16 +50,13 @@ Check `.workflow/<name>/` in the project directory:
 - `prd.md` - generated requirements
 - `agents.yml` - agent registry (proposed team + runtime locations)
 - `tasks.json` - task list with status and assignments
-- `agents/<name>/instructions.md` - agent instructions (positive guidance)
-- `agents/<name>/constraints.md` - agent constraints (prohibitions)
-- `agents/<name>/CLAUDE.md` - agent entry point config
+- `agents/<name>/CLAUDE.md` - agent entry point (self-contained: instructions, constraints, communication)
 - `agents/<name>/identity.yml` - agent metadata
 
 ## Step 4: Observe Agent Behavior
 
 Watch the live agents to verify they:
-- Follow their instructions.md (role, responsibilities, communication)
-- Respect their constraints.md (system constraints, project constraints)
+- Follow their CLAUDE.md (role, responsibilities, constraints, communication)
 - Communicate through PM (not directly with user)
 - Use /notify-pm for status updates
 
