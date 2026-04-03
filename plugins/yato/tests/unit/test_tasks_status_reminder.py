@@ -125,6 +125,75 @@ class TestAgentRosterWithoutAgentsYml:
         assert "NEVER" in msg
 
 
+class TestAgentRosterWithDescriptions:
+    """Tests for roster injection with agent descriptions from predefined YAMLs."""
+
+    def test_roster_includes_agent_descriptions(self, tmp_workflow_with_agents):
+        """Roster should show descriptions from predefined agent YAMLs."""
+        tasks_path = str(tmp_workflow_with_agents / "tasks.json")
+        hook_input = {"toolInput": {"file_path": tasks_path}}
+
+        output = run_hook(hook_input)
+
+        msg = output["systemMessage"]
+        assert "TEAM ROSTER" in msg
+        # Should contain description text from predefined YAMLs
+        assert "- developer:" in msg
+        assert "- qa:" in msg
+
+    def test_roster_shows_mandatory_skills(self, tmp_workflow):
+        """When agent has mandatory skills in description, they appear in roster."""
+        agents_data = {
+            "pm": {"name": "pm", "role": "pm", "pane_id": "%5", "session": "s", "window": 0, "model": "opus"},
+            "agents": [
+                {"name": "reviewer", "role": "code-reviewer", "pane_id": "%6", "session": "s", "window": 1, "model": "opus"},
+            ],
+        }
+        agents_file = tmp_workflow / "agents.yml"
+        with open(agents_file, "w") as f:
+            yaml.dump(agents_data, f, default_flow_style=False)
+
+        tasks_path = str(tmp_workflow / "tasks.json")
+        hook_input = {"toolInput": {"file_path": tasks_path}}
+
+        output = run_hook(hook_input)
+
+        msg = output["systemMessage"]
+        assert "TEAM ROSTER" in msg
+        assert "/code-review" in msg
+
+    def test_roster_falls_back_to_name_when_no_yaml(self, tmp_workflow):
+        """Unknown roles without a predefined YAML fall back to showing agent name only."""
+        agents_data = {
+            "pm": {"name": "pm", "role": "pm", "pane_id": "%5", "session": "s", "window": 0, "model": "opus"},
+            "agents": [
+                {"name": "custom-agent", "role": "custom-unknown-role", "pane_id": "%6", "session": "s", "window": 1, "model": "sonnet"},
+            ],
+        }
+        agents_file = tmp_workflow / "agents.yml"
+        with open(agents_file, "w") as f:
+            yaml.dump(agents_data, f, default_flow_style=False)
+
+        tasks_path = str(tmp_workflow / "tasks.json")
+        hook_input = {"toolInput": {"file_path": tasks_path}}
+
+        output = run_hook(hook_input)
+
+        msg = output["systemMessage"]
+        assert "TEAM ROSTER" in msg
+        assert "custom-agent" in msg
+
+    def test_roster_includes_mandatory_skill_instruction(self, tmp_workflow_with_agents):
+        """Roster should include instruction about mandatory skills."""
+        tasks_path = str(tmp_workflow_with_agents / "tasks.json")
+        hook_input = {"toolInput": {"file_path": tasks_path}}
+
+        output = run_hook(hook_input)
+
+        msg = output["systemMessage"]
+        assert "mandatory skill" in msg.lower()
+
+
 class TestNonTasksJsonFiles:
     """Tests for files that are NOT tasks.json."""
 
