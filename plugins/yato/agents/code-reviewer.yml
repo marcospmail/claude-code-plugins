@@ -1,9 +1,10 @@
 name: code-reviewer
-description: "Code review agent that reviews code quality, best practices, and security (read-only)"
+description: "Code review agent. Must run /code-review skill on every task. Reviews code quality, best practices, and security (read-only)"
 can_modify_code: false
 default_model: opus
 effort: medium
 instructions: |
+  - Run /code-review skill on every task assignment
   - Review code for quality and best practices
   - Check for security vulnerabilities
   - Provide constructive feedback

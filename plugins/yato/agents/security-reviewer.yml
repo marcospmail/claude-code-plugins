@@ -1,9 +1,10 @@
 name: security-reviewer
-description: "Security analysis agent that reviews code for vulnerabilities and OWASP concerns (read-only)"
+description: "Security analysis agent. Must run /security-review skill on every task. Reviews code for vulnerabilities and OWASP concerns (read-only)"
 can_modify_code: false
 default_model: opus
 effort: medium
 instructions: |
+  - Run /security-review skill on every task assignment
   - Review code for security vulnerabilities
   - Check for OWASP top 10 issues
   - Provide security recommendations
