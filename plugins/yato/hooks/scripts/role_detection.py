@@ -120,6 +120,20 @@ def _get_workflow_name() -> Optional[str]:
     return None
 
 
+def _get_workflow_session(wf_dir: Path) -> Optional[str]:
+    """Read the tmux session name from a workflow's status.yml."""
+    try:
+        with open(wf_dir / "status.yml") as f:
+            data = yaml.safe_load(f)
+        if data and isinstance(data, dict):
+            session = data.get("session")
+            if session:
+                return str(session)
+    except Exception:
+        pass
+    return None
+
+
 def detect_role(project_root: Optional[Path] = None, file_path: Optional[str] = None) -> Optional[str]:
     """
     Detect the current agent's role by scanning identity.yml files.
@@ -180,6 +194,9 @@ def detect_role(project_root: Optional[Path] = None, file_path: Optional[str] = 
         if not agents_dir.exists():
             continue
 
+        # Load workflow session from status.yml to validate pane ownership
+        workflow_session = _get_workflow_session(wf_dir)
+
         for identity_file in agents_dir.glob("*/identity.yml"):
             try:
                 with open(identity_file) as f:
@@ -192,10 +209,18 @@ def detect_role(project_root: Optional[Path] = None, file_path: Optional[str] = 
                 if not role:
                     continue
 
-                # Primary: match pane_id against TMUX_PANE
+                # Primary: match pane_id + session against current pane
                 identity_pane_id = data.get("pane_id")
                 if identity_pane_id and current_pane_id:
                     if str(identity_pane_id) == str(current_pane_id):
+                        # Pane ID matches — verify the session also matches
+                        # to avoid false positives from stale workflows whose
+                        # pane IDs got reused by new non-yato sessions
+                        if workflow_session:
+                            if not current_session:
+                                continue  # can't confirm session, skip match
+                            if str(workflow_session) != str(current_session):
+                                continue  # pane reused in different session
                         return role.lower()
                     continue  # pane_id set but doesn't match - skip legacy check
 
