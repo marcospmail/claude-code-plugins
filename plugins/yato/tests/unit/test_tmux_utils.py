@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
@@ -573,6 +574,143 @@ class TestSendMessage:
             o.send_message("sess:1.2", "msg", _skip_suffix=True)
             select_calls = [c for c in calls if "select-pane" in c]
             assert any("sess:1.2" in c for c in select_calls)
+
+
+    def test_multiline_message_uses_bracketed_paste(self, monkeypatch):
+        """Messages with newlines should use load-buffer + paste-buffer -p, not send-keys -l."""
+        monkeypatch.delenv("TMUX_SOCKET", raising=False)
+        o = TmuxOrchestrator()
+        calls = []
+
+        def mock_run(cmd, *args, **kwargs):
+            calls.append(cmd)
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("subprocess.run", side_effect=mock_run), \
+             patch("time.sleep"):
+            msg = "Hello.\n- Line 1.\n- Line 2."
+            result = o.send_message("%5", msg, _skip_suffix=True)
+            assert result is True
+            # Should NOT have send-keys -l for the message
+            sendkeys_l_calls = [c for c in calls if "-l" in c and "send-keys" in c]
+            assert len(sendkeys_l_calls) == 0
+            # Should have load-buffer and paste-buffer -p
+            load_calls = [c for c in calls if "load-buffer" in c]
+            paste_calls = [c for c in calls if "paste-buffer" in c]
+            assert len(load_calls) == 1
+            assert len(paste_calls) == 1
+            assert "-p" in paste_calls[0]
+
+    def test_singleline_message_uses_send_keys(self, monkeypatch):
+        """Messages without newlines should still use send-keys -l."""
+        monkeypatch.delenv("TMUX_SOCKET", raising=False)
+        o = TmuxOrchestrator()
+        calls = []
+
+        def mock_run(cmd, *args, **kwargs):
+            calls.append(cmd)
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("subprocess.run", side_effect=mock_run), \
+             patch("time.sleep"):
+            result = o.send_message("%5", "no newlines here", _skip_suffix=True)
+            assert result is True
+            sendkeys_l_calls = [c for c in calls if "-l" in c and "send-keys" in c]
+            assert len(sendkeys_l_calls) == 1
+            load_calls = [c for c in calls if "load-buffer" in c]
+            assert len(load_calls) == 0
+
+    def test_multiline_load_buffer_failure(self, monkeypatch):
+        """load-buffer failure should return False."""
+        monkeypatch.delenv("TMUX_SOCKET", raising=False)
+        o = TmuxOrchestrator()
+
+        def mock_run(cmd, *args, **kwargs):
+            m = MagicMock()
+            if "load-buffer" in cmd:
+                m.returncode = 1
+                m.stderr = "error"
+            else:
+                m.returncode = 0
+            m.stdout = ""
+            return m
+
+        with patch("subprocess.run", side_effect=mock_run), \
+             patch("time.sleep"):
+            result = o.send_message("%5", "line1\nline2", _skip_suffix=True)
+            assert result is False
+
+    def test_multiline_paste_buffer_failure(self, monkeypatch):
+        """paste-buffer failure should return False."""
+        monkeypatch.delenv("TMUX_SOCKET", raising=False)
+        o = TmuxOrchestrator()
+
+        def mock_run(cmd, *args, **kwargs):
+            m = MagicMock()
+            if "paste-buffer" in cmd:
+                m.returncode = 1
+                m.stderr = "error"
+            else:
+                m.returncode = 0
+            m.stdout = ""
+            return m
+
+        with patch("subprocess.run", side_effect=mock_run), \
+             patch("time.sleep"):
+            result = o.send_message("%5", "line1\nline2", _skip_suffix=True)
+            assert result is False
+
+    def test_multiline_cleans_up_temp_file(self, monkeypatch):
+        """Temp file should be cleaned up even on failure."""
+        monkeypatch.delenv("TMUX_SOCKET", raising=False)
+        o = TmuxOrchestrator()
+        created_files = []
+
+        original_named_temp = tempfile.NamedTemporaryFile
+
+        def track_tempfile(*args, **kwargs):
+            kwargs["delete"] = False
+            f = original_named_temp(*args, **kwargs)
+            created_files.append(f.name)
+            return f
+
+        def mock_run(cmd, *args, **kwargs):
+            m = MagicMock()
+            if "paste-buffer" in cmd:
+                m.returncode = 1
+                m.stderr = "error"
+            else:
+                m.returncode = 0
+            m.stdout = ""
+            return m
+
+        with patch("subprocess.run", side_effect=mock_run), \
+             patch("time.sleep"), \
+             patch("tempfile.NamedTemporaryFile", side_effect=track_tempfile):
+            o.send_message("%5", "line1\nline2", _skip_suffix=True)
+            # Temp file should have been cleaned up
+            for f in created_files:
+                assert not os.path.exists(f), f"Temp file {f} was not cleaned up"
+
+    def test_multiline_buffer_uses_unique_name(self, monkeypatch):
+        """Buffer name should include PID for uniqueness."""
+        monkeypatch.delenv("TMUX_SOCKET", raising=False)
+        o = TmuxOrchestrator()
+        calls = []
+
+        def mock_run(cmd, *args, **kwargs):
+            calls.append(cmd)
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("subprocess.run", side_effect=mock_run), \
+             patch("time.sleep"):
+            o.send_message("%5", "line1\nline2", _skip_suffix=True)
+            load_calls = [c for c in calls if "load-buffer" in c]
+            assert len(load_calls) == 1
+            # Buffer name should contain PID
+            buf_idx = load_calls[0].index("-b") + 1
+            buf_name = load_calls[0][buf_idx]
+            assert str(os.getpid()) in buf_name
 
 
 class TestSendKeysToWindow:
