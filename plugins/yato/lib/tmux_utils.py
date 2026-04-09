@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import json
+import tempfile
 import time
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
@@ -332,12 +333,39 @@ class TmuxOrchestrator:
 
                 message = _build_message_with_suffixes(message, yato_suffix, workflow_suffix)
 
-            # Step 5: Send the message text as literal (-l prevents key name interpretation)
-            cmd = tmux + ["send-keys", "-l", "-t", target, message]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                print(f"Error sending message: {result.stderr}")
-                return False
+            # Step 5: Send the message text
+            # Use bracketed paste (load-buffer + paste-buffer -p) for messages with newlines.
+            # tmux send-keys -l treats \n as Enter keypresses, which submits the prompt
+            # prematurely and collapses multi-line content into a single line.
+            # Bracketed paste preserves newlines as actual line content in the TUI.
+            if "\n" in message:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+                    f.write(message)
+                    tmp_path = f.name
+                try:
+                    buf_name = f"yato-msg-{os.getpid()}"
+                    result = subprocess.run(
+                        tmux + ["load-buffer", "-b", buf_name, tmp_path],
+                        capture_output=True, text=True,
+                    )
+                    if result.returncode != 0:
+                        print(f"Error loading buffer: {result.stderr}")
+                        return False
+                    result = subprocess.run(
+                        tmux + ["paste-buffer", "-p", "-d", "-b", buf_name, "-t", target],
+                        capture_output=True, text=True,
+                    )
+                    if result.returncode != 0:
+                        print(f"Error pasting buffer: {result.stderr}")
+                        return False
+                finally:
+                    os.unlink(tmp_path)
+            else:
+                cmd = tmux + ["send-keys", "-l", "-t", target, message]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    print(f"Error sending message: {result.stderr}")
+                    return False
 
             if enter:
                 # Step 6: Brief delay to let TUI process text before submitting
@@ -418,7 +446,10 @@ class TmuxOrchestrator:
         return self.send_command_to_window(session, window_idx, message, confirm)
 
     def _send_to_pane(self, target: str, message: str, confirm: bool = False) -> bool:
-        """Send a message to a specific pane target (session:window.pane)."""
+        """Send a message to a specific pane target (session:window.pane).
+
+        Uses bracketed paste for multi-line messages to preserve newlines.
+        """
         if self.safety_mode and confirm:
             print(f"SAFETY CHECK: About to send '{message}' to {target}")
             response = input("Confirm? (yes/no): ")
@@ -427,15 +458,26 @@ class TmuxOrchestrator:
                 return False
 
         try:
-            # Send the message text
-            cmd = _tmux_cmd() + ["send-keys", "-t", target, message]
-            subprocess.run(cmd, check=True)
+            tmux = _tmux_cmd()
+            if "\n" in message:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+                    f.write(message)
+                    tmp_path = f.name
+                try:
+                    buf_name = f"yato-pane-{os.getpid()}"
+                    subprocess.run(tmux + ["load-buffer", "-b", buf_name, tmp_path], check=True)
+                    subprocess.run(tmux + ["paste-buffer", "-p", "-d", "-b", buf_name, "-t", target], check=True)
+                finally:
+                    os.unlink(tmp_path)
+            else:
+                cmd = tmux + ["send-keys", "-l", "-t", target, message]
+                subprocess.run(cmd, check=True)
 
             # Wait before sending Enter
             time.sleep(self.message_delay)
 
             # Send Enter
-            cmd = _tmux_cmd() + ["send-keys", "-t", target, "Enter"]
+            cmd = tmux + ["send-keys", "-t", target, "Enter"]
             subprocess.run(cmd, check=True)
             return True
         except subprocess.CalledProcessError as e:

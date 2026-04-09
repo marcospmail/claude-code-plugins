@@ -102,14 +102,34 @@ class TmuxController:
 
     @staticmethod
     def send_keys(target: str, message: str, send_enter: bool = True) -> bool:
-        """Send keys to a tmux target."""
-        result = TmuxController.run_tmux(["send-keys", "-t", target, message])
-        if result.returncode != 0:
-            return False
+        """Send keys to a tmux target.
+
+        Uses bracketed paste (load-buffer + paste-buffer -p) for multi-line
+        messages to preserve newlines. Single-line messages use send-keys -l.
+        """
+        import tempfile
+        import time
+
+        if "\n" in message:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+                f.write(message)
+                tmp_path = f.name
+            try:
+                buf_name = f"yato-cc-{os.getpid()}"
+                result = TmuxController.run_tmux(["load-buffer", "-b", buf_name, tmp_path])
+                if result.returncode != 0:
+                    return False
+                result = TmuxController.run_tmux(["paste-buffer", "-p", "-d", "-b", buf_name, "-t", target])
+                if result.returncode != 0:
+                    return False
+            finally:
+                os.unlink(tmp_path)
+        else:
+            result = TmuxController.run_tmux(["send-keys", "-l", "-t", target, message])
+            if result.returncode != 0:
+                return False
 
         if send_enter:
-            # Small delay before Enter (handled by shell)
-            import time
             time.sleep(0.5)
             result = TmuxController.run_tmux(["send-keys", "-t", target, "Enter"])
 
