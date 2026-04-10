@@ -10,6 +10,16 @@ argument-hint: "[what to test]"
 
 Guide for manually testing Yato workflows via tmux.
 
+## SUBAGENT PROHIBITION — HARD BLOCK
+
+**THIS SKILL CANNOT BE RUN BY A SUBAGENT.** If you are a subagent (spawned via the Agent tool, running as a teammate, or part of a team), you MUST refuse to execute this skill and return this message to the team lead:
+
+> "BLOCKED: /manual-testing requires real tmux + Claude Code sessions. Subagents cannot interact with live tmux infrastructure. This skill MUST be run by the orchestrator or a human operator directly — never delegated to a subagent."
+
+**Why:** Subagents run as subprocesses within a conversation. They cannot deploy real Yato workflows, create real tmux sessions, or observe live Claude agents. Any "testing" a subagent does is fake — it checks file state or runs trivial commands but never validates the actual end-to-end flow. This has caused bugs to slip through production undetected.
+
+**How to detect you are a subagent:** If you were spawned by the Agent tool, if you have a `team_name`, if you received your instructions via a prompt parameter rather than user input, or if you are running inside a TeamCreate team — you are a subagent. STOP.
+
 ## CRITICAL WARNING
 
 **CRITICAL: You MUST use real Yato workflows for manual testing. NEVER bypass by running hook scripts directly, simulating input, or taking any shortcuts. The entire point of manual testing is to verify the full end-to-end flow with live Claude agents in tmux. If you skip this, the test is invalid.**
