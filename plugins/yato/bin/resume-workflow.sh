@@ -260,6 +260,9 @@ echo "Restoring agent windows..."
 declare -a AGENT_IDS
 declare -a AGENT_PANE_IDS
 
+# Cache window list once before the loop (avoid N subprocess spawns)
+CACHED_WINDOWS=$(tmux $TMUX_FLAGS list-windows -t "$SESSION" -F "#{window_index}:#{window_name}:#{pane_id}" 2>/dev/null)
+
 for i in "${!AGENT_NAMES[@]}"; do
     agent_name="${AGENT_NAMES[$i]}"
     agent_role="${AGENT_ROLES[$i]}"
@@ -267,30 +270,43 @@ for i in "${!AGENT_NAMES[@]}"; do
     agent_effort="${AGENT_EFFORTS[$i]}"
     agent_window="${AGENT_WINDOWS[$i]}"
 
-    echo "  Creating window $agent_window for: $agent_name ($agent_role, $agent_model)"
+    # Check if a window with this agent's name already exists (exact match via grep -F)
+    EXISTING_WINDOW=$(echo "$CACHED_WINDOWS" | grep -F ":${agent_name}:" | head -1)
 
-    # Create new window for this agent with specific window name
-    # Capture both window index and global pane ID
-    WINDOW_OUTPUT=$(tmux $TMUX_FLAGS new-window -t "$SESSION" -n "$agent_name" -c "$PROJECT_PATH" -P -F "#{session_name}:#{window_index}:#{pane_id}" 2>&1)
+    if [[ -n "$EXISTING_WINDOW" ]]; then
+        # Reuse existing window — extract window index and pane ID
+        EXISTING_WIN_IDX=$(echo "$EXISTING_WINDOW" | cut -d: -f1)
+        EXISTING_PANE_ID=$(echo "$EXISTING_WINDOW" | cut -d: -f3)
+        echo "  Reusing existing window $EXISTING_WIN_IDX for: $agent_name ($agent_role, $agent_model)"
 
-    if [[ $? -ne 0 ]] || [[ -z "$WINDOW_OUTPUT" ]]; then
-        echo "    Warning: Could not create window for $agent_name"
-        AGENT_IDS+=("")
-        AGENT_PANE_IDS+=("")
-        continue
+        AGENT_WINDOW="$SESSION:$EXISTING_WIN_IDX"
+        AGENT_PANE_ID="$EXISTING_PANE_ID"
+    else
+        echo "  Creating window for: $agent_name ($agent_role, $agent_model)"
+
+        # Create new window for this agent with specific window name
+        # Capture both window index and global pane ID
+        WINDOW_OUTPUT=$(tmux $TMUX_FLAGS new-window -t "$SESSION" -n "$agent_name" -c "$PROJECT_PATH" -P -F "#{session_name}:#{window_index}:#{pane_id}" 2>&1)
+
+        if [[ $? -ne 0 ]] || [[ -z "$WINDOW_OUTPUT" ]]; then
+            echo "    Warning: Could not create window for $agent_name"
+            AGENT_IDS+=("")
+            AGENT_PANE_IDS+=("")
+            continue
+        fi
+
+        # Parse output: session:window_index:pane_id
+        AGENT_WINDOW="${WINDOW_OUTPUT%:*}"  # session:window_index
+        AGENT_PANE_ID="${WINDOW_OUTPUT##*:}"  # %N pane ID
+
+        # Start Claude with correct model, effort, and bypass permissions
+        sleep 0.3
+        CLAUDE_CMD="claude --dangerously-skip-permissions --model $agent_model"
+        if [[ -n "$agent_effort" ]]; then
+            CLAUDE_CMD="$CLAUDE_CMD --effort $agent_effort"
+        fi
+        tmux $TMUX_FLAGS send-keys -t "$AGENT_PANE_ID" "$CLAUDE_CMD" Enter
     fi
-
-    # Parse output: session:window_index:pane_id
-    AGENT_WINDOW="${WINDOW_OUTPUT%:*}"  # session:window_index
-    AGENT_PANE_ID="${WINDOW_OUTPUT##*:}"  # %N pane ID
-
-    # Start Claude with correct model, effort, and bypass permissions
-    sleep 0.3
-    CLAUDE_CMD="claude --dangerously-skip-permissions --model $agent_model"
-    if [[ -n "$agent_effort" ]]; then
-        CLAUDE_CMD="$CLAUDE_CMD --effort $agent_effort"
-    fi
-    tmux $TMUX_FLAGS send-keys -t "$AGENT_PANE_ID" "$CLAUDE_CMD" Enter
 
     # Store agent ID and pane ID
     AGENT_IDS+=("$AGENT_WINDOW")
@@ -403,39 +419,63 @@ with open('$AGENTS_FILE', 'w') as f:
 " 2>/dev/null
 echo "  Updated PM -> pane_id $PM_PANE"
 
+# Build update list: name:pane_id:window tuples
+AGENT_UPDATES=""
 for i in "${!AGENT_NAMES[@]}"; do
     if [[ -n "${AGENT_IDS[$i]}" ]]; then
         agent_name="${AGENT_NAMES[$i]}"
         new_window="${AGENT_IDS[$i]##*:}"
         agent_pane_id="${AGENT_PANE_IDS[$i]}"
-
-        # Update pane_id and window in agents.yml using Python
-        uv run python -c "
-import re
-with open('$AGENTS_FILE', 'r') as f:
-    content = f.read()
-
-lines = content.split('\\n')
-in_agent = False
-result = []
-for line in lines:
-    if '- name: \"$agent_name\"' in line or '- name: $agent_name' in line:
-        in_agent = True
-    elif in_agent and line.strip().startswith('pane_id:'):
-        line = re.sub(r'pane_id: .*', 'pane_id: \"$agent_pane_id\"', line)
-    elif in_agent and line.strip().startswith('window:'):
-        line = re.sub(r'window: .*', 'window: $new_window', line)
-        in_agent = False
-    elif in_agent and line.strip().startswith('- name:'):
-        in_agent = False
-    result.append(line)
-
-with open('$AGENTS_FILE', 'w') as f:
-    f.write('\\n'.join(result))
-" 2>/dev/null
+        AGENT_UPDATES="${AGENT_UPDATES}${agent_name}|${agent_pane_id}|${new_window}\n"
         echo "  Updated $agent_name -> pane_id $agent_pane_id, window $new_window"
     fi
 done
+
+# Single Python call to update all agents at once (avoid N+1 read/write)
+uv run python -c "
+import yaml
+with open('$AGENTS_FILE', 'r') as f:
+    data = yaml.safe_load(f)
+updates_raw = '''$(echo -e "$AGENT_UPDATES")'''.strip()
+if updates_raw:
+    for line in updates_raw.splitlines():
+        name, pane_id, window = line.split('|')
+        for agent in data.get('agents', []):
+            if agent.get('name') == name:
+                agent['pane_id'] = pane_id
+                agent['window'] = int(window)
+                break
+KEYS = ['name', 'role', 'pane_id', 'session', 'window', 'model', 'effort']
+with open('$AGENTS_FILE', 'w') as f:
+    f.write('# Agent Registry\n')
+    if 'pm' in data:
+        pm = data['pm']
+        f.write('pm:\n')
+        for key in KEYS:
+            if key in pm:
+                val = pm[key]
+                if isinstance(val, str):
+                    f.write(f'  {key}: \"{val}\"\n')
+                else:
+                    f.write(f'  {key}: {val}\n')
+        f.write('\n')
+    agents_list = data.get('agents', [])
+    if not agents_list:
+        f.write('agents: []\n')
+    else:
+        f.write('agents:\n')
+        for a in agents_list:
+            first = True
+            for key in KEYS:
+                if key in a:
+                    val = a[key]
+                    prefix = '  - ' if first else '    '
+                    if isinstance(val, str):
+                        f.write(f'{prefix}{key}: \"{val}\"\n')
+                    else:
+                        f.write(f'{prefix}{key}: {val}\n')
+                    first = False
+" 2>/dev/null
 
 # Wait for all Claude instances to start
 echo ""
