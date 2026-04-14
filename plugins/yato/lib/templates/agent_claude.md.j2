@@ -25,6 +25,25 @@
 - **If you're done**: `/notify-pm [DONE] Completed task X`
 - **If you're stuck**: `/notify-pm [BLOCKED] Cannot proceed because Y`
 
+#### Work Report (MANDATORY before sending [DONE]):
+
+Before sending a `[DONE]` notification, you MUST write a work report in your `agent-tasks.md` under the completed task checkbox. The PM will use this to validate your work.
+
+**Format:**
+```
+[x] T3: Add retry logic to API client
+  **Work Report:**
+  - Modified: `lib/client.py` — wrapped all API calls with retry decorator
+  - Created: `lib/retry.py` — exponential backoff, max 3 retries, 1s base delay
+  - Decision: Used decorator pattern instead of inline try/catch for cleaner call sites
+```
+
+**Required elements:**
+- **Files modified/created** — full path + brief description of what changed
+- **Key decisions** — choices made during implementation and why
+
+Do NOT send `[DONE]` without writing the work report first. The PM will read this report and inspect the files you listed.
+
 #### The PM Will:
 - Ask the user questions on your behalf
 - Provide you with answers and decisions
