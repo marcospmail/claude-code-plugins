@@ -119,6 +119,8 @@ Use the Write tool to create the tasks.json file in the workflow folder with thi
       "activeForm": "Present continuous form for status display (e.g., 'Implementing user auth')",
       "agent": "developer",
       "status": "pending",
+      "needs_validation": true,
+      "validated": false,
       "blockedBy": [],
       "blocks": ["T2", "T3"]
     },
@@ -129,6 +131,8 @@ Use the Write tool to create the tasks.json file in the workflow folder with thi
       "activeForm": "Writing unit tests for user auth",
       "agent": "qa",
       "status": "pending",
+      "needs_validation": false,
+      "validated": false,
       "blockedBy": ["T1"],
       "blocks": []
     }
@@ -148,6 +152,8 @@ Use the Write tool to create the tasks.json file in the workflow folder with thi
 - `activeForm`: Present continuous form for display (e.g., "Implementing login endpoint")
 - `agent`: Single agent assignment (developer, qa, code-reviewer)
 - `status`: Always starts as "pending" (other values: in_progress, blocked, completed)
+- `needs_validation`: Boolean (mandatory). Whether PM must validate before marking complete. Default by role: developer=true, qa=false, code-reviewer=false, security-reviewer=false
+- `validated`: Boolean (mandatory). Whether PM has validated the work. Always starts as `false`
 - `blockedBy`: Array of task IDs that must complete before this task can start
 - `blocks`: Array of task IDs that are waiting on this task
 
@@ -171,6 +177,8 @@ After generating tasks.json, provide a clear summary:
 - Use consistent naming conventions for task IDs (T1, T2, T3...)
 - Write activeForm in present continuous tense
 - **For tasks that produce files:** Include "OUTPUT_PATH: <path>" in description with FULL path from project root. Example: "Create coverage analysis. OUTPUT_PATH: e2e/COVERAGE-GAPS.md" - this prevents agents from using wrong paths
+- Always set `needs_validation` based on agent role (developer=true, others=false by default)
+- Always initialize `validated` to `false` on every task
 
 **DON'T:**
 - Create vague tasks like "Implement feature" or "Fix bugs"
@@ -191,4 +199,7 @@ After generating tasks.json, provide a clear summary:
 - blockedBy/blocks must reference valid task IDs
 - Status should always start as "pending"
 - Output must be valid JSON
+- Every task MUST have `needs_validation` (boolean) and `validated: false` fields
+- Default `needs_validation` by agent role: developer=true, qa=false, code-reviewer=false, security-reviewer=false
+- A task with `needs_validation: true` cannot be marked `completed` until `validated` is set to `true` by the PM
 </constraints>
