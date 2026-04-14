@@ -58,7 +58,6 @@ lib/
 ├── tmux_utils.py         # Tmux operations + send_message, notify_pm
 ├── workflow_ops.py       # Workflow folder/slug utilities
 ├── checkin_scheduler.py  # Check-in scheduling and management
-├── task_manager.py       # Task assignment and display
 ├── agent_manager.py      # Agent creation and file generation
 └── templates/            # Jinja2 templates for agent files
     ├── agent_identity.yml.j2
@@ -93,11 +92,6 @@ uv run python lib/tmux_utils.py notify "[DONE] Task completed"
 uv run python lib/checkin_scheduler.py start 15 --note "Progress check" --target "session:0" --workflow "001-name"
 uv run python lib/checkin_scheduler.py cancel --workflow "001-name"
 uv run python lib/checkin_scheduler.py status --workflow "001-name"
-
-# Task management
-uv run python lib/task_manager.py assign developer "Implement feature X"
-uv run python lib/task_manager.py table
-uv run python lib/task_manager.py list
 
 # Workflow operations
 uv run python lib/workflow_ops.py list
@@ -153,6 +147,7 @@ agent_message_suffix: ""              # Workflow-level: PM → agent messages (r
 checkin_message_suffix: ""             # Workflow-level: check-in daemon → PM messages (read fresh each send)
 agent_to_pm_message_suffix: ""         # Workflow-level: agent → PM messages via notify_pm (read fresh each send)
 user_to_pm_message_suffix: ""          # Workflow-level: user prompt → PM context (read fresh each submit)
+validate_tasks: true                   # Global toggle: PM validates developer work before marking complete
 ```
 
 ### Dual-Level Message Suffix System
@@ -191,6 +186,8 @@ Suffixes use a **stacking** system: both yato-level (global) and workflow-level 
       "description": "Detailed description...",
       "agent": "developer",
       "status": "pending",
+      "needs_validation": true,
+      "validated": false,
       "blockedBy": [],
       "blocks": ["T2"]
     }
