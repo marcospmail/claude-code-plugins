@@ -154,6 +154,7 @@ class TestCreateWorkflowFolder:
         assert data["checkin_message_suffix"] == ""
         assert data["agent_to_pm_message_suffix"] == ""
         assert data["user_to_pm_message_suffix"] == ""
+        assert data["validate_tasks"] is True
 
     def test_sequential_numbering(self, tmp_project):
         f1 = WorkflowOps.create_workflow_folder(str(tmp_project), "First")

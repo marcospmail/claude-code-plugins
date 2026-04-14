@@ -143,6 +143,7 @@ class WorkflowOps:
             "checkin_message_suffix": "",
             "agent_to_pm_message_suffix": "",
             "user_to_pm_message_suffix": "",
+            "validate_tasks": True,
         }
 
         status_file = full_path / "status.yml"
