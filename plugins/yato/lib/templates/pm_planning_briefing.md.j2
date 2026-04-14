@@ -233,19 +233,42 @@ IMPORTANT: Tell agents to READ files themselves - do NOT send file contents in m
 
 ### Step 13: Handle Agent Notifications
 
-CRITICAL - When receiving agent notifications (e.g., '[DONE] from dev: ...'), IMMEDIATELY update tasks.json:
+When receiving agent notifications, follow this flow:
 
-a) Read `.workflow/$WORKFLOW_NAME/tasks.json`
-b) Find the task(s) mentioned by the agent and update status:
-   - '[DONE]' notifications -> set status to 'completed' (work was ACTUALLY performed)
-   - '[BLOCKED]' notifications -> set status to 'blocked'
-   - '[STATUS]' or '[PROGRESS]' -> may update to 'in_progress' if pending
-   NEVER mark a task 'completed' unless work was ACTUALLY DONE.
-   Blocked tasks stay 'blocked' until resolved - you cannot skip tasks.
-c) Write the updated tasks.json back to the file
-d) Acknowledge to the agent that you received their update
+**For '[BLOCKED]' notifications:** Set task status to 'blocked' in tasks.json.
+**For '[STATUS]' or '[PROGRESS]':** May update to 'in_progress' if pending.
 
-EXAMPLE: If you receive '[DONE] from dev: Counter app complete', read tasks.json, find tasks assigned to 'dev', change their status to 'completed', write the file.
+**For '[DONE]' notifications — VALIDATION FLOW:**
+
+a) Read `.workflow/$WORKFLOW_NAME/status.yml` — check `validate_tasks` field.
+   If `validate_tasks` is `false`, skip validation and mark task completed directly (go to step f).
+
+b) Read `.workflow/$WORKFLOW_NAME/tasks.json` — find the task mentioned by the agent.
+
+c) Check the task's `needs_validation` field:
+   - If `needs_validation` is `false` → skip validation, go to step f.
+   - If `needs_validation` is `true` → continue to step d.
+
+d) **VALIDATE THE WORK:**
+   1. Read the agent's `agent-tasks.md` — find the **Work Report** section under the completed task.
+   2. Read the specific files listed in the work report to verify the changes are correct.
+   3. Compare the work against the task description and acceptance criteria in tasks.json.
+   4. Use your judgment — you may:
+      - Read the modified files directly to verify correctness
+      - Ask the agent follow-up questions via `/send-to-agent` if something is unclear
+      - Delegate deeper review to QA or code-reviewer if the change is complex
+
+e) **VALIDATION DECISION:**
+   - **PASS:** Set `validated: true` and `status: completed` in tasks.json. Acknowledge to the agent.
+   - **FAIL:** Keep `validated: false` and `status: in_progress`. Send specific feedback to the agent via `/send-to-agent` explaining what needs fixing. The agent will fix and re-send `[DONE]`.
+
+f) Write the updated tasks.json back to the file.
+g) Acknowledge to the agent that you received their update.
+
+**COMPLETION RULE:** A task with `needs_validation: true` can ONLY be marked `completed` if `validated` is also `true`.
+
+NEVER mark a task 'completed' unless work was ACTUALLY DONE and validated (if required).
+Blocked tasks stay 'blocked' until resolved - you cannot skip tasks.
 
 ### Step 14: Handle Requirements Changes
 
