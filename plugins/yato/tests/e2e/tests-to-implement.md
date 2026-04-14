@@ -59,5 +59,4 @@ This file tracks all end-to-end tests for the yato workflow.
 
 - [ ] **test-checkin-schedule.sh** - Check-in scheduling and cancellation
 - [ ] **test-pm-briefing-content.sh** - Full PM briefing content validation
-- [ ] **test-agent-task-assignment.sh** - task_manager.py assign functionality
 - [ ] **test-ralph-loop.sh** - Ralph oversight loop setup

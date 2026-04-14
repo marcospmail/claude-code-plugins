@@ -30,10 +30,6 @@ class TestPublicExports:
         from lib import CheckinScheduler
         assert CheckinScheduler is not None
 
-    def test_task_manager_class(self):
-        from lib import TaskManager
-        assert TaskManager is not None
-
     def test_workflow_ops_class(self):
         from lib import WorkflowOps
         assert WorkflowOps is not None
@@ -65,10 +61,6 @@ class TestPublicExports:
     def test_schedule_checkin_function(self):
         from lib import schedule_checkin
         assert callable(schedule_checkin)
-
-    def test_assign_task_function(self):
-        from lib import assign_task
-        assert callable(assign_task)
 
     def test_workflow_ops_functions(self):
         from lib import (

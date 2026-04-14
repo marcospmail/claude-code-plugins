@@ -17,7 +17,6 @@ from lib.tmux_utils import (
 )
 from lib.workflow_registry import WorkflowRegistry
 from lib.checkin_scheduler import CheckinScheduler, cancel_checkin, schedule_checkin
-from lib.task_manager import TaskManager, assign_task
 from lib.workflow_ops import (
     WorkflowOps,
     get_next_workflow_number,
@@ -34,7 +33,6 @@ __all__ = [
     "TmuxOrchestrator",
     "WorkflowRegistry",
     "CheckinScheduler",
-    "TaskManager",
     "WorkflowOps",
     "AgentManager",
     "send_message",
@@ -43,7 +41,6 @@ __all__ = [
     "restart_checkin_display",
     "cancel_checkin",
     "schedule_checkin",
-    "assign_task",
     "get_next_workflow_number",
     "generate_workflow_slug",
     "create_workflow_folder",

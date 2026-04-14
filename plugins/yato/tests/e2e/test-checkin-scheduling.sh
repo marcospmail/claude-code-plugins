@@ -82,6 +82,7 @@ EOF
 # Create tmux session (needed as check-in target)
 tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION_NAME" -x 120 -y 40 -c "$TEST_DIR"
 
+
 echo "  ✓ Test environment ready"
 echo ""
 
