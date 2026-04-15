@@ -122,6 +122,8 @@ session: _
 agent_message_suffix: ""
 checkin_message_suffix: ""
 agent_to_pm_message_suffix: ""
+user_to_pm_message_suffix: ""
+validate_tasks: true
 EOF
 
     echo "$folder_name"
