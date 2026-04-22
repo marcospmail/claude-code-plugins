@@ -195,6 +195,19 @@ Suffixes use a **stacking** system: both yato-level (global) and workflow-level 
 }
 ```
 
+### Task Validation Guard Hook
+
+`hooks/scripts/task-validation-guard.py` is a PreToolUse hook on `Write`/`Edit`/`MultiEdit`
+that protects `**/.workflow/*/tasks.json`. It blocks any write that would mark a task
+`status: completed` while `needs_validation` is true (the default when missing) and
+`validated` is not explicitly the bool `true`. It also blocks writes that produce invalid
+JSON or tasks missing `id`/`status`. Only an explicit `validate_tasks: false` in the
+sibling `status.yml` bypasses the guard at the workflow level; to exempt a single task,
+set `needs_validation: false` on it (in a separate edit) first. On a block, the PM sees a
+tool error listing the offending task ids and a pointer to the Step 13 validation flow
+(read the agent's `agent-tasks.md` work report, verify the files, then set
+`validated: true` in the SAME write as `status: completed`).
+
 ### Check-in System
 
 The check-in system uses a **single long-running daemon process** that:
